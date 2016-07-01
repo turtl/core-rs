@@ -1,12 +1,11 @@
 use ::error::{TResult, TError};
 use ::messaging;
 use ::util::json;
+use ::util::json::Value;
 use ::models::user;
-use ::serde_json;
-use ::serde_json::Value;
 
 pub fn process(msg: &String) -> TResult<()> {
-    let data: Value = try!(serde_json::from_str(msg).map_err(|e| TError::Msg(format!("JSON parse: {}", e))));
+    let data: Value = try_t!(json::parse(msg));
 
     // grab the command from the data
     let cmd = try_t!(json::find_string(&["0"], &data));

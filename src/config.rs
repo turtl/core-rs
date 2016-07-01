@@ -2,10 +2,9 @@ use std::fs::File;
 use std::path::Path;
 use std::io::prelude::*;
 
-use serde_json;
-use serde_json::Value;
 use ::error::{TResult, TError};
 use ::util::json;
+use ::util::json::Value;
 
 /// create a static/global CONFIG var, and load it with our config data
 lazy_static! {
@@ -20,7 +19,7 @@ fn load_config() -> TResult<Value> {
     let mut file = try_t!(File::open(&path));
     let mut contents = String::new();
     try_t!(file.read_to_string(&mut contents));
-    let data: Value = try_t!(serde_json::from_str(&contents));
+    let data: Value = try_t!(json::parse(&contents));
     Ok(data)
 }
 

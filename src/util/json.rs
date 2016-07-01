@@ -1,9 +1,15 @@
-use ::serde_json::Value;
+use ::serde_json;
+pub use ::serde_json::Value;
 use ::serde_json::Value::{Object, Array};
 
 quick_error! {
     #[derive(Debug)]
     pub enum JSONError {
+        Parse(err: serde_json::Error) {
+            cause(err)
+            description("parse error")
+            display("json: parse error: {}", err)
+        }
         DeadEnd {
             description("dead end")
             display("json: lookup dead end")
@@ -28,6 +34,11 @@ quick_error! {
 }
 
 pub type JResult<T> = Result<T, JSONError>;
+
+pub fn parse(string: &String) -> JResult<Value> {
+    let data: Value = try!(serde_json::from_str(string).map_err(JSONError::Parse));
+    Ok(data)
+}
 
 pub fn find<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     let last: bool = keys.len() == 0;
