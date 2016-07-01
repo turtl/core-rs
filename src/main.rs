@@ -19,13 +19,12 @@ mod models;
 mod dispatch;
 
 use std::thread;
-use std::env;
 
 use error::{TError, TResult};
 
 /// init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
-    match util::logger::setup_logger(log::LogLevelFilter::Debug) {
+    match util::logger::setup_logger() {
         Ok(..) => Ok(()),
         Err(e) => Err(toterr!(e)),
     }
@@ -49,12 +48,21 @@ pub fn start() -> TResult<()> {
 /// see https://doc.rust-lang.org/std/panic/fn.catch_unwind.html
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
-    let args: Vec<_> = env::args().collect();
     init().unwrap();
+    start().unwrap();
+}
+
+//use std::env;
+#[allow(dead_code)]
+fn msgtest() {
+    /*
+    let args: Vec<_> = env::args().collect();
     if args.len() > 1 {
-        messaging::send_new(&args[1]).unwrap();
+        let mut msg = String::new();
+        messaging::send_recv("[\"ping\"]".to_owned(), &mut msg).unwrap();
+        println!("final msg: {}", msg);
         return;
     }
-    start().unwrap();
+    */
 }
 
