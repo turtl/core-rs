@@ -11,6 +11,9 @@ all:
 run: all
 	cargo run
 
+test:
+	cargo test
+
 clean:
 	rm -rf target/
 

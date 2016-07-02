@@ -4,6 +4,8 @@ use ::util::json;
 use ::util::json::Value;
 use ::models::user;
 
+/// process a message from the messaging system. this is the main communication
+/// heart of turtl core.
 pub fn process(msg: &String) -> TResult<()> {
     let data: Value = try_t!(json::parse(msg));
 
@@ -25,6 +27,8 @@ pub fn process(msg: &String) -> TResult<()> {
     }
 }
 
+/// our main dispatch loop. really, just calls into messaging::bind and hands it
+/// our process function
 pub fn main() {
     match messaging::bind(&process) {
         Ok(..) => (),

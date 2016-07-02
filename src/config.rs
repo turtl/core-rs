@@ -23,8 +23,8 @@ fn load_config() -> TResult<Value> {
     Ok(data)
 }
 
-/// get a string value from our config
 #[allow(dead_code)]
+/// get a string value from our config
 pub fn get_str(keys: &[&str]) -> TResult<String> {
     match json::find_string(keys, &*CONFIG) {
         Ok(x) => Ok(x.to_owned()),
@@ -33,10 +33,28 @@ pub fn get_str(keys: &[&str]) -> TResult<String> {
 }
 
 #[allow(dead_code)]
+/// get an int value from our config
 pub fn get_int(keys: &[&str]) -> TResult<i64> {
     match json::find_int(keys, &*CONFIG) {
-        Ok(x) => Ok(x.clone()),
+        Ok(x) => Ok(x),
         Err(x) => Err(toterr!(x)),
     }
 }
 
+#[allow(dead_code)]
+/// get a float value from our config
+pub fn get_float(keys: &[&str]) -> TResult<f64> {
+    match json::find_float(keys, &*CONFIG) {
+        Ok(x) => Ok(x),
+        Err(x) => Err(toterr!(x)),
+    }
+}
+
+#[allow(dead_code)]
+/// get a bool value from our config
+pub fn get_bool(keys: &[&str]) -> TResult<bool> {
+    match json::find_bool(keys, &*CONFIG) {
+        Ok(x) => Ok(x),
+        Err(x) => Err(toterr!(x)),
+    }
+}

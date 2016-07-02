@@ -27,8 +27,16 @@ quick_error! {
             display("json: the value found is not a string")
         }
         InvalidInt {
-            description("invalid string")
+            description("invalid int")
             display("json: the value found is not an int")
+        }
+        InvalidFloat {
+            description("invalid float")
+            display("json: the value found is not a float")
+        }
+        InvalidBool {
+            description("invalid bool")
+            display("json: the value found is not a bool")
         }
     }
 }
@@ -77,13 +85,84 @@ pub fn find_string<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a String> {
     }
 }
 
-pub fn find_int<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a i64> {
+pub fn find_int(keys: &[&str], data: &Value) -> JResult<i64> {
     return match find(&keys, &data) {
         Ok(x) => match *x {
-            Value::I64(ref x) => Ok(x),
+            Value::I64(x) => Ok(x),
+            Value::U64(x) => Ok(x as i64),
             _ => Err(JSONError::InvalidInt),
         },
         Err(e) => Err(e),
+    }
+}
+
+pub fn find_float(keys: &[&str], data: &Value) -> JResult<f64> {
+    return match find(&keys, &data) {
+        Ok(x) => match *x {
+            Value::F64(x) => Ok(x),
+            _ => Err(JSONError::InvalidFloat),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+pub fn find_bool(keys: &[&str], data: &Value) -> JResult<bool> {
+    return match find(&keys, &data) {
+        Ok(x) => match *x {
+            Value::Bool(x) => Ok(x),
+            _ => Err(JSONError::InvalidBool),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn get_json() -> String {
+        String::from(r#"["test",{"name":"slappy","age":17,"has_friends":false},2,3.885]"#)
+    }
+
+    fn get_parsed() -> Value {
+        parse(&get_json()).unwrap()
+    }
+
+    #[test]
+    fn can_parse() {
+        let json = get_json();
+        parse(&json).unwrap();
+    }
+
+    #[test]
+    fn can_find() {
+        let parsed = get_parsed();
+        let found = find(&["1", "name"], &parsed).unwrap();
+
+        match *found {
+            Value::String(ref x) => assert_eq!(*x, "slappy"),
+            _ => panic!("value not found"),
+        }
+    }
+
+    #[test]
+    fn can_find_string() {
+        assert_eq!(find_string(&["0"], &get_parsed()).unwrap(), "test");
+    }
+
+    #[test]
+    fn can_find_int() {
+        assert_eq!(find_int(&["1", "age"], &get_parsed()).unwrap(), 17i64);
+    }
+
+    #[test]
+    fn can_find_float() {
+        assert_eq!(find_float(&["3"], &get_parsed()).unwrap(), 3.885f64);
+    }
+
+    #[test]
+    fn can_find_bool() {
+        assert_eq!(find_bool(&["1", "has_friends"], &get_parsed()).unwrap(), false);
     }
 }
 
