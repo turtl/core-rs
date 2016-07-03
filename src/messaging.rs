@@ -146,7 +146,7 @@ mod tests {
     /// (to confirm it ran) then shuts down the bind thread.
     ///
     /// this tests that message passing via the messaging system, well, works.
-    fn can_send_recv() {
+    fn can_bind_send_recv() {
         let pong = Arc::new(Mutex::new(false));
         let panic = Arc::new(Mutex::new(false));
 
@@ -182,9 +182,7 @@ mod tests {
 }
 
 
-/*
- * functions i want to keep around for testing.
- * 
+#[allow(dead_code)]
 fn send_new(message: &String) -> TResult<()> {
     let mut socket = try_t!(Socket::new(Protocol::Pair));
     let address = try!(config::get_str(&["messaging", "address"]));
@@ -194,5 +192,4 @@ fn send_new(message: &String) -> TResult<()> {
     try_t!(endpoint.shutdown());
     Ok(())
 }
-*/
 
