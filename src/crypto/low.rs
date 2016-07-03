@@ -20,6 +20,7 @@ use ::openssl::crypto::hash::{self, Type};
 use ::openssl::crypto::hmac::hmac;
 use ::openssl::crypto::rand;
 use ::openssl::crypto::pkcs5;
+use ::openssl::crypto::symm;
 
 quick_error! {
     #[derive(Debug)]
@@ -48,6 +49,12 @@ macro_rules! tocterr {
 /// Like try!, but converts errors found into CryptoErrors.
 macro_rules! try_c {
     ($e:expr) => (try!($e.map_err(|e| tocterr!(e))))
+}
+
+/// Specifies what type of padding we want to use when encrypting data.
+pub enum PadMode {
+    PKCS7,
+    ANSIX923,
 }
 
 #[allow(dead_code)]
@@ -130,7 +137,94 @@ pub fn pbkdf2_sha256(pass: &str, salt: &[u8], iter: usize, keylen: usize) -> CRe
     Ok(pkcs5::pbkdf2_hmac_sha256(pass, salt, iter, keylen))
 }
 
-// TODO: aes-cbc-256 (AnsiX923, PKCS7)
+const BLOCK_SIZE: usize = 16;
+
+/// Pad a byte vector using padding of type PadMode. This is mainly about doing
+/// AnsiX923 padding (for backwards compat). We also implement PKCS7, although
+/// we don't need to really since most crypto libs use it by default...however
+/// it's really easy to do so why not throw it in.
+fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
+    let mut pad_len = BLOCK_SIZE - (data.len() % BLOCK_SIZE);
+    if pad_len == 0 { pad_len = BLOCK_SIZE; }
+
+    for i in 0..pad_len {
+        let val: u8 = match pad_mode {
+            // PKCS7:
+            //  05 05 05 05 05
+            PadMode::PKCS7 => pad_len as u8,
+            // ANSIX923:
+            //  00 00 00 00 05
+            PadMode::ANSIX923 => {
+                if i == (pad_len - 1) {
+                    pad_len as u8
+                } else {
+                    0u8
+                }
+            }
+        };
+        data.push(val);
+    }
+}
+
+/// Unpad a byte vector. We do this generically. Both PKCS7 and AnsiX923 store
+/// the length of the padded bytes at the end of the data, so all we have to do
+/// is grab the last byte and truncate the vector to LEN - LASTBYTE. So easy. A
+/// baboon could do it.
+fn unpad(data: &mut Vec<u8>) {
+    let last = match data.last() {
+        Some(x) => x + 0,
+        None => return
+    };
+    if last > 16 { return; }
+
+    let datalen = data.len();
+    data.truncate(datalen - (last as usize));
+}
+
+#[allow(dead_code)]
+/// Encrypt data using a 256-bit length key via AES-CBC
+pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) -> CResult<Vec<u8>> {
+    //Ok(symm::encrypt(symm::Type::AES_256_CBC, key, iv, data))
+    let mut data = Vec::from(data);
+    let crypter = symm::Crypter::new(symm::Type::AES_256_CBC);
+    crypter.init(symm::Mode::Encrypt, key, iv);
+
+    // if we have padding other than PKCS7, turn OFF OpenSSL's padding and use
+    // our own.
+    match pad_mode {
+        PadMode::PKCS7 => (),
+        _ => {
+            crypter.pad(false);
+            pad(&mut data, pad_mode);
+        },
+    }
+
+    let mut result = crypter.update(data.as_slice());
+    let rest = crypter.finalize();
+    result.extend(rest.into_iter());
+    Ok(result)
+}
+
+#[allow(dead_code)]
+/// Decrypt data using a 256-bit length key via AES-CBC
+pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
+    //Ok(symm::decrypt(symm::Type::AES_256_CBC, key, iv, data))
+    let crypter = symm::Crypter::new(symm::Type::AES_256_CBC);
+    crypter.init(symm::Mode::Decrypt, key, iv);
+
+    // ALWAYS turn off padding when decrypting. OpenSSL forces PKCS7 down our
+    // throat which we don't always want. So instead, we tell it not to deal
+    // with padding on decrypt, and we opt to do it ourselves via unpad().
+    crypter.pad(false);
+
+    let mut result = crypter.update(data);
+    let rest = crypter.finalize();
+    result.extend(rest.into_iter());
+    // run the unpad
+    unpad(&mut result);
+    Ok(result)
+}
+
 // TODO: aes-gcm-256
 
 #[cfg(test)]
@@ -272,7 +366,45 @@ mod tests {
     }
 
     #[test]
-    fn can_aes_cbc_256() {
+    fn can_aes_cbc_256_encrypt() {
+        let plain = get_string(6);
+        let key = from_hex(&String::from("e487cbea0d56adc3cd12e89bb17d6a5ef36effde4b778fe07cd70e426c6d714c")).unwrap();
+        let iv = from_hex(&String::from("c623f0e62bf7e422799637ff03205184")).unwrap();
+        let enc = aes_cbc_encrypt(&key[..], &iv[..], plain.as_bytes(), PadMode::PKCS7).unwrap();
+        let encbase = to_base64(&enc).unwrap();
+        assert_eq!(encbase, "WchtFlfvntw19wvB5Fkx8Cs0q0AedG+GOOR3VcwiQJ16hReOX7b6dCZw6XfOnuZbxwyrlVUFdE+6btiZ/vJ3SWz0iFOpwjxSTagCSFKx95+r7MGCiy5nW0c/2jbMlva7OVxZd05zW2f4LKzvWcG7t8IvBUxQwpWCDqy+65Xu6w9QDHrCUpCmxE1KX6QCO9AZsuFnoB0V2kdIRlfa2LYdmqsxLyZLeWVvtqgYC7UhmxU0U9dx7hYj8yb4dJzpuoeIdyfUOJzI92CTIF/XwWX+o4h/vO629wJJbxSSLax9110=");
+    }
+
+    #[test]
+    fn can_aes_cbc_256_decrypt() {
+        let encbase = String::from("WchtFlfvntw19wvB5Fkx8Cs0q0AedG+GOOR3VcwiQJ16hReOX7b6dCZw6XfOnuZbxwyrlVUFdE+6btiZ/vJ3SWz0iFOpwjxSTagCSFKx95+r7MGCiy5nW0c/2jbMlva7OVxZd05zW2f4LKzvWcG7t8IvBUxQwpWCDqy+65Xu6w9QDHrCUpCmxE1KX6QCO9AZsuFnoB0V2kdIRlfa2LYdmqsxLyZLeWVvtqgYC7UhmxU0U9dx7hYj8yb4dJzpuoeIdyfUOJzI92CTIF/XwWX+o4h/vO629wJJbxSSLax9110=");
+        let enc = from_base64(&encbase).unwrap();
+        let key = from_hex(&String::from("e487cbea0d56adc3cd12e89bb17d6a5ef36effde4b778fe07cd70e426c6d714c")).unwrap();
+        let iv = from_hex(&String::from("c623f0e62bf7e422799637ff03205184")).unwrap();
+        let dec = aes_cbc_decrypt(&key[..], &iv[..], &enc).unwrap();
+        let decstr = String::from_utf8(dec).unwrap();
+        assert_eq!(decstr, get_string(6));
+    }
+
+    #[test]
+    fn can_aes_cbc_256_encrypt_ansix923() {
+        let plain = get_string(6);
+        let key = from_hex(&String::from("265c4f65060c0fcbbce562ba81664de28f6be5c083c42f42cab0c73b6f48ed30")).unwrap();
+        let iv = from_hex(&String::from("0d4b1deb697be38e688e38b3fde63b52")).unwrap();
+        let enc = aes_cbc_encrypt(&key[..], &iv[..], plain.as_bytes(), PadMode::ANSIX923).unwrap();
+        let encbase = to_base64(&enc).unwrap();
+        assert_eq!(encbase, "it5TMi/ySbjQWyCnhVJi+EYGsuoBbGWJuMLfiBHbaZfA7b6y+ygfR+gLLDhC+WdxFmK7KOhqCWxCu7J6c5XgDcyiM8sJ7I+Li18dlj8k+0FwBXrrKsBIw1aE+bGW0tu32zBDmPYOfiG0W3USM5kHTNeggcNURIGwYu2SICIMelLK7FMNN3BvFm3beLMdrxjen2PcmJA8aip/W1BdRzzneDd09TLMLRr0psMUbbad/sKyq4plo3ptYkeVqxkLkZ6DCA2FtfcSKJ1gLAx7YSwhf6gClj1L31cJMD3JbV+uqlM=");
+    }
+
+    #[test]
+    fn can_aes_cbc_256_decrypt_ansix923() {
+        let encbase = String::from("WchtFlfvntw19wvB5Fkx8Cs0q0AedG+GOOR3VcwiQJ16hReOX7b6dCZw6XfOnuZbxwyrlVUFdE+6btiZ/vJ3SWz0iFOpwjxSTagCSFKx95+r7MGCiy5nW0c/2jbMlva7OVxZd05zW2f4LKzvWcG7t8IvBUxQwpWCDqy+65Xu6w9QDHrCUpCmxE1KX6QCO9AZsuFnoB0V2kdIRlfa2LYdmqsxLyZLeWVvtqgYC7UhmxU0U9dx7hYj8yb4dJzpuoeIdyfUOJzI92CTIF/XwWX+o3zegyq4zdw7CCoyN2lCy0E=");
+        let enc = from_base64(&encbase).unwrap();
+        let key = from_hex(&String::from("e487cbea0d56adc3cd12e89bb17d6a5ef36effde4b778fe07cd70e426c6d714c")).unwrap();
+        let iv = from_hex(&String::from("c623f0e62bf7e422799637ff03205184")).unwrap();
+        let dec = aes_cbc_decrypt(&key[..], &iv[..], &enc).unwrap();
+        let decstr = String::from_utf8(dec).unwrap();
+        assert_eq!(decstr, get_string(6));
     }
 }
 
