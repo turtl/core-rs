@@ -24,18 +24,35 @@ pub use ::crypto::low::{
 };
 
 #[allow(dead_code)]
-const CRYPTO_VERSION: u32 = 5;
-#[allow(dead_code)]
-const CIPHER_INDEX: [&'static str; 1] = [
-    "aes",
-];
-#[allow(dead_code)]
-const BLOCK_INDEX: [&'static str; 2] = [
-    "cbc",
-    "gcm",
-];
+/// Stores our current crypto version. This gets encoded into a header in the
+/// ciphertext and lets the crypto module know how to handle the message.
+const CRYPTO_VERSION: u16 = 5;
 
-/// A 
+#[allow(dead_code)]
+/// Stores which ciphers we have available.
+///
+/// The index for this is used in the crypto `desc` field (see deserialize() for
+/// more info). For this reason, the order of this array must never change: new
+/// items must only be appended.
+const CIPHER_INDEX: [&'static str; 1] = ["aes"];
+
+#[allow(dead_code)]
+/// Stores which block modes we have available.
+///
+/// The index for this is used in the crypto `desc` field (see deserialize() for
+/// more info). For this reason, the order of this array must never change: new
+/// items must only be appended.
+const BLOCK_INDEX: [&'static str; 2] = ["cbc", "gcm"];
+
+#[allow(dead_code)]
+/// Stores which pad modes we have available.
+///
+/// The index for this is used in the crypto `desc` field (see deserialize() for
+/// more info). For this reason, the order of this array must never change: new
+/// items must only be appended.
+const PAD_INDEX: [&'static str; 2] = ["AnsiX923", "PKCS7"];
+
+/// Holds a deserialized description of our ciphertext.
 pub struct CryptoData {
     pub version: u32,
     pub desc: Vec<u8>,
@@ -312,6 +329,22 @@ mod tests {
     use super::*;
 
     const TEST_ITERATIONS: usize = 32;
+
+    #[test]
+    /// Makes sure our cipher/block/padding indexes are correct. New values can be
+    /// added to these arrays, but *MUST* be tested here. Note that we also test for
+    /// existence of specific values at specific indexes so re-ordering of these
+    /// arrays will make our test fail.
+    fn indexes_are_correct() {
+        assert_eq!(super::CIPHER_INDEX.len(), 1);
+        assert_eq!(super::CIPHER_INDEX[0], "aes");
+        assert_eq!(super::BLOCK_INDEX.len(), 2);
+        assert_eq!(super::BLOCK_INDEX[0], "cbc");
+        assert_eq!(super::BLOCK_INDEX[1], "gcm");
+        assert_eq!(super::PAD_INDEX.len(), 2);
+        assert_eq!(super::PAD_INDEX[0], "AnsiX923");
+        assert_eq!(super::PAD_INDEX[1], "PKCS7");
+    }
 
     #[test]
     fn can_gen_keys() {
