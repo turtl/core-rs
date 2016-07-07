@@ -8,8 +8,8 @@ extern crate serde_json;
 extern crate nanomsg;
 #[macro_use]
 extern crate lazy_static;
-extern crate openssl;
 extern crate rustc_serialize as serialize;
+extern crate gcrypt;
 
 #[macro_use]
 mod error;
