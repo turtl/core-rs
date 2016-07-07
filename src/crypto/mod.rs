@@ -87,6 +87,11 @@ impl CryptoData {
 ///
 /// Since we note use authenticated crypto (ie gcm), this format is no longer
 /// used, however *all* old serialization versions need to be supported.
+///
+/// Also note that we basically skipped versions 1 and 2. There is no detectable
+/// data that uses those modes, and they can be safely ignored in both their
+/// implementation and their tests, although theoretically they use the exact
+/// same format as v4.
 pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     let mut idx: usize = 0;
     let mut hmac: Option<Vec<u8>> = None;
@@ -306,6 +311,20 @@ mod tests {
 
     use super::*;
 
+    const TEST_ITERATIONS: usize = 32;
+
+    #[test]
+    fn can_gen_keys() {
+        let username = String::from("andrew@thillygooth.com");
+        let password = String::from("this is definitely not the password i use for my bank account. no sir.");
+
+        let key = gen_key(Hasher::SHA256, password.as_ref(), username.as_ref(), 69696).unwrap();
+        let keystr = to_hex(&key).unwrap();
+        // this hex val used for comparison was grabbed from turtl-js using the
+        // same username/password/iterations/hasher.
+        assert_eq!(keystr, "381dfffbb503b3ed90cd0a30d57e8d2bdba36e6c0bab274ae1c346ef3b1b9778");
+    }
+
     #[test]
     //(test (decryption-test-version0 :depends-on key-tests)
     //  "Test decryption of version 0 against Turtl's tcrypt library."
@@ -394,7 +413,7 @@ mod tests {
     #[test]
     fn can_gen_random_keys() {
         // test a number of hashes
-        for _ in 0..256 {
+        for _ in 0..TEST_ITERATIONS {
             let key = random_key().unwrap();
             assert_eq!(key.len(), 32);
         }
@@ -403,29 +422,33 @@ mod tests {
     #[test]
     fn can_gen_random_ivs() {
         // test a number of hashes
-        for _ in 0..256 {
+        for _ in 0..TEST_ITERATIONS {
             let key = random_iv().unwrap();
             assert_eq!(key.len(), 16);
         }
     }
 
     #[test]
-    fn can_gen_keys() {
-        let username = String::from("andrew@thillygooth.com");
-        let password = String::from("this is definitely not the password i use for my bank account. no sir.");
-
-        let key = gen_key(Hasher::SHA256, password.as_ref(), username.as_ref(), 69696).unwrap();
-        let keystr = to_hex(&key).unwrap();
-        // this hex val used for comparison was grabbed from turtl-js using the
-        // same username/password/iterations/hasher.
-        assert_eq!(keystr, "381dfffbb503b3ed90cd0a30d57e8d2bdba36e6c0bab274ae1c346ef3b1b9778");
+    fn can_gen_random_hash() {
+        // test a number of hashes
+        for _ in 0..TEST_ITERATIONS {
+            let hash = random_hash().unwrap();
+            assert_eq!(hash.len(), 64);
+            for chr in hash.chars() {
+                let cint = chr as u32;
+                assert!(
+                    (cint >= ('0' as u32) && cint <= ('9' as u32)) ||
+                    (cint >= ('a' as u32) && cint <= ('f' as u32))
+                );
+            }
+        }
     }
 
     #[test]
     fn can_gen_uuid() {
         // since we get a lot of variants, let's generate a lot of these and run
         // the test for each one
-        for _ in 0..256 {
+        for _ in 0..TEST_ITERATIONS {
             let uuidstr = uuid().unwrap();
             assert_eq!(uuidstr.len(), 36);
             let mut i = 0;
@@ -445,22 +468,6 @@ mod tests {
                     }
                 }
                 i += 1;
-            }
-        }
-    }
-
-    #[test]
-    fn can_gen_random_hash() {
-        // test a number of hashes
-        for _ in 0..256 {
-            let hash = random_hash().unwrap();
-            assert_eq!(hash.len(), 64);
-            for chr in hash.chars() {
-                let cint = chr as u32;
-                assert!(
-                    (cint >= ('0' as u32) && cint <= ('9' as u32)) ||
-                    (cint >= ('a' as u32) && cint <= ('f' as u32))
-                );
             }
         }
     }

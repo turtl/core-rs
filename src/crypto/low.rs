@@ -11,27 +11,28 @@
 //! For a higher-level set of turtl-core crypto, check out one module up,
 //! ::crypto.
 
-use std::fmt::Write;
-use std::u64;
-
 use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
 use ::gcrypt::rand::Random;
 
 lazy_static! {
+    /// Init the gcrypt lib and store our token
     static ref TOKEN: gcrypt::Token = gcrypt::init(|mut x| {
         x.enable_secmem(1024 * 1024 * 4).unwrap();
-        //x.disable_secmem();
-        // don't know what this does. can't find the docs. disabling.
         x.enable_secure_rndpool();
     });
+    /// Store our block size. This is mainly used for padding.
     static ref AES_BLOCK_SIZE: usize = gcrypt::cipher::CIPHER_AES256.block_len();
 }
-
+/// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;
+/// Defines flags for our ciphers
 const GCRYPT_CIPHER_FLAGS: gcrypt::cipher::Flags = gcrypt::cipher::FLAG_SECURE;
+/// Defines flags for our hmacs
 const GCRYPT_MAC_FLAGS: gcrypt::mac::Flags = gcrypt::mac::FLAG_SECURE;
+/// Defines flags for our random number generation
+const GCRYPT_RANDOM_STRENGTH: gcrypt::rand::Level = gcrypt::rand::VERY_STRONG_RANDOM;
 
 quick_error! {
     #[derive(Debug)]
@@ -61,13 +62,13 @@ macro_rules! try_c {
     ($e:expr) => (try!($e.map_err(|e| tocterr!(e))))
 }
 
-/// Specifies what type of padding we want to use when encrypting data.
+/// Specifies what type of padding we want to use when encrypting data via CBC.
 pub enum PadMode {
     PKCS7,
     ANSIX923,
 }
 
-// Specifies the hash algorithm we want to use for hashing or PBKDF2/HMAC
+/// Specifies the hash algorithms available for hashing or PBKDF2/HMAC
 pub enum Hasher {
     SHA1,
     SHA256,
@@ -151,10 +152,7 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
 /// Generate N number of CS random bytes.
 pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
     let mut result: Vec<u8> = vec![0; len];
-    let strength = gcrypt::rand::WEAK_RANDOM;
-    //let strength = gcrypt::rand::STRONG_RANDOM;
-    //let strength = gcrypt::rand::VERY_STRONG_RANDOM;
-    (&mut result[..]).randomize(*TOKEN, strength);
+    (&mut result[..]).randomize(*TOKEN, GCRYPT_RANDOM_STRENGTH);
     Ok(result)
 }
 
@@ -174,7 +172,7 @@ pub fn rand_int() -> CResult<u64> {
 /// Generate a random floating point (f64) between 0.0 and 1.0. Uses rand_int()
 /// and divides it by u64::MAX to get the value.
 pub fn rand_float() -> CResult<f64> {
-    Ok((try!(rand_int()) as f64) / (u64::MAX as f64))
+    Ok((try!(rand_int()) as f64) / (::std::u64::MAX as f64))
 }
 
 #[allow(dead_code)]
@@ -190,12 +188,9 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
     Ok(result)
 }
 
-/// Pad a byte vector using padding of type PadMode. This is mainly about doing
-/// AnsiX923 padding (for backwards compat). We also implement PKCS7, although
-/// we don't need to really since most crypto libs use it by default...however
-/// it's really easy to do so why not throw it in.
+/// Pad a byte vector using padding of type PadMode.
 fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
-    let blocksize = *AES_BLOCK_SIZE;
+    let blocksize: usize = *AES_BLOCK_SIZE;
     let mut pad_len = blocksize - (data.len() % blocksize);
     if pad_len == 0 { pad_len = blocksize; }
 
@@ -223,11 +218,15 @@ fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
 /// is grab the last byte and truncate the vector to LEN - LASTBYTE. So easy. A
 /// baboon could do it.
 fn unpad(data: &mut Vec<u8>) {
+    let blocksize: usize = *AES_BLOCK_SIZE;
     let last = match data.last() {
         Some(x) => x + 0,
         None => return
     };
-    if last > 16 { return; }
+
+    // if our padding is greater than our block size, the padding is invalid and
+    // we proceed without unpadding.
+    if (last as usize) > blocksize { return; }
 
     let datalen = data.len();
     data.truncate(datalen - (last as usize));
