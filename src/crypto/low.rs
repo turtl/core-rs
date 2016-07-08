@@ -193,7 +193,7 @@ pub fn rand_float() -> CResult<f64> {
 
 /*
 #[allow(dead_code)]
-/// Generate a key from a password/salt using PBKDF2/SHA256.
+/// Generate a key from a password/salt using PBKDF2/SHA256. This uses gcrypt.
 pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let hashtype = match hasher {
         Hasher::SHA1 => gcrypt::digest::MD_SHA1,
@@ -208,6 +208,7 @@ pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: us
 
 /*
 #[allow(dead_code)]
+/// Generate a key from a password/salt using PBKDF2/SHA256. This uses openssl.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let pbfn = match hasher {
         Hasher::SHA1 => pkcs5::pbkdf2_hmac_sha1,
@@ -228,6 +229,8 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 */
 
 #[allow(dead_code)]
+/// Generate a key from a password/salt using PBKDF2/SHA256. This uses
+/// ruct-crypto.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let mut result: Vec<u8> = vec![0; keylen];
     match hasher {
@@ -289,6 +292,10 @@ fn unpad(data: &mut Vec<u8>) {
 
     let datalen = data.len();
     data.truncate(datalen - (last as usize));
+}
+
+pub fn aes_block_size() -> usize {
+    *AES_BLOCK_SIZE
 }
 
 #[allow(dead_code)]
