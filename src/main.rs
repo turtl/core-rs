@@ -10,6 +10,8 @@ extern crate nanomsg;
 extern crate lazy_static;
 extern crate rustc_serialize as serialize;
 extern crate gcrypt;
+extern crate openssl;
+extern crate constant_time_eq;
 
 #[macro_use]
 mod error;

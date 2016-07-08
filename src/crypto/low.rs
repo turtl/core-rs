@@ -15,6 +15,8 @@ use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
 use ::gcrypt::rand::Random;
+use ::openssl::crypto::pkcs5;
+use ::constant_time_eq;
 
 lazy_static! {
     /// Init the gcrypt lib and store our token
@@ -42,10 +44,13 @@ quick_error! {
             description(str)
             display("crypto: error: {}", str)
         }
-        Authentication(err: ::gcrypt::Error) {
-            cause(err)
+        Authentication(str: String) {
             description("authentication error")
-            display("crypto: autentication error: {}", err)
+            display("crypto: authentication error: {}", str)
+        }
+        NotImplemented(str: String) {
+            description("not implemented")
+            display("crypto: not implemented: {}", str)
         }
     }
 }
@@ -62,12 +67,14 @@ macro_rules! try_c {
     ($e:expr) => (try!($e.map_err(|e| tocterr!(e))))
 }
 
+#[derive(Debug)]
 /// Specifies what type of padding we want to use when encrypting data via CBC.
 pub enum PadMode {
     PKCS7,
     ANSIX923,
 }
 
+#[derive(Debug)]
 /// Specifies the hash algorithms available for hashing or PBKDF2/HMAC
 pub enum Hasher {
     SHA1,
@@ -128,7 +135,10 @@ pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
 #[allow(dead_code)]
 /// Convert a base64 string to a vector of u8 data.
 pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
-    Ok(try_c!(data.from_base64()))
+    match data.from_base64() {
+        Ok(x) => Ok(x),
+        Err(e) => Err(tocterr!(format!("base64: {}", e))),
+    }
 }
 
 #[allow(dead_code)]
@@ -146,6 +156,12 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     try_c!(maccer.write(data));
     try_c!(maccer.read(&mut result[..]));
     Ok(result)
+}
+
+#[allow(dead_code)]
+/// Do a constant-time comparison of two byte arrays.
+pub fn const_compare(arr1: &[u8], arr2: &[u8]) -> bool {
+    constant_time_eq::constant_time_eq(arr1, arr2)
 }
 
 #[allow(dead_code)]
@@ -175,9 +191,10 @@ pub fn rand_float() -> CResult<f64> {
     Ok((try!(rand_int()) as f64) / (::std::u64::MAX as f64))
 }
 
+/*
 #[allow(dead_code)]
 /// Generate a key from a password/salt using PBKDF2/SHA256.
-pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
+pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let hashtype = match hasher {
         Hasher::SHA1 => gcrypt::digest::MD_SHA1,
         Hasher::SHA256 => gcrypt::digest::MD_SHA256,
@@ -186,6 +203,23 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
     let mut result: Vec<u8> = vec![0; keylen];
     try_c!(gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..]));
     Ok(result)
+}
+*/
+
+#[allow(dead_code)]
+pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
+
+    let pbfn = match hasher {
+        Hasher::SHA1 => pkcs5::pbkdf2_hmac_sha1,
+        Hasher::SHA256 => pkcs5::pbkdf2_hmac_sha256,
+        Hasher::SHA512 => pkcs5::pbkdf2_hmac_sha512,
+    };
+
+    let mut pass_str = String::with_capacity(pass.len());
+    for byte in pass {
+        pass_str.push(*byte as char);
+    }
+    Ok(pbfn(&pass_str, salt, iter, keylen))
 }
 
 /// Pad a byte vector using padding of type PadMode.
@@ -286,7 +320,7 @@ pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResu
     try_c!(cipher.decrypt(data, &mut dec[..]));
     match cipher.check_tag(&tag[..]) {
         Ok(..) => {},
-        Err(e) => return Err(CryptoError::Authentication(e)),
+        Err(e) => return Err(CryptoError::Authentication(format!("{}", e))),
     }
     Ok(dec)
 }
@@ -298,6 +332,7 @@ mod tests {
     use std::vec::Vec;
     use std::collections::HashMap;
     use std::u64;
+    //use time::PreciseTime;
 
     /// Grab a random libertarian string, used for testing our heroic crypto
     /// primitives.
@@ -329,6 +364,7 @@ mod tests {
         quotes.insert("filthy statists", String::from(r#"And I can go on for hours on hundreds of free market solutions that could solve that problem, The statist can only come up with one solution, Make A LAW!!!"#));
         quotes.insert("out of context", String::from(r#"None of which is to say that the Empire isn't sometimes brutal. In Episode IV, Imperial stormtroopers kill Luke's aunt and uncle and Grand Moff Tarkin orders the destruction of an entire planet, Alderaan. But viewed in context, these acts are less brutal than they initially appear. Poor Aunt Beru and Uncle Owen reach a grisly end, but only after they aid the rebellion by hiding Luke and harboring two fugitive droids. They aren't given due process, but they are traitors."#));
         quotes.insert("right to harass", String::from(r#"You would have made the choice yourself. No one is holding a gun to your head and telling you to quit, either. If a boss wants to sexually harass you, that's their right. If you want to quit, that is your right. The market will solve any problems."#));
+        quotes.insert("honorable labor", String::from(r#"Moreover, the institution of child labor is an honorable one, with a long and glorious history of good works. And the villains of the piece are not the employers, but rather those who prohibit the free market in child labor. These do-gooders are responsible for the untold immiseration of those who are thus forced out of employment. Although the harm done was greater in the past, when great poverty made widespread child labor necessary, there are still people in dire straits today. Present prohibitions of child labor are thus an unconscionable interference with their lives."#));
         // not elsbot, but i had to throw it in
         quotes.insert("minimum wage", String::from(r#"Is there a 'progressive' response to the idea of the minimum wage being immoral because it violates the non-aggression principle?"#));
 
@@ -401,6 +437,32 @@ mod tests {
         let res = to_hex(&hmac(Hasher::SHA256, &key, &data.as_bytes()).unwrap()).unwrap();
         assert_eq!(res, "b1a698ee4ea7105e79723dfbab65912dffa01c822038b24fbf413a587f241f10");
     }
+
+    /*
+    #[test]
+    fn constant_time_compare() {
+        let key1 = from_hex(&String::from("f509a6e0249b014d5a626d819073983cf00e873d1f7cc632ef4687ee839174c1")).unwrap();
+        let key2 = from_hex(&String::from("f509a6e0249b014d5a626d819073983cf00e873d1f7cc632ef4687ee839174c1")).unwrap();
+        let key3 = from_hex(&String::from("e487cbea0d56adc3cd12e89bb17d6a5ef36effde4b778fe07cd70e426c6d714c")).unwrap();
+
+        let iters = 999999;
+        let start1 = PreciseTime::now();
+        for _ in 0..iters {
+            const_compare(key1.as_slice(), key2.as_slice());
+        }
+        let end1 = start1.to(PreciseTime::now());
+        let start2 = PreciseTime::now();
+        for _ in 0..iters {
+            const_compare(key1.as_slice(), key3.as_slice());
+        }
+        let end2 = start2.to(PreciseTime::now());
+        
+
+        let run1 = end1.num_nanoseconds().unwrap();
+        let run2 = end2.num_nanoseconds().unwrap();
+        //assert!((run1 - run2).abs() < 40000000);
+    }
+    */
 
     #[test]
     fn random_bytes_works() {

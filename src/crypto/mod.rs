@@ -7,6 +7,13 @@
 //! This includes high-level encryption/decryption as well as (de)serialiation
 //! from/to [Turtl's standard format](https://turtl.it/docs/security/encryption-specifics/).
 
+// TODO: serialize
+// TODO: deserialize
+// TODO: encrypt
+// TODO: decrypt
+// TODO: key splitting/stretching via pbkdf2
+// TODO: cbc+hmac verification
+
 #[macro_use]
 mod low;
 
@@ -52,17 +59,127 @@ const BLOCK_INDEX: [&'static str; 2] = ["cbc", "gcm"];
 /// items must only be appended.
 const PAD_INDEX: [&'static str; 2] = ["AnsiX923", "PKCS7"];
 
+#[allow(dead_code)]
+/// Stores which pad modes we have available.
+///
+/// The index for this is used in the crypto `desc` field (see deserialize() for
+/// more info). For this reason, the order of this array must never change: new
+/// items must only be appended.
+const KDF_INDEX: [&'static str; 1] = ["SHA256:2:64"];
+
+/// Find the position of a static string in an array of static strings
+fn find_index(arr: &[&'static str], val: &str) -> CResult<usize> {
+    for i in 0..arr.len() {
+        if val == arr[i] { return Ok(i) }
+    }
+    Err(CryptoError::Msg(format!("not found: {}", val)))
+}
+
+#[derive(Debug)]
+/// Describes some meta about our payload. This includes the cipher used, the
+/// block mode used, and possibly which padding and key-derivation methods used.
+pub struct PayloadDescription {
+    pub cipher_index: u8,
+    pub block_index: u8,
+    pub pad_index: Option<u8>,
+    pub kdf_index: Option<u8>,
+}
+
+impl PayloadDescription {
+    #[allow(dead_code)]
+    /// Create a new PayloadDescription from a crypto version and some other data
+    pub fn new(crypto_version: u16, cipher: &str, block: &str, padding: Option<&str>, kdf: Option<&str>) -> CResult<PayloadDescription> {
+        if crypto_version == 0 { return Err(CryptoError::Msg(format!("PayloadDescription not implemented for version 0"))); }
+
+        let mut desc: Vec<u8> = Vec::with_capacity(4);
+        desc.push(try!(find_index(&CIPHER_INDEX, cipher)) as u8);
+        desc.push(try!(find_index(&BLOCK_INDEX, block)) as u8);
+        if crypto_version <= 4 {
+            if let Some(ref x) = padding { desc.push(try!(find_index(&PAD_INDEX, x)) as u8); }
+            if let Some(ref x) = kdf { desc.push(try!(find_index(&KDF_INDEX, x)) as u8); }
+        }
+        Ok(try!(PayloadDescription::from(desc.as_slice())))
+    }
+
+    /// Convert a byte vector into a PayloadDescription object
+    pub fn from(data: &[u8]) -> CResult<PayloadDescription> {
+        if data.len() < 2 { return Err(CryptoError::Msg(format!("PayloadDescription::from - bad desc length (< 2)"))) }
+        let cipher = data[0];
+        let block = data[1];
+        let pad = if data.len() > 2 { Some(data[2]) } else { None };
+        let kdf = if data.len() > 3 { Some(data[3]) } else { None };
+        Ok(PayloadDescription {
+            cipher_index: cipher,
+            block_index: block,
+            pad_index: pad,
+            kdf_index: kdf,
+        })
+    }
+
+    /// Covert this payload description into a byte vector
+    pub fn as_vec(&self) -> Vec<u8> {
+        let mut desc: Vec<u8> = Vec::new();
+        desc.push(self.cipher_index);
+        desc.push(self.block_index);
+        match self.pad_index {
+            Some(x) => desc.push(x),
+            None => return desc,
+        }
+        match self.kdf_index {
+            Some(x) => desc.push(x),
+            None => return desc,
+        }
+        desc
+    }
+
+    /// Estimate the size (in bytes) this PayloadDescription is
+    pub fn len(&self) -> usize {
+        let mut len: usize = 2;
+        if self.pad_index.is_some() { len += 1; }
+        if self.kdf_index.is_some() { len += 1; }
+        len
+    }
+
+    #[allow(dead_code)]
+    pub fn cipher(&self) -> String {
+        String::from(CIPHER_INDEX[self.cipher_index as usize])
+    }
+
+    #[allow(dead_code)]
+    pub fn block(&self) -> String {
+        String::from(BLOCK_INDEX[self.block_index as usize])
+    }
+
+    #[allow(dead_code)]
+    pub fn padding(&self) -> Option<String> {
+        match self.pad_index {
+            Some(x) => Some(String::from(PAD_INDEX[x as usize])),
+            None => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn kdf(&self) -> Option<String> {
+        match self.kdf_index {
+            Some(x) => Some(String::from(KDF_INDEX[x as usize])),
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
 /// Holds a deserialized description of our ciphertext.
 pub struct CryptoData {
-    pub version: u32,
-    pub desc: Vec<u8>,
+    pub version: u16,
+    pub desc: PayloadDescription,
     pub iv: Vec<u8>,
-    pub hmac: Option<Vec<u8>>,
+    pub hmac: Vec<u8>,
     pub ciphertext: Vec<u8>,
 }
 
 impl CryptoData {
-    pub fn new(version: u32, desc: Vec<u8>, iv: Vec<u8>, hmac: Option<Vec<u8>>, ciphertext: Vec<u8>) -> CryptoData {
+    /// Create a new CryptoData object from its parts
+    pub fn new(version: u16, desc: PayloadDescription, iv: Vec<u8>, hmac: Vec<u8>, ciphertext: Vec<u8>) -> CryptoData {
         CryptoData {
             version: version,
             desc: desc,
@@ -71,12 +188,12 @@ impl CryptoData {
             ciphertext: ciphertext,
         }
     }
-}
 
-// TODO: serialize
-// TODO: deserialize
-// TODO: encrypt
-// TODO: decrypt
+    /// Returns the estimated serialized size of this CryptoData
+    pub fn len(&self) -> usize {
+        return (2 + 1 + self.desc.len() + self.iv.len() + self.hmac.len() + self.ciphertext.len()) as usize;
+    }
+}
 
 #[allow(dead_code)]
 /// Deserialize a serialized cryptographic message. Basically, each piece of
@@ -84,16 +201,17 @@ impl CryptoData {
 /// the following format:
 ///
 ///     |-2 bytes-| |-1 byte----| |-N bytes-----------| |-16 bytes-| |-N bytes-------|
-///     | version | |desc length| |payload description| |    IV    | |ciphertext data|
+///     | version | |desc length| |payload description| |    iv    | |ciphertext data|
 ///
 /// - `version` tells us the serialization version. although it will probably
 ///   not get over 255, it has two bytes just in case. never say never.
-/// - `desc` length is the length of the payload description, which may change
+/// - `desc length` is the length of the payload description, which may change
 ///   in length from version to version.
 /// - `payload description` tells us what algorithm/format the encryption uses.
-///   for instance, it could be AES+CBC, or Twofish+CBC, etc etc. payload
-///   description encoding/length may change from version to version.
-/// - `IV` is the initial vector of the payload, in binary form
+///   This holds 1-byte array indexes for our crypto values (CIPHER_INDEX,
+///   BLOCK_INDEX, PAD_INDEX, KDF_INDEX), which tells us the cipher, block mode,
+///   etc (and how to decrypt this data).
+/// - `iv` is the initial vector of the payload.
 /// - `ciphertext data` is our actual encrypted data.
 ///
 /// Note that in older versions (1 <= v <= 4), we used aes-cbc with 
@@ -102,7 +220,7 @@ impl CryptoData {
 ///     |-2 bytes-| |-32 bytes-| |-1 byte----| |-N bytes-----------| |-16 bytes-| |-N bytes-------|
 ///     | version | |   HMAC   | |desc length| |payload description| |    IV    | |ciphertext data|
 ///
-/// Since we note use authenticated crypto (ie gcm), this format is no longer
+/// Since we now use authenticated crypto (ie gcm), this format is no longer
 /// used, however *all* old serialization versions need to be supported.
 ///
 /// Also note that we basically skipped versions 1 and 2. There is no detectable
@@ -111,8 +229,8 @@ impl CryptoData {
 /// same format as v4.
 pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     let mut idx: usize = 0;
-    let mut hmac: Option<Vec<u8>> = None;
-    let version: u32 = ((serialized[idx] as u32) << 8) + (serialized[idx + 1] as u32);
+    let mut hmac: Vec<u8> = Vec::new();
+    let version: u16 = ((serialized[idx] as u16) << 8) + (serialized[idx + 1] as u16);
     idx += 2;
 
     // Check if we're at version 0. Version 0 was the very first crypto format.
@@ -133,12 +251,13 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     }
 
     if version <= 4 {
-        hmac = Some(Vec::from(&serialized[idx..(idx + 32)]));
+        hmac = Vec::from(&serialized[idx..(idx + 32)]);
         idx += 32;
     }
 
     let desc_length = serialized[idx];
     let desc = &serialized[(idx + 1)..(idx + 1 + (desc_length as usize))];
+    let desc_struct = try!(PayloadDescription::from(desc));
     idx += (desc_length as usize) + 1;
 
     let iv = &serialized[idx..(idx + 16)];
@@ -146,7 +265,169 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
 
     let ciphertext = &serialized[idx..];
 
-    Ok(CryptoData::new(version, Vec::from(desc), Vec::from(iv), hmac, Vec::from(ciphertext)))
+    Ok(CryptoData::new(version, desc_struct, Vec::from(iv), hmac, Vec::from(ciphertext)))
+}
+
+#[allow(dead_code)]
+/// Serialize a CryptoData container into a raw header vector. This is useful
+/// for extracting authentication data.
+pub fn serialize_header(data: & CryptoData) -> CResult<Vec<u8>> {
+    let mut ser: Vec<u8> = Vec::with_capacity(data.len());
+
+    // add the two-byte version
+    ser.push((data.version >> 8) as u8);
+    ser.push((data.version & 0xFF) as u8);
+
+    // if we're 1 <= version <= 4, append our hmac
+    if data.version <= 4 {
+        ser.append(&mut data.hmac.clone());
+    }
+
+    // add description length and description
+    ser.push(data.desc.len() as u8);
+    ser.append(&mut data.desc.as_vec().clone());
+
+    // add the iv
+    ser.append(&mut data.iv.clone());
+
+    Ok(ser)
+}
+
+#[allow(dead_code)]
+/// Serialize a CryptoData container into a vector of bytes. For more info on
+/// the different serialization formats, check out deserialize().
+pub fn serialize(data: &mut CryptoData) -> CResult<Vec<u8>> {
+    if data.version == 0 { return serialize_version_0(data); }
+
+    // grab the raw header
+    let mut ser = try!(serialize_header(data));
+
+    // lastly, our ciphertext
+    ser.append(&mut data.ciphertext);
+
+    Ok(ser)
+}
+
+#[allow(dead_code)]
+/// Given a master key, derive an encryption key and an authentication key
+/// using PBKDF2 as a key-stretcher. Note that HKDF would be a better option but
+/// PBKDF2 works just fine. The general consensus is that using it for this
+/// purpose is great, but HKDF would be slightly better.
+///
+/// Also, this is really to support back-wards compatible crypto versions <= 4.
+fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>, Vec<u8>)> {
+    match desc.kdf_index {
+        Some(x) => {
+            let hasher: low::Hasher;
+            let iterations: usize;
+            let keylen: usize;
+
+            // NOTE: only one KDF value was ever implemented. So instead of
+            // doing the "right thing" and parsing it out, I'm going to just
+            // hardcode this shit.
+            match x {
+                0 | _ => {
+                    hasher = low::Hasher::SHA256;
+                    iterations = 2;
+                    keylen = 64;
+                }
+            }
+
+            println!("deriveing: {:?} / {} / {}", hasher, iterations, keylen);
+            let derived = try!(low::pbkdf2(hasher, master_key, &[], iterations, keylen));
+            Ok((Vec::from(&derived[0..32]), Vec::from(&derived[32..64])))
+        },
+        None => Err(CryptoError::Msg(format!("derive_keys: no kdf present in desc"))),
+    }
+}
+
+#[allow(dead_code)]
+/// HMACs a CryptoData and compares the generated hash to the hash stored
+/// in the struct in constant time. Returns true of the data authenticates
+/// properly.
+///
+/// NOTE that we are not going to implement this correctly. No. Instead, we're
+/// going to mimick the way the function worked in the turtl js project, which
+/// used string concatenation as such:
+///
+///   // if version = 4 and desc = "desc"
+///   var auth = version + desc.length + desc
+///
+/// This was (at the time) thought to yield something like "43desc", but since
+/// js actually does the combination left to right, it ends up being 7desc
+/// (4+3+'desc'). Great. So, let's replicate this then never speak of it again.
+/// Luckily this only applies to old versions (new versions use GCM, no need to
+/// do the HMAC ourselves).
+pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
+    let mut auth: Vec<u8> = Vec::new();
+    let shitty_version = data.version + (data.desc.len() as u16);
+    auth.push(shitty_version as u8);
+    auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
+    auth.append(&mut Vec::from(data.iv.as_slice()));
+    auth.append(&mut Vec::from(data.ciphertext.as_slice()));
+    let hmac = try!(low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice()));
+    if !low::const_compare(hmac.as_slice(), data.hmac.as_slice()) {
+        return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
+    }
+    Ok(())
+}
+
+/// Wow. Such fail. In older versions of Turtl, keys were UTF8 encoded strings.
+/// This function converts the keys back to raw byte arrays. Ugh.
+fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
+    let keystr = try_c!(String::from_utf8(key.clone()));
+    let mut fixed_key: Vec<u8> = Vec::with_capacity(32);
+    for char in keystr.chars() {
+        fixed_key.push(char as u8);
+    }
+    Ok(fixed_key)
+}
+
+#[allow(dead_code)]
+/// Decrypt a message, given a key and the ciphertext. The ciphertext should
+/// contain *all* the data needed to decrypt the message encoded in a header
+/// (see deserialize() for more info).
+pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
+    let fixed: Vec<u8>;
+    let mut key = key;
+
+    // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
+    // Obviously I should have used utf9. That's the best way to encode raw
+    // binary data.
+    if key.len() > 32 {
+        fixed = try!(fix_utf8_key(key));
+        key = &fixed;
+    }
+
+    let deserialized = try!(deserialize(ciphertext));
+    let version = deserialized.version;
+    let desc = &deserialized.desc;
+    let iv = &deserialized.iv;
+    let ciphertext = &deserialized.ciphertext;
+    let mut decrypted: Vec<u8>;
+
+    if version == 0 {
+        decrypted = try!(low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
+    } else if version <= 4 {
+        let (crypt_key, hmac_key) = try!(derive_keys(key.as_slice(), &desc));
+        println!("cryp: {}", low::to_base64(&crypt_key).unwrap());
+        println!("hmac: {}", low::to_base64(&hmac_key).unwrap());
+        try!(authenticate(&deserialized, hmac_key.as_slice()));
+        decrypted = try!(low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
+    } else if version >= 5 {
+        let auth: Vec<u8> = try!(serialize_header(&deserialized));
+        decrypted = try!(low::aes_gcm_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice(), auth.as_slice()));
+    } else {
+        return Err(CryptoError::NotImplemented(format!("version not implemented: {}", version)));
+    }
+
+    // if we're version 4 or 5, we have a stupid UTF8 byte. another vestigial
+    // javascript annoyance
+    if version >= 4 && version <= 5 {
+        decrypted = Vec::from(&decrypted[1..]);
+    }
+
+    Ok(decrypted)
 }
 
 #[allow(dead_code)]
@@ -315,9 +596,21 @@ pub fn random_hash() -> CResult<String> {
 fn deserialize_version_0(serialized: &Vec<u8>) -> CResult<CryptoData> {
     let ciphertext_base64 = String::from_utf8(Vec::from(&serialized[0..(serialized.len() - 34)])).unwrap();
     let ciphertext = low::from_base64(&ciphertext_base64).unwrap();
-    let iv_base64 = String::from_utf8(Vec::from(&serialized[34..])).unwrap();
-    let iv = low::from_hex(&iv_base64).unwrap();
-    Ok(CryptoData::new(0, Vec::new(), iv, None, ciphertext))
+    let cutoff: usize = serialized.len() - 32;
+    let iv_hex = String::from_utf8(Vec::from(&serialized[cutoff..])).unwrap();
+    let iv = low::from_hex(&iv_hex).unwrap();
+    let desc = PayloadDescription { cipher_index: 0, block_index: 0, pad_index: None, kdf_index: None };
+    Ok(CryptoData::new(0, desc, iv, Vec::new(), ciphertext))
+}
+
+#[allow(dead_code)]
+/// Ugh. Serialize a CryptoData container to version 0. See "dunce" comment
+/// above.
+fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
+    let mut ser = to_base64(&data.ciphertext).unwrap();
+    ser.push_str(":i");
+    ser.push_str(&to_hex(&data.iv).unwrap());
+    Ok(Vec::from(ser.as_bytes()))
 }
 
 #[cfg(test)]
@@ -344,6 +637,8 @@ mod tests {
         assert_eq!(super::PAD_INDEX.len(), 2);
         assert_eq!(super::PAD_INDEX[0], "AnsiX923");
         assert_eq!(super::PAD_INDEX[1], "PKCS7");
+        assert_eq!(super::KDF_INDEX.len(), 1);
+        assert_eq!(super::KDF_INDEX[0], "SHA256:2:64");
     }
 
     #[test]
@@ -359,24 +654,12 @@ mod tests {
     }
 
     #[test]
-    //(test (decryption-test-version0 :depends-on key-tests)
-    //  "Test decryption of version 0 against Turtl's tcrypt library."
-    //  (let* ((key (key-from-string "WPEpNTwrRE144Y7uLuTmJSIYhc1qoo7OMLvZ3oNwaII="))
-    //         (tcrypt-ciphertext (babel:string-to-octets "VFQYqIsxYBVdVxANyHepjXvowy107j+n9t1bQqcSI2E2CGLscFMnuZJW6vxLz75XuBHKn0lhbC5FFL1HDuXa1bjvj9CSQcuOl96DqQzGs6BuBHBtTZDHovuzlaC+J7eanoAydRmCuz5iZgKNLLWgWox9e3HWcwRrbyGwOAq5Cj/7s0cn4lKDE5K9V/+x3EA4LzB6aOekBcJNPKD9LmV7I2yifELN2+OAJC7jcICYZHa6i0KciLBZUxTeYfpM1vZJ4suWLH5ZdTFdT9SUINbi06WGFyJtTOQrqlzIz2LFHctsm/FDuU8r9bwFc4sYbha/Ej80+z3S7Zjfp40Ra5GW71oLyK6NyuZSjbdK/xShybiqzyEhA6hf6ekH4Mfef0SlGYTKTvCx7bNd+pPJa/R+LkT/qGgDDJkyzqejvP7guhk=:ib043a089740f1d5ed086225eb30063ff"))
-    //         (tcrypt-plaintext "{\"sort\":15,\"type\":\"link\",\"tags\":[\"programming\",\"css\",\"design\"],\"url\":\"http://nicolasgallagher.com/css-drop-shadows-without-images/\",\"title\":\"CSS drop-shadows without images\",\"text\":\"Perhaps a bit dated, but seems to work well. Check [the demo](http://nicolasgallagher.com/css-drop-shadows-without-images/demo/).\"}")
-    //         (turtl-plaintext (babel:octets-to-string (decrypt key tcrypt-ciphertext))))
-    //    (is (string= tcrypt-plaintext turtl-plaintext))))
     fn can_decrypt_v0() {
-        let data = from_base64(&String::from("AAUCAAFhrjnt2O1fiZnsHwyEOr+Ysx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha")).unwrap();
-        let des = deserialize(&data).unwrap();
-
-        let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
-        let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc, [0, 1]);
-        assert_eq!(des.version, 5);
-        assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
-        assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, None);
+        let key = from_base64(&String::from("WPEpNTwrRE144Y7uLuTmJSIYhc1qoo7OMLvZ3oNwaII=")).unwrap();
+        let enc = String::from(r#"VFQYqIsxYBVdVxANyHepjXvowy107j+n9t1bQqcSI2E2CGLscFMnuZJW6vxLz75XuBHKn0lhbC5FFL1HDuXa1bjvj9CSQcuOl96DqQzGs6BuBHBtTZDHovuzlaC+J7eanoAydRmCuz5iZgKNLLWgWox9e3HWcwRrbyGwOAq5Cj/7s0cn4lKDE5K9V/+x3EA4LzB6aOekBcJNPKD9LmV7I2yifELN2+OAJC7jcICYZHa6i0KciLBZUxTeYfpM1vZJ4suWLH5ZdTFdT9SUINbi06WGFyJtTOQrqlzIz2LFHctsm/FDuU8r9bwFc4sYbha/Ej80+z3S7Zjfp40Ra5GW71oLyK6NyuZSjbdK/xShybiqzyEhA6hf6ekH4Mfef0SlGYTKTvCx7bNd+pPJa/R+LkT/qGgDDJkyzqejvP7guhk=:ib043a089740f1d5ed086225eb30063ff"#);
+        let dec = decrypt(&key, &Vec::from(enc.as_bytes())).unwrap();
+        let dec_str = String::from_utf8(dec).unwrap();
+        assert_eq!(dec_str, "{\"sort\":15,\"type\":\"link\",\"tags\":[\"programming\",\"css\",\"design\"],\"url\":\"http://nicolasgallagher.com/css-drop-shadows-without-images/\",\"title\":\"CSS drop-shadows without images\",\"text\":\"Perhaps a bit dated, but seems to work well. Check [the demo](http://nicolasgallagher.com/css-drop-shadows-without-images/demo/).\"}");
     }
 
     #[test]
@@ -389,16 +672,13 @@ mod tests {
     //         (turtl-plaintext (babel:octets-to-string (decrypt key tcrypt-ciphertext))))
     //    (is (string= tcrypt-plaintext turtl-plaintext))))
     fn can_decrypt_v3() {
-        let data = from_base64(&String::from("AAUCAAFhrjnt2O1fiZnsHwyEOr+Ysx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha")).unwrap();
-        let des = deserialize(&data).unwrap();
-
-        let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
-        let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc, [0, 1]);
-        assert_eq!(des.version, 5);
-        assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
-        assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, None);
+        println!("");
+        println!("----");
+        let key = from_base64(&String::from("HsKTwqcAdzAXSsK2Z8OaOy4RI8OqKnoUw5Miw7BbJcOUT8KOdcO0JwsO")).unwrap();
+        let enc = from_base64(&String::from(r#"AAOpckDeBymudt1AnCMpNUWE/3gA53BFCXVfl5eRXR6h2gQAAAAAmF5Li7QHzaJda8AwGom/ZGcFhKUjE9VOot2xxxKgQNop6MOkMq6stbbARt8ltbsVQb8I5wSTddcGUJapB6Spd/O+lZ7neYVBNttIm+kb3mekW4AjSBrNBFGpfqsGzOBp3ZVVpkUBJwlCT3/ZJdUXU9KqFlbHq/1uNesiRtXEugTRM4rtKaWoOvPvFye6msGDIxecdjJjI2tSJv4mCvPqnenPw9HzGGDp6U1s9r/FWtdsGoRfxuDPtIKEzuXm4t4CjxMlx/83fOV7xxE4EneMRTOlRUf8MM0eqNkDqAeDK8YNtOmdJLs3XVXRYGvPvh6eR9WcemLbcliz1gqjEmpc+UTWLrL/XDlbDcCQ2RacvJLoEq6i5ogkMa7XTyjKGhrg"#)).unwrap();
+        let dec = decrypt(&key, &enc).unwrap();
+        let dec_str = String::from_utf8(dec).unwrap();
+        assert_eq!(dec_str, "{\"type\":\"link\",\"url\":\"http://viget.com/extend/level-up-your-shell-game\",\"title\":\"Level Up Your Shell Game\",\"text\":\"Covers movements, aliases, many shortcuts. Good article.\\n\\nTODO: break out the useful bits into individual notes =]\",\"tags\":[\"bash\",\"shell\"],\"sort\":12}");
     }
 
     #[test]
@@ -415,11 +695,11 @@ mod tests {
 
         let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
         let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc, [0, 1]);
+        assert_eq!(des.desc.as_vec(), [0, 1]);
         assert_eq!(des.version, 5);
         assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
         assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, None);
+        assert_eq!(des.hmac, Vec::new());
     }
 
     #[test]
@@ -436,11 +716,11 @@ mod tests {
 
         let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
         let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc, [0, 1]);
+        assert_eq!(des.desc.as_vec(), [0, 1]);
         assert_eq!(des.version, 5);
         assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
         assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, None);
+        assert_eq!(des.hmac, Vec::new());
     }
 
     #[test]
