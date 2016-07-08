@@ -7,13 +7,6 @@
 //! This includes high-level encryption/decryption as well as (de)serialiation
 //! from/to [Turtl's standard format](https://turtl.it/docs/security/encryption-specifics/).
 
-// TODO: serialize
-// TODO: deserialize
-// TODO: encrypt
-// TODO: decrypt
-// TODO: key splitting/stretching via pbkdf2
-// TODO: cbc+hmac verification
-
 #[macro_use]
 mod low;
 
@@ -73,6 +66,42 @@ fn find_index(arr: &[&'static str], val: &str) -> CResult<usize> {
         if val == arr[i] { return Ok(i) }
     }
     Err(CryptoError::Msg(format!("not found: {}", val)))
+}
+
+#[derive(Debug)]
+/// Describes how we want to run our encryption.
+pub struct CryptoOp {
+    cipher: &'static str,
+    blockmode: &'static str,
+    iv: Option<Vec<u8>>,
+    utf8_random: Option<u8>,
+}
+
+impl CryptoOp {
+    #[allow(dead_code)]
+    /// Create a new crypto op with a cipher/blockmode
+    pub fn new(cipher: &'static str, blockmode: &'static str) -> CResult<CryptoOp> {
+        try!(find_index(&CIPHER_INDEX, cipher));
+        try!(find_index(&BLOCK_INDEX, blockmode));
+        Ok(CryptoOp { cipher: cipher, blockmode: blockmode, iv: None, utf8_random: None })
+    }
+
+    #[allow(dead_code)]
+    /// Create a new crypto op with a cipher/blockmode/iv
+    pub fn new_with_iv(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>) -> CResult<CryptoOp> {
+        let mut op = try!(CryptoOp::new(cipher, blockmode));
+        op.iv = Some(iv);
+        Ok(op)
+    }
+
+    #[allow(dead_code)]
+    /// Create a new crypto op with a cipher/blockmode/iv
+    pub fn new_with_iv_utf8(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>, utf8: u8) -> CResult<CryptoOp> {
+        let mut op = try!(CryptoOp::new(cipher, blockmode));
+        op.iv = Some(iv);
+        op.utf8_random = Some(utf8);
+        Ok(op)
+    }
 }
 
 #[derive(Debug)]
@@ -271,7 +300,7 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
 #[allow(dead_code)]
 /// Serialize a CryptoData container into a raw header vector. This is useful
 /// for extracting authentication data.
-pub fn serialize_header(data: & CryptoData) -> CResult<Vec<u8>> {
+pub fn serialize_header(data: &CryptoData) -> CResult<Vec<u8>> {
     let mut ser: Vec<u8> = Vec::with_capacity(data.len());
 
     // add the two-byte version
@@ -368,10 +397,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
     auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
-    println!("hkey: {}", to_base64(&Vec::from(hmac_key)).unwrap());
-    println!("data: {}", low::to_base64(&auth).unwrap());
     let hmac = try!(low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice()));
-    println!("hmac: {}, {}", low::to_hex(&hmac).unwrap(), low::to_hex(&data.hmac).unwrap());
     if !low::const_compare(hmac.as_slice(), data.hmac.as_slice()) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }
@@ -381,6 +407,8 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
 /// Wow. Such fail. In older versions of Turtl, keys were UTF8 encoded strings.
 /// This function converts the keys back to raw byte arrays. Ugh.
 fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
+    if key.len() == 32 { return Ok(key.clone()); }
+
     let keystr = try_c!(String::from_utf8(key.clone()));
     let mut fixed_key: Vec<u8> = Vec::with_capacity(32);
     for char in keystr.chars() {
@@ -394,16 +422,10 @@ fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
 /// contain *all* the data needed to decrypt the message encoded in a header
 /// (see deserialize() for more info).
 pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
-    let fixed: Vec<u8>;
-    let mut key = key;
-
     // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
-    if key.len() > 32 {
-        fixed = try!(fix_utf8_key(key));
-        key = &fixed;
-    }
+    let key = &try!(fix_utf8_key(&key));
 
     let deserialized = try!(deserialize(ciphertext));
     let version = deserialized.version;
@@ -416,9 +438,6 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
         decrypted = try!(low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
     } else if version <= 4 {
         let (crypt_key, hmac_key) = try!(derive_keys(key.as_slice(), &desc));
-        println!("- mast: {}", low::to_base64(&key).unwrap());
-        println!("- cryp: {}", low::to_base64(&crypt_key).unwrap());
-        println!("- hmac: {}", low::to_base64(&hmac_key).unwrap());
         try!(authenticate(&deserialized, hmac_key.as_slice()));
         decrypted = try!(low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
     } else if version >= 5 {
@@ -438,6 +457,65 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
 }
 
 #[allow(dead_code)]
+/// Encrypt a message, given a key and the plaintext. This returns the
+/// ciphertext serialized via Turtl serialization format (see deserialize() for
+/// more info).
+///
+/// Note that this function *ONLY* supports encrypting the current crypto
+/// version (CRYPTO_VERSION). The idea is that later versions are most likely
+/// more secure or correct than earlier versions, so we just don't allow going
+/// back in time (although decrypt() support all previous versions).
+///
+/// That said, some parts of the app *need* version 0 crypto. See encrypt_v0()
+/// for this.
+pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<Vec<u8>> {
+    // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
+    // Obviously I should have used utf9. That's the best way to encode raw
+    // binary data.
+    let key = &try!(fix_utf8_key(&key));
+    let version = CRYPTO_VERSION;
+
+    match (op.cipher, op.blockmode) {
+        ("aes", "gcm") => {
+            let iv = match op.iv {
+                Some(x) => x,
+                None => try!(random_iv()),
+            };
+
+            let mut plaintext_utf;
+            // in javascript, we used strings for everything. the problem with
+            // this is that plaintext was often utf8-encoded. we needed a way to
+            // let the decryptor know that this data should be returned as utf8
+            // or as binary. ugh.
+            //
+            // this is done by prepending a (random) byte to our plaintext such
+            // that if the byte is < 128, it's not utf8, if it's >= 128, it's
+            // utf8-encoded. since we always use binary in the rust version, we
+            // just set this to off (AND 0b1111111)
+            if version >= 4 && version <= 5 {
+                plaintext_utf = Vec::with_capacity(1 + plaintext.len());
+                let utf8_byte = match op.utf8_random {
+                    Some(x) => x,
+                    None => try!(low::rand_bytes(1))[0] & 0b1111111,
+                };
+                plaintext_utf.push(utf8_byte);
+                plaintext_utf.append(&mut plaintext);
+            } else {
+                plaintext_utf = plaintext;
+            }
+            let plaintext = plaintext_utf;
+
+            let desc = try!(PayloadDescription::new(version, op.cipher, op.blockmode, None, None));
+            let mut data = CryptoData::new(version, desc, iv, Vec::new(), Vec::new());
+            let auth = try!(serialize_header(&data));
+            data.ciphertext = try!(low::aes_gcm_encrypt(key.as_slice(), data.iv.as_slice(), plaintext.as_slice(), auth.as_slice()));
+            Ok(try!(serialize(&mut data)))
+        }
+        _ =>  return Err(CryptoError::NotImplemented(format!("mode not implemented: {}-{} (try \"aes-gcm\")", op.cipher, op.blockmode))) ,
+    }
+}
+
+#[allow(dead_code)]
 /// Generate a random cryptographic key (256-bit).
 pub fn random_key() -> CResult<Vec<u8>> {
     low::rand_bytes(32)
@@ -447,7 +525,7 @@ pub fn random_key() -> CResult<Vec<u8>> {
 /// Generate a random IV for use with encryption. This is a helper to enforce
 /// the idea that we should not reuse IVs.
 pub fn random_iv() -> CResult<Vec<u8>> {
-    low::rand_bytes(16)
+    low::rand_bytes(low::aes_block_size())
 }
 
 #[allow(dead_code)]
@@ -620,6 +698,15 @@ fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
     Ok(Vec::from(ser.as_bytes()))
 }
 
+#[allow(dead_code)]
+pub fn encrypt_v0(key: &Vec<u8>, iv: &Vec<u8>, plaintext: &String) -> CResult<String> {
+    let desc = try!(PayloadDescription::from(&[0, 0]));
+    let enc = try!(low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923));
+    let data = CryptoData::new(0, desc, iv.clone(), Vec::new(), enc);
+    let serialized = try!(serialize_version_0(&data));
+    Ok(try_c!(String::from_utf8(serialized)))
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for our high-level Crypto module interface. Note that many of
@@ -670,17 +757,7 @@ mod tests {
     }
 
     #[test]
-    //(test (decryption-test-version3 :depends-on key-tests)
-    //  "Test decryption of version 3 against Turtl's tcrypt library. Also contains a
-    //   built-in test for fixing utf8-encoded keys."
-    //  (let* ((key (key-from-string "HsKTwqcAdzAXSsK2Z8OaOy4RI8OqKnoUw5Miw7BbJcOUT8KOdcO0JwsO"))
-    //         (tcrypt-ciphertext (from-base64 "AAOpckDeBymudt1AnCMpNUWE/3gA53BFCXVfl5eRXR6h2gQAAAAAmF5Li7QHzaJda8AwGom/ZGcFhKUjE9VOot2xxxKgQNop6MOkMq6stbbARt8ltbsVQb8I5wSTddcGUJapB6Spd/O+lZ7neYVBNttIm+kb3mekW4AjSBrNBFGpfqsGzOBp3ZVVpkUBJwlCT3/ZJdUXU9KqFlbHq/1uNesiRtXEugTRM4rtKaWoOvPvFye6msGDIxecdjJjI2tSJv4mCvPqnenPw9HzGGDp6U1s9r/FWtdsGoRfxuDPtIKEzuXm4t4CjxMlx/83fOV7xxE4EneMRTOlRUf8MM0eqNkDqAeDK8YNtOmdJLs3XVXRYGvPvh6eR9WcemLbcliz1gqjEmpc+UTWLrL/XDlbDcCQ2RacvJLoEq6i5ogkMa7XTyjKGhrg"))
-    //         (tcrypt-plaintext "{\"type\":\"link\",\"url\":\"http://viget.com/extend/level-up-your-shell-game\",\"title\":\"Level Up Your Shell Game\",\"text\":\"Covers movements, aliases, many shortcuts. Good article.\\n\\nTODO: break out the useful bits into individual notes =]\",\"tags\":[\"bash\",\"shell\"],\"sort\":12}")
-    //         (turtl-plaintext (babel:octets-to-string (decrypt key tcrypt-ciphertext))))
-    //    (is (string= tcrypt-plaintext turtl-plaintext))))
     fn can_decrypt_v3() {
-        println!("");
-        println!("----");
         let key = from_base64(&String::from("HsKTwqcAdzAXSsK2Z8OaOy4RI8OqKnoUw5Miw7BbJcOUT8KOdcO0JwsO")).unwrap();
         let enc = from_base64(&String::from(r#"AAOpckDeBymudt1AnCMpNUWE/3gA53BFCXVfl5eRXR6h2gQAAAAAmF5Li7QHzaJda8AwGom/ZGcFhKUjE9VOot2xxxKgQNop6MOkMq6stbbARt8ltbsVQb8I5wSTddcGUJapB6Spd/O+lZ7neYVBNttIm+kb3mekW4AjSBrNBFGpfqsGzOBp3ZVVpkUBJwlCT3/ZJdUXU9KqFlbHq/1uNesiRtXEugTRM4rtKaWoOvPvFye6msGDIxecdjJjI2tSJv4mCvPqnenPw9HzGGDp6U1s9r/FWtdsGoRfxuDPtIKEzuXm4t4CjxMlx/83fOV7xxE4EneMRTOlRUf8MM0eqNkDqAeDK8YNtOmdJLs3XVXRYGvPvh6eR9WcemLbcliz1gqjEmpc+UTWLrL/XDlbDcCQ2RacvJLoEq6i5ogkMa7XTyjKGhrg"#)).unwrap();
         let dec = decrypt(&key, &enc).unwrap();
@@ -689,45 +766,41 @@ mod tests {
     }
 
     #[test]
-    //(test (decryption-test-version4 :depends-on key-tests)
-    //  "Test decryption of version 4 against Turtl's tcrypt library."
-    //  (let* ((key (key-from-string "rYMgzeHsjMupzeUvqBpbsDRO1pBk/JWlJp9EHw3yGPs="))
-    //         (tcrypt-ciphertext (from-base64 "AAQRk+ROrg4uNqRIwlAJrPOlTupLliAXexfnZpBt2nsCAAQAAAAA8PxvFb3rlGm50n75m4q7aLkif54G7BMiK1cqOAgKIziV7cN3Hyq+d2DggAkpSjnfcJXDDi60SGM+y0kjLUWOIuq0QVOFVF+c9OlhL6eQ5NsgYAr2ElUatg7jwufGbbCS93vItWssCJ3M5h2PTtaHTLtxhI0IrThkqeQYkV7bvK5tKOvo60Vc4pZ0LdAKfulIp3DJ0tmC15Nab2QVNDrQ35WB0tXZIBnloLIG0AkrBZYE+ig7cYK24QM52Z2sPSSQB33cKVe7U4OOZuS4rXBc1xwAhWKom9NZSMTYg6Ke69H4ZZTILZkkW4Qkgt+yIIJf"))
-    //         (tcrypt-plaintext "{\"type\":\"link\",\"url\":\"http://www.youtube.com/watch?v=m_0e9VGO05g\",\"title\":\"M-Seven - Electronic Flip - YouTube\",\"text\":\"![image](http://i1.ytimg.com/vi/m_0e9VGO05g/maxresdefault.jpg)  \\n\",\"tags\":[\"electronic\",\"calm\"]}")
-    //         (turtl-plaintext (babel:octets-to-string (decrypt key tcrypt-ciphertext))))
-    //    (is (string= tcrypt-plaintext turtl-plaintext))))
     fn can_decrypt_v4() {
-        let data = from_base64(&String::from("AAUCAAFhrjnt2O1fiZnsHwyEOr+Ysx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha")).unwrap();
-        let des = deserialize(&data).unwrap();
-
-        let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
-        let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc.as_vec(), [0, 1]);
-        assert_eq!(des.version, 5);
-        assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
-        assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, Vec::new());
+        let key = from_base64(&String::from("rYMgzeHsjMupzeUvqBpbsDRO1pBk/JWlJp9EHw3yGPs=")).unwrap();
+        let enc = from_base64(&String::from(r#"AAQRk+ROrg4uNqRIwlAJrPOlTupLliAXexfnZpBt2nsCAAQAAAAA8PxvFb3rlGm50n75m4q7aLkif54G7BMiK1cqOAgKIziV7cN3Hyq+d2DggAkpSjnfcJXDDi60SGM+y0kjLUWOIuq0QVOFVF+c9OlhL6eQ5NsgYAr2ElUatg7jwufGbbCS93vItWssCJ3M5h2PTtaHTLtxhI0IrThkqeQYkV7bvK5tKOvo60Vc4pZ0LdAKfulIp3DJ0tmC15Nab2QVNDrQ35WB0tXZIBnloLIG0AkrBZYE+ig7cYK24QM52Z2sPSSQB33cKVe7U4OOZuS4rXBc1xwAhWKom9NZSMTYg6Ke69H4ZZTILZkkW4Qkgt+yIIJf"#)).unwrap();
+        let dec = decrypt(&key, &enc).unwrap();
+        let dec_str = String::from_utf8(dec).unwrap();
+        assert_eq!(dec_str, "{\"type\":\"link\",\"url\":\"http://www.youtube.com/watch?v=m_0e9VGO05g\",\"title\":\"M-Seven - Electronic Flip - YouTube\",\"text\":\"![image](http://i1.ytimg.com/vi/m_0e9VGO05g/maxresdefault.jpg)  \\n\",\"tags\":[\"electronic\",\"calm\"]}");
     }
 
     #[test]
-    //(test (decryption-test-version5 :depends-on key-tests)
-    //  "Test decryption of version 5 against Turtl's tcrypt library."
-    //  (let* ((key (key-from-string "js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs="))
-    //         (tcrypt-ciphertext (from-base64 "AAUCAAFKp4T7iuwnVM6+OY+nM9ZKnxe5sUvA+WvkVfhAFDYUKQRenSi+m1WCGGWZIigqL12fAvE4AA10MGACEjEbHvxGQ45qQcEiVZuqB3EMgijklXjNA+EcvnbvcOFSu3KJ4i1iTbsZH+KORmqoxGsWYXafq/EeejAMV94umfC0Uwl6cuCOav2OcDced5GYHwkd9qSDTR+SJyjgAq33r7ylVQQASa8YUP7jx/FGoT4mzjp0+rNAoyqGYU7gJz4v0ccUfm34ww1eZS1kkWmy33h5Cqi6R7Y0y57ytye2WXjvlHGC2/iglx7sPgemDCmIoIMBVdXDW5sMw2fxmpQph1pyst10+Wbv4DcNtN+fMpseDdmTpbXarGNFqyYul/QXM9WmzUTtjeW3kZxol989l+1WXrr6E5Ctk61NVb98PtRMFuRHYU8kt3cTUE4m0G8PGwK62vkp+2pI6fn3UijOFLYHDpeGbgRiAeBbykHgXrtXfAIpysl/FOl1NzfFz44="))
-    //         (tcrypt-plaintext "{\"type\":\"link\",\"url\":\"http://www.baynatives.com/plants/Erysimum-capitatum/\",\"title\":\"Erysimum capitatum Gallery - Bay Natives: The San Francisco Source for Native Plants\",\"text\":\"![image](http://www.baynatives.com/plants/Erysimum-capitatum/03-P4082478__.jpg)  \\n\",\"tags\":[\"backyard\",\"garden\",\"native plants\",\"bay natives\",\"flower\",\"wildflower\"]}")
-    //         (turtl-plaintext (babel:octets-to-string (decrypt key tcrypt-ciphertext))))
-    //    (is (string= tcrypt-plaintext turtl-plaintext))))
     fn can_decrypt_v5() {
-        let data = from_base64(&String::from("AAUCAAFhrjnt2O1fiZnsHwyEOr+Ysx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha")).unwrap();
-        let des = deserialize(&data).unwrap();
+        let key = from_base64(&String::from("js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs=")).unwrap();
+        let enc = from_base64(&String::from(r#"AAUCAAFKp4T7iuwnVM6+OY+nM9ZKnxe5sUvA+WvkVfhAFDYUKQRenSi+m1WCGGWZIigqL12fAvE4AA10MGACEjEbHvxGQ45qQcEiVZuqB3EMgijklXjNA+EcvnbvcOFSu3KJ4i1iTbsZH+KORmqoxGsWYXafq/EeejAMV94umfC0Uwl6cuCOav2OcDced5GYHwkd9qSDTR+SJyjgAq33r7ylVQQASa8YUP7jx/FGoT4mzjp0+rNAoyqGYU7gJz4v0ccUfm34ww1eZS1kkWmy33h5Cqi6R7Y0y57ytye2WXjvlHGC2/iglx7sPgemDCmIoIMBVdXDW5sMw2fxmpQph1pyst10+Wbv4DcNtN+fMpseDdmTpbXarGNFqyYul/QXM9WmzUTtjeW3kZxol989l+1WXrr6E5Ctk61NVb98PtRMFuRHYU8kt3cTUE4m0G8PGwK62vkp+2pI6fn3UijOFLYHDpeGbgRiAeBbykHgXrtXfAIpysl/FOl1NzfFz44="#)).unwrap();
+        let dec = decrypt(&key, &enc).unwrap();
+        let dec_str = String::from_utf8(dec).unwrap();
+        assert_eq!(dec_str, "{\"type\":\"link\",\"url\":\"http://www.baynatives.com/plants/Erysimum-capitatum/\",\"title\":\"Erysimum capitatum Gallery - Bay Natives: The San Francisco Source for Native Plants\",\"text\":\"![image](http://www.baynatives.com/plants/Erysimum-capitatum/03-P4082478__.jpg)  \\n\",\"tags\":[\"backyard\",\"garden\",\"native plants\",\"bay natives\",\"flower\",\"wildflower\"]}");
+    }
 
-        let cipher_base64 = to_base64(&Vec::from(des.ciphertext)).unwrap();
-        let iv_base64 = to_base64(&Vec::from(des.iv)).unwrap();
-        assert_eq!(des.desc.as_vec(), [0, 1]);
-        assert_eq!(des.version, 5);
-        assert_eq!(cipher_base64, "sx06ZcyOYaATj+jCp0MbxsSPsgT9I63q8rgiM7mpDdseylSP1m79IMIUbRNeRDXb7V8pDBF3JXbYUXtFmPFnxft0pjxLSvDO/UcX8dgfjYTqtH7Zsm3XExRPYm3n1C63oqdXM805RPF6Pqb1iAUWvRDVC/1Y992BBk9pQHw4yvnCwFwVsw8EXKNinSt8DAksJvU2FgMt3sq1+tpcbKEaevNTl6h9ElvoeMR3sROSvW6vGwlrxA8OOaKaTRuPcLtNfM5ue/8GqZMBcWbWS+qBPZBtHJsjDOfLa28gyOha");
-        assert_eq!(iv_base64, "Ya457djtX4mZ7B8MhDq/mA==");
-        assert_eq!(des.hmac, Vec::new());
+    #[test]
+    fn can_encrypt_v0() {
+        let key = from_base64(&String::from("nDuViJIt1KFY0AKZqkyrVJ/qxeWaC8sD8Ynuo2iT850=")).unwrap();
+        let iv = from_base64(&String::from("uPTMrLsYTVBTj3c3LATl/g==")).unwrap();
+        let plain = String::from(r#"version 0 violates the NAP"#);
+        let enc = encrypt_v0(&key, &iv, &plain).unwrap();
+        assert_eq!(enc, "IXORwc/2T+Zt/I+QGUSGzQV4a8/gvHpNHiKMZhOJv1U=:ib8f4ccacbb184d50538f77372c04e5fe");
+    }
+
+    #[test]
+    fn can_encrypt_latest() {
+        let key = from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap();
+        let iv = from_base64(&String::from("gFKdvdDznhM+Wo/uzfsPbg==")).unwrap();
+        let plain = String::from(r#"{"title":"libertarian quotes","body":"Moreover, the institution of child labor is an honorable one, with a long and glorious history of good works. And the villains of the piece are not the employers, but rather those who prohibit the free market in child labor. These do-gooders are responsible for the untold immiseration of those who are thus forced out of employment. Although the harm done was greater in the past, when great poverty made widespread child labor necessary, there are still people in dire straits today. Present prohibitions of child labor are thus an unconscionable interference with their lives.","tags":["moron"],"mod":1468007942,"created":1468007942.493,"keys":[]}"#);
+        let op = CryptoOp::new_with_iv_utf8("aes", "gcm", iv, 42).unwrap();
+        let enc = encrypt(&key, Vec::from(plain.as_bytes()), op).unwrap();
+        let enc_str = to_base64(&enc).unwrap();
+        assert_eq!(enc_str, "AAUCAAGAUp290POeEz5aj+7N+w9uaa6P93K8GQvTwE7C+PXslD/3BgY5vt6zufAH8VgDTr3OwozHCtz/hBsEmHcH8GTWKC3EMyMO5nlJxttmuCJ22IMtEZqYWv8rosS9rX/XTaI1+c8LJga/0V7vwTs2U1Eaa8EiXRsO3eaitblmZnCTxOE0CB+bNu+yF/YZ8kxhVr5fzpipPFTwabWck/i7piglfELrhCuTKE4oYZzDlprv1CXLvRma3i/O9Vw7GsXKdSwP7tKLQG7yTER7jNd5C4jlpjwB8GCeZ/plam9q3Rg95hpRDe4ZMXSSw44Fraxg8C/JgG4wGyHt/bXNGVHbWEpO2wLgwP2cEMvWX75YSPwYoVlvb773uXiPOlFJAhF9q2BNeBux67t1vPmWuQ43k1HBgIdaaaaRdEDxRIRlctlUE7KU6Z2otD5eDjUQEuYjyygiVWf0s+gn0cFBBfpBV+yX1mn35RTcBrdHSQkHHk/r/YxhKuAw6oabQDJZpMNW7ivFTvPbnaVapVTU8BWdop+4yIKqZt2u/N1melKkKPm3noYxp6xYW+aBZ5P48YQH/O+gWha3rFdz7pt7THbtb2wwZDdwioI4u2S/8BAwKEg8gOqGL9C8GKpay59rsufd+6P3RxjNmGPxbzfN2mCzrNMT6iIFCIzDcGbRfEpmMcFtXjd8GSMY2JDGH06hDEe51HPO8X64H5IUZLWzRKlJOgOhkG9nJLRgNwMsZnH1aNnoZsXWc40brIdnY1/fwQ1aS6cibOD7SaQikXGjQEpXKNqWJReaurSVpuFGZTtJY52QUBQlDEqS8IWftjziopjvpsjgG3f7PSyju0hABA7iZVJ/A3dLaYwCJunhZ49UflEA45nwZs/pyVVkc2hYJfYQwBf6n0Wohta7uVMP0SNoDKhO1rsRg14tjnv7xIoKyLtpNEcGaGuGPY/l+JojHt0sVNFn");
     }
 
     #[test]
