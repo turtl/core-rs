@@ -15,7 +15,7 @@ use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
 use ::gcrypt::rand::Random;
-use ::openssl::crypto::pkcs5;
+use ::rust_crypto;
 use ::constant_time_eq;
 
 lazy_static! {
@@ -206,20 +206,45 @@ pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: us
 }
 */
 
+/*
 #[allow(dead_code)]
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
-
     let pbfn = match hasher {
         Hasher::SHA1 => pkcs5::pbkdf2_hmac_sha1,
         Hasher::SHA256 => pkcs5::pbkdf2_hmac_sha256,
         Hasher::SHA512 => pkcs5::pbkdf2_hmac_sha512,
     };
 
-    let mut pass_str = String::with_capacity(pass.len());
+    let mut pass_str = String::new();
+    let mut i = 0;
     for byte in pass {
         pass_str.push(*byte as char);
+        i += 1;
+        println!("byte: {} -- {} / {}", byte, i, pass_str.len());
     }
+    println!("- pass: {}", to_base64(&Vec::from(pass_str.as_bytes())).unwrap());
     Ok(pbfn(&pass_str, salt, iter, keylen))
+}
+*/
+
+#[allow(dead_code)]
+pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
+    let mut result: Vec<u8> = vec![0; keylen];
+    match hasher {
+        Hasher::SHA1 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha1::Sha1::new(), pass);
+            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
+        },
+        Hasher::SHA256 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha256::new(), pass);
+            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
+        },
+        Hasher::SHA512 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha512::new(), pass);
+            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
+        },
+    }
+    Ok(result)
 }
 
 /// Pad a byte vector using padding of type PadMode.
@@ -436,6 +461,13 @@ mod tests {
         let key = keystr.as_bytes();
         let res = to_hex(&hmac(Hasher::SHA256, &key, &data.as_bytes()).unwrap()).unwrap();
         assert_eq!(res, "b1a698ee4ea7105e79723dfbab65912dffa01c822038b24fbf413a587f241f10");
+
+        /*
+        let data = from_base64(&String::from("NwAAAACYXkuLtAfNol1rwDAaib9kZwWEpSMT1U6i3bHHEqBA2inow6Qyrqy1tsBG3yW1uxVBvwjnBJN11wZQlqkHpKl3876Vnud5hUE220ib6RveZ6RbgCNIGs0EUal+qwbM4GndlVWmRQEnCUJPf9kl1RdT0qoWVser/W416yJG1cS6BNEziu0ppag68+8XJ7qawYMjF5x2MmMja1Im/iYK8+qd6c/D0fMYYOnpTWz2v8Va12wahF/G4M+0goTO5ebi3gKPEyXH/zd85XvHETgSd4xFM6VFR/wwzR6o2QOoB4Mrxg206Z0kuzddVdFga8++Hp5H1Zx6YttyWLPWCqMSalz5RNYusv9cOVsNwJDZFpy8kugSrqLmiCQxrtdPKMoaGuA=")).unwrap();
+        let key = from_base64(&String::from("S6jy3U3rgIIFuItBVNTfCniyYGplEOZCZ9qORZ+qQXM=")).unwrap();
+        let res = to_hex(&hmac(Hasher::SHA256, key.as_slice(), data.as_slice()).unwrap()).unwrap();
+        assert_eq!(res, "a97240de0729ae76dd409c2329354584ff7800e7704509755f9797915d1ea1da");
+        */
     }
 
     /*

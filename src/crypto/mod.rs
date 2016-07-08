@@ -333,9 +333,8 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
                 }
             }
 
-            println!("deriveing: {:?} / {} / {}", hasher, iterations, keylen);
             let derived = try!(low::pbkdf2(hasher, master_key, &[], iterations, keylen));
-            Ok((Vec::from(&derived[0..32]), Vec::from(&derived[32..64])))
+            Ok((Vec::from(&derived[0..32]), Vec::from(&derived[32..])))
         },
         None => Err(CryptoError::Msg(format!("derive_keys: no kdf present in desc"))),
     }
@@ -361,11 +360,18 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
 pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
     let mut auth: Vec<u8> = Vec::new();
     let shitty_version = data.version + (data.desc.len() as u16);
-    auth.push(shitty_version as u8);
+    let shitty_version_char = match format!("{}", shitty_version).chars().nth(0) {
+        Some(x) => x as u8,
+        None => 0 as u8,
+    };
+    auth.push(shitty_version_char);
     auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
+    println!("hkey: {}", to_base64(&Vec::from(hmac_key)).unwrap());
+    println!("data: {}", low::to_base64(&auth).unwrap());
     let hmac = try!(low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice()));
+    println!("hmac: {}, {}", low::to_hex(&hmac).unwrap(), low::to_hex(&data.hmac).unwrap());
     if !low::const_compare(hmac.as_slice(), data.hmac.as_slice()) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }
@@ -410,8 +416,9 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
         decrypted = try!(low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
     } else if version <= 4 {
         let (crypt_key, hmac_key) = try!(derive_keys(key.as_slice(), &desc));
-        println!("cryp: {}", low::to_base64(&crypt_key).unwrap());
-        println!("hmac: {}", low::to_base64(&hmac_key).unwrap());
+        println!("- mast: {}", low::to_base64(&key).unwrap());
+        println!("- cryp: {}", low::to_base64(&crypt_key).unwrap());
+        println!("- hmac: {}", low::to_base64(&hmac_key).unwrap());
         try!(authenticate(&deserialized, hmac_key.as_slice()));
         decrypted = try!(low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
     } else if version >= 5 {
