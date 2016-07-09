@@ -3,8 +3,7 @@ use std::path::Path;
 use std::io::prelude::*;
 
 use ::error::{TResult, TError};
-use ::util::json;
-use ::util::json::Value;
+use ::util::json::{self, Value, Deserialize};
 
 /// create a static/global CONFIG var, and load it with our config data
 lazy_static! {
@@ -25,36 +24,7 @@ fn load_config() -> TResult<Value> {
 
 #[allow(dead_code)]
 /// get a string value from our config
-pub fn get_str(keys: &[&str]) -> TResult<String> {
-    match json::find_string(keys, &*CONFIG) {
-        Ok(x) => Ok(x.to_owned()),
-        Err(x) => Err(toterr!(x)),
-    }
+pub fn get<T: Deserialize>(keys: &[&str]) -> TResult<T> {
+    Ok(try_t!(json::get(keys, &*CONFIG)))
 }
 
-#[allow(dead_code)]
-/// get an int value from our config
-pub fn get_int(keys: &[&str]) -> TResult<i64> {
-    match json::find_int(keys, &*CONFIG) {
-        Ok(x) => Ok(x),
-        Err(x) => Err(toterr!(x)),
-    }
-}
-
-#[allow(dead_code)]
-/// get a float value from our config
-pub fn get_float(keys: &[&str]) -> TResult<f64> {
-    match json::find_float(keys, &*CONFIG) {
-        Ok(x) => Ok(x),
-        Err(x) => Err(toterr!(x)),
-    }
-}
-
-#[allow(dead_code)]
-/// get a bool value from our config
-pub fn get_bool(keys: &[&str]) -> TResult<bool> {
-    match json::find_bool(keys, &*CONFIG) {
-        Ok(x) => Ok(x),
-        Err(x) => Err(toterr!(x)),
-    }
-}

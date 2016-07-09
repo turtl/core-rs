@@ -35,7 +35,7 @@ lazy_static! {
 /// and unbind.
 pub fn bind(dispatch: &Fn(&String) -> TResult<()>) -> TResult<()> {
     let mut message = String::new();
-    let address = try!(config::get_str(&["messaging", "address"]));
+    let address: String = try!(config::get(&["messaging", "address"]));
     info!("messaging: binding: address: {}", address);
 
     // bind our socket and mark it as bound so send() knows it can use it
@@ -114,7 +114,7 @@ mod tests {
     /// receive a message on an open nanomsg socket, saving the message to a
     /// mutable string (passed in)
     fn recv(socket: &mut Socket, message: &mut String) -> TResult<()> {
-        let address = try!(config::get_str(&["messaging", "address"]));
+        let address: String = try!(config::get(&["messaging", "address"]));
         info!("messaging: recv: address: {}", address);
 
         try_t!(socket.read_to_string(message));
@@ -124,7 +124,7 @@ mod tests {
     /// send a message, then receive the response (blocks the thread)
     fn send_recv(outgoing: &String, incoming: &mut String) -> TResult<()> {
         let mut socket = try_t!(Socket::new(Protocol::Pair));
-        let address = try!(config::get_str(&["messaging", "address"]));
+        let address: String = try!(config::get(&["messaging", "address"]));
         let mut endpoint = try_t!(socket.connect(&address));
 
         try!(send_sock(&mut socket, &outgoing));
@@ -185,7 +185,7 @@ mod tests {
 #[allow(dead_code)]
 fn send_new(message: &String) -> TResult<()> {
     let mut socket = try_t!(Socket::new(Protocol::Pair));
-    let address = try!(config::get_str(&["messaging", "address"]));
+    let address: String = try!(config::get(&["messaging", "address"]));
     let mut endpoint = try_t!(socket.connect(&address));
 
     try!(send_sock(&mut socket, &message));

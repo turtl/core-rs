@@ -1,5 +1,6 @@
-use ::serde_json;
-pub use ::serde_json::Value;
+pub use ::serde_json::{self, Value};
+pub use ::serde::de::Deserialize;
+pub use ::serde::ser::Serialize;
 use ::serde_json::Value::{Object, Array};
 
 quick_error! {
@@ -22,22 +23,6 @@ quick_error! {
             description("invalid key")
             display("json: invalid key for object: {}", key)
         }
-        InvalidString {
-            description("invalid string")
-            display("json: the value found is not a string")
-        }
-        InvalidInt {
-            description("invalid int")
-            display("json: the value found is not an int")
-        }
-        InvalidFloat {
-            description("invalid float")
-            display("json: the value found is not a float")
-        }
-        InvalidBool {
-            description("invalid bool")
-            display("json: the value found is not a bool")
-        }
     }
 }
 
@@ -48,7 +33,7 @@ pub fn parse(string: &String) -> JResult<Value> {
     Ok(data)
 }
 
-pub fn find<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
+pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     let last: bool = keys.len() == 0;
     if last { return Ok(data); }
 
@@ -57,7 +42,7 @@ pub fn find<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     match *data {
         Object(ref obj) => {
             match obj.get(key) {
-                Some(d) => find(&keys[1..].to_vec(), d),
+                Some(d) => walk(&keys[1..].to_vec(), d),
                 None => Err(JSONError::NotFound(key.to_owned())),
             }
         },
@@ -67,7 +52,7 @@ pub fn find<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
                 Err(..) => return Err(JSONError::InvalidKey(key.to_owned())),
             };
             match arr.get(ukey) {
-                Some(d) => find(&keys[1..].to_vec(), d),
+                Some(d) => walk(&keys[1..].to_vec(), d),
                 None => Err(JSONError::NotFound(key.to_owned())),
             }
         },
@@ -75,42 +60,13 @@ pub fn find<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     }
 }
 
-pub fn find_string<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a String> {
-    return match find(&keys, &data) {
-        Ok(x) => match *x {
-            Value::String(ref x) => Ok(x),
-            _ => Err(JSONError::InvalidString),
-        },
-        Err(e) => Err(e),
-    }
-}
-
-pub fn find_int(keys: &[&str], data: &Value) -> JResult<i64> {
-    return match find(&keys, &data) {
-        Ok(x) => match *x {
-            Value::I64(x) => Ok(x),
-            Value::U64(x) => Ok(x as i64),
-            _ => Err(JSONError::InvalidInt),
-        },
-        Err(e) => Err(e),
-    }
-}
-
-pub fn find_float(keys: &[&str], data: &Value) -> JResult<f64> {
-    return match find(&keys, &data) {
-        Ok(x) => match *x {
-            Value::F64(x) => Ok(x),
-            _ => Err(JSONError::InvalidFloat),
-        },
-        Err(e) => Err(e),
-    }
-}
-
-pub fn find_bool(keys: &[&str], data: &Value) -> JResult<bool> {
-    return match find(&keys, &data) {
-        Ok(x) => match *x {
-            Value::Bool(x) => Ok(x),
-            _ => Err(JSONError::InvalidBool),
+pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
+    match walk(keys, value) {
+        Ok(ref x) => {
+            match serde_json::from_value((*x).clone()) {
+                Ok(x) => Ok(x),
+                Err(e) => Err(JSONError::NotFound(format!("get: {}", e))),
+            }
         },
         Err(e) => Err(e),
     }
@@ -135,34 +91,16 @@ mod tests {
     }
 
     #[test]
-    fn can_find() {
-        let parsed = get_parsed();
-        let found = find(&["1", "name"], &parsed).unwrap();
+    fn can_get_value() {
+        let val_str: String = get(&["0"], &get_parsed()).unwrap();
+        let val_int: i64 = get(&["1", "age"], &get_parsed()).unwrap();
+        let val_float: f64 = get(&["3"], &get_parsed()).unwrap();
+        let val_bool: bool = get(&["1", "has_friends"], &get_parsed()).unwrap();
 
-        match *found {
-            Value::String(ref x) => assert_eq!(*x, "slappy"),
-            _ => panic!("value not found"),
-        }
-    }
-
-    #[test]
-    fn can_find_string() {
-        assert_eq!(find_string(&["0"], &get_parsed()).unwrap(), "test");
-    }
-
-    #[test]
-    fn can_find_int() {
-        assert_eq!(find_int(&["1", "age"], &get_parsed()).unwrap(), 17i64);
-    }
-
-    #[test]
-    fn can_find_float() {
-        assert_eq!(find_float(&["3"], &get_parsed()).unwrap(), 3.885f64);
-    }
-
-    #[test]
-    fn can_find_bool() {
-        assert_eq!(find_bool(&["1", "has_friends"], &get_parsed()).unwrap(), false);
+        assert_eq!(val_str, "test");
+        assert_eq!(val_int, 17);
+        assert_eq!(val_float, 3.885);
+        assert_eq!(val_bool, false);
     }
 }
 

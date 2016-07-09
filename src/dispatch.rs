@@ -10,13 +10,13 @@ pub fn process(msg: &String) -> TResult<()> {
     let data: Value = try_t!(json::parse(msg));
 
     // grab the command from the data
-    let cmd = try_t!(json::find_string(&["0"], &data));
+    let cmd: String = try_t!(json::get(&["0"], &data));
 
     match cmd.as_ref() {
         "user:login" => {
-            let username = try_t!(json::find_string(&["1", "username"], &data));
-            let password = try_t!(json::find_string(&["1", "password"], &data));
-            user::login(username.to_owned(), password.to_owned())
+            let username = try_t!(json::get(&["1", "username"], &data));
+            let password = try_t!(json::get(&["1", "password"], &data));
+            user::login(username, password)
         },
         "ping" => {
             info!("ping!");
