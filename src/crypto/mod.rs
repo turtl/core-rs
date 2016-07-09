@@ -23,12 +23,10 @@ pub use ::crypto::low::{
     sha512,
 };
 
-#[allow(dead_code)]
 /// Stores our current crypto version. This gets encoded into a header in the
 /// ciphertext and lets the crypto module know how to handle the message.
 const CRYPTO_VERSION: u16 = 5;
 
-#[allow(dead_code)]
 /// Stores which ciphers we have available.
 ///
 /// The index for this is used in the crypto `desc` field (see deserialize() for
@@ -36,7 +34,6 @@ const CRYPTO_VERSION: u16 = 5;
 /// items must only be appended.
 const CIPHER_INDEX: [&'static str; 1] = ["aes"];
 
-#[allow(dead_code)]
 /// Stores which block modes we have available.
 ///
 /// The index for this is used in the crypto `desc` field (see deserialize() for
@@ -44,7 +41,6 @@ const CIPHER_INDEX: [&'static str; 1] = ["aes"];
 /// items must only be appended.
 const BLOCK_INDEX: [&'static str; 2] = ["cbc", "gcm"];
 
-#[allow(dead_code)]
 /// Stores which pad modes we have available.
 ///
 /// The index for this is used in the crypto `desc` field (see deserialize() for
@@ -52,7 +48,6 @@ const BLOCK_INDEX: [&'static str; 2] = ["cbc", "gcm"];
 /// items must only be appended.
 const PAD_INDEX: [&'static str; 2] = ["AnsiX923", "PKCS7"];
 
-#[allow(dead_code)]
 /// Stores which pad modes we have available.
 ///
 /// The index for this is used in the crypto `desc` field (see deserialize() for
@@ -78,7 +73,6 @@ pub struct CryptoOp {
 }
 
 impl CryptoOp {
-    #[allow(dead_code)]
     /// Create a new crypto op with a cipher/blockmode
     pub fn new(cipher: &'static str, blockmode: &'static str) -> CResult<CryptoOp> {
         try!(find_index(&CIPHER_INDEX, cipher));
@@ -86,8 +80,8 @@ impl CryptoOp {
         Ok(CryptoOp { cipher: cipher, blockmode: blockmode, iv: None, utf8_random: None })
     }
 
-    #[allow(dead_code)]
     /// Create a new crypto op with a cipher/blockmode/iv
+    #[allow(dead_code)]
     pub fn new_with_iv(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>) -> CResult<CryptoOp> {
         let mut op = try!(CryptoOp::new(cipher, blockmode));
         op.iv = Some(iv);
@@ -95,7 +89,7 @@ impl CryptoOp {
     }
 
     #[allow(dead_code)]
-    /// Create a new crypto op with a cipher/blockmode/iv
+    /// Create a new crypto op with a cipher/blockmode/iv/utf8 byte
     pub fn new_with_iv_utf8(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>, utf8: u8) -> CResult<CryptoOp> {
         let mut op = try!(CryptoOp::new(cipher, blockmode));
         op.iv = Some(iv);
@@ -115,7 +109,6 @@ pub struct PayloadDescription {
 }
 
 impl PayloadDescription {
-    #[allow(dead_code)]
     /// Create a new PayloadDescription from a crypto version and some other data
     pub fn new(crypto_version: u16, cipher: &str, block: &str, padding: Option<&str>, kdf: Option<&str>) -> CResult<PayloadDescription> {
         if crypto_version == 0 { return Err(CryptoError::Msg(format!("PayloadDescription not implemented for version 0"))); }
@@ -168,32 +161,6 @@ impl PayloadDescription {
         if self.kdf_index.is_some() { len += 1; }
         len
     }
-
-    #[allow(dead_code)]
-    pub fn cipher(&self) -> String {
-        String::from(CIPHER_INDEX[self.cipher_index as usize])
-    }
-
-    #[allow(dead_code)]
-    pub fn block(&self) -> String {
-        String::from(BLOCK_INDEX[self.block_index as usize])
-    }
-
-    #[allow(dead_code)]
-    pub fn padding(&self) -> Option<String> {
-        match self.pad_index {
-            Some(x) => Some(String::from(PAD_INDEX[x as usize])),
-            None => None,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn kdf(&self) -> Option<String> {
-        match self.kdf_index {
-            Some(x) => Some(String::from(KDF_INDEX[x as usize])),
-            None => None,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -224,7 +191,6 @@ impl CryptoData {
     }
 }
 
-#[allow(dead_code)]
 /// Deserialize a serialized cryptographic message. Basically, each piece of
 /// crypto data in Turtl has a header, followed by N bytes of ciphertext in
 /// the following format:
@@ -297,7 +263,6 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     Ok(CryptoData::new(version, desc_struct, Vec::from(iv), hmac, Vec::from(ciphertext)))
 }
 
-#[allow(dead_code)]
 /// Serialize a CryptoData container into a raw header vector. This is useful
 /// for extracting authentication data.
 pub fn serialize_header(data: &CryptoData) -> CResult<Vec<u8>> {
@@ -322,7 +287,6 @@ pub fn serialize_header(data: &CryptoData) -> CResult<Vec<u8>> {
     Ok(ser)
 }
 
-#[allow(dead_code)]
 /// Serialize a CryptoData container into a vector of bytes. For more info on
 /// the different serialization formats, check out deserialize().
 pub fn serialize(data: &mut CryptoData) -> CResult<Vec<u8>> {
@@ -337,7 +301,6 @@ pub fn serialize(data: &mut CryptoData) -> CResult<Vec<u8>> {
     Ok(ser)
 }
 
-#[allow(dead_code)]
 /// Given a master key, derive an encryption key and an authentication key
 /// using PBKDF2 as a key-stretcher. Note that HKDF would be a better option but
 /// PBKDF2 works just fine. The general consensus is that using it for this
@@ -369,7 +332,6 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
     }
 }
 
-#[allow(dead_code)]
 /// HMACs a CryptoData and compares the generated hash to the hash stored
 /// in the struct in constant time. Returns true of the data authenticates
 /// properly.
@@ -417,7 +379,6 @@ fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
     Ok(fixed_key)
 }
 
-#[allow(dead_code)]
 /// Decrypt a message, given a key and the ciphertext. The ciphertext should
 /// contain *all* the data needed to decrypt the message encoded in a header
 /// (see deserialize() for more info).
@@ -456,7 +417,6 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     Ok(decrypted)
 }
 
-#[allow(dead_code)]
 /// Encrypt a message, given a key and the plaintext. This returns the
 /// ciphertext serialized via Turtl serialization format (see deserialize() for
 /// more info).
@@ -515,20 +475,17 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
     }
 }
 
-#[allow(dead_code)]
 /// Generate a random cryptographic key (256-bit).
 pub fn random_key() -> CResult<Vec<u8>> {
     low::rand_bytes(32)
 }
 
-#[allow(dead_code)]
 /// Generate a random IV for use with encryption. This is a helper to enforce
 /// the idea that we should not reuse IVs.
 pub fn random_iv() -> CResult<Vec<u8>> {
     low::rand_bytes(low::aes_block_size())
 }
 
-#[allow(dead_code)]
 /// Generate a cryptographic key, given a password/salt combination. We also
 /// specify the hasher we want to use (Hasher::SHA1, Hasher::SHA256, ...) along
 /// with the number of iterations to run our key generator (the more iterations,

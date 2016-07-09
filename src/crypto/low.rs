@@ -102,7 +102,6 @@ pub fn sha1(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA1, data)
 }
 
-#[allow(dead_code)]
 /// SHA256 some data and return a u8 vec result.
 pub fn sha256(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA256, data)
@@ -114,25 +113,21 @@ pub fn sha512(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA512, data)
 }
 
-#[allow(dead_code)]
 /// Convert a u8 vector to a hex string.
 pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
     Ok(data[..].to_hex())
 }
 
-#[allow(dead_code)]
 /// Convert a hex string to a u8 vector.
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
     Ok(try_c!(data.from_hex()))
 }
 
-#[allow(dead_code)]
 /// Convert a u8 vector of binary data inot a base64 string.
 pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
     Ok(data[..].to_base64(base64::STANDARD))
 }
 
-#[allow(dead_code)]
 /// Convert a base64 string to a vector of u8 data.
 pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
     match data.from_base64() {
@@ -141,7 +136,6 @@ pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
     }
 }
 
-#[allow(dead_code)]
 /// Given a key (password/secret) and a set of data, run an HMAC-SHA256 and
 /// return the binary result as a u8 vec.
 pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
@@ -158,13 +152,11 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     Ok(result)
 }
 
-#[allow(dead_code)]
 /// Do a constant-time comparison of two byte arrays.
 pub fn const_compare(arr1: &[u8], arr2: &[u8]) -> bool {
     constant_time_eq::constant_time_eq(arr1, arr2)
 }
 
-#[allow(dead_code)]
 /// Generate N number of CS random bytes.
 pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
     let mut result: Vec<u8> = vec![0; len];
@@ -172,7 +164,6 @@ pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
     Ok(result)
 }
 
-#[allow(dead_code)]
 /// Generate a random u64. Uses rand_bytes() and bit shifting to build a u64.
 pub fn rand_int() -> CResult<u64> {
     let bytes = try!(rand_bytes(8));
@@ -192,9 +183,8 @@ pub fn rand_float() -> CResult<f64> {
 }
 
 /*
-#[allow(dead_code)]
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses gcrypt.
-pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
+pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let hashtype = match hasher {
         Hasher::SHA1 => gcrypt::digest::MD_SHA1,
         Hasher::SHA256 => gcrypt::digest::MD_SHA256,
@@ -207,7 +197,6 @@ pub fn pbkdf2_(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: us
 */
 
 /*
-#[allow(dead_code)]
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses openssl.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let pbfn = match hasher {
@@ -228,7 +217,6 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 }
 */
 
-#[allow(dead_code)]
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses
 /// ruct-crypto.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
@@ -294,11 +282,12 @@ fn unpad(data: &mut Vec<u8>) {
     data.truncate(datalen - (last as usize));
 }
 
+/// Returns the aes block size. Obviously, always 16, but let's get it straight
+/// from the panda's mouth instead of making WILD assumptions.
 pub fn aes_block_size() -> usize {
     *AES_BLOCK_SIZE
 }
 
-#[allow(dead_code)]
 /// Encrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) -> CResult<Vec<u8>> {
     let mut data = Vec::from(data);
@@ -311,7 +300,6 @@ pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) ->
     Ok(enc)
 }
 
-#[allow(dead_code)]
 /// Decrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     let mut dec: Vec<u8> = vec![0; data.len()];
@@ -323,7 +311,6 @@ pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     Ok(dec)
 }
 
-#[allow(dead_code)]
 /// Encrypt data using a 256-bit length key via AES-GCM
 pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
     let mut tag: Vec<u8> = vec![0; GCM_TAG_LENGTH];
@@ -338,7 +325,6 @@ pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResu
     Ok(enc)
 }
 
-#[allow(dead_code)]
 /// Decrypt data using a 256-bit length key via AES-GCM
 pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
     let tag_cutoff: usize = data.len() - GCM_TAG_LENGTH;
