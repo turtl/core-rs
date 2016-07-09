@@ -15,6 +15,9 @@ run: all
 test:
 	cargo test $(CARGO_BUILD_ARGS)
 
+doc:
+	cargo doc -p turtl-core --no-deps
+
 clean:
 	rm -rf target/
 
