@@ -57,17 +57,3 @@ fn main() {
     start().unwrap();
 }
 
-//use std::env;
-#[allow(dead_code)]
-fn msgtest() {
-    /*
-    let args: Vec<_> = env::args().collect();
-    if args.len() > 1 {
-        let mut msg = String::new();
-        messaging::send_recv("[\"ping\"]".to_owned(), &mut msg).unwrap();
-        println!("final msg: {}", msg);
-        return;
-    }
-    */
-}
-
