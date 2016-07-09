@@ -4,6 +4,7 @@ extern crate time;
 extern crate log;
 #[macro_use]
 extern crate quick_error;
+extern crate serde;
 extern crate serde_json;
 extern crate nanomsg;
 #[macro_use]
