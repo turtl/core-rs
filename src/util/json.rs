@@ -1,7 +1,7 @@
-pub use ::serde_json::{self, Value};
+use ::serde_json;
+pub use ::serde_json::Value;
 pub use ::serde::de::Deserialize;
 pub use ::serde::ser::Serialize;
-use ::serde_json::Value::{Object, Array};
 
 quick_error! {
     #[derive(Debug)]
@@ -40,13 +40,13 @@ pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     let key = keys[0];
 
     match *data {
-        Object(ref obj) => {
+        Value::Object(ref obj) => {
             match obj.get(key) {
                 Some(d) => walk(&keys[1..].to_vec(), d),
                 None => Err(JSONError::NotFound(key.to_owned())),
             }
         },
-        Array(ref arr) => {
+        Value::Array(ref arr) => {
             let ukey = match key.parse::<usize>() {
                 Ok(x) => x,
                 Err(..) => return Err(JSONError::InvalidKey(key.to_owned())),
