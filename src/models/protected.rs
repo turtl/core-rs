@@ -4,13 +4,13 @@ use ::error::{TResult, TError};
 use ::util::json::{self, Serialize, Deserialize};
 
 /// Defines a key struct, used by many models that have subkey data.
-pub struct Key {
-    #[allow(dead_code)]
-    object_type: String,
-    #[allow(dead_code)]
-    item_id: String,
-    #[allow(dead_code)]
-    key: String,
+serializable! {
+    pub struct Key {
+        ()
+        type_: String,
+        item_id: String,
+        key: String,
+    }
 }
 
 //impl Serialize for Key {
@@ -25,6 +25,9 @@ pub struct Key {
 /// when handling protected model data. The goal here is to eliminate all forms
 /// of data leaks while providing an interface that's easy to use.
 pub trait Protected {
+    /// Grab this model's id
+    fn id(&self) -> Option<String>;
+
     /// Grab the public fields for this model
     fn public_fields(&self) -> Vec<&str>;
 
@@ -47,6 +50,13 @@ pub trait Protected {
         }
         json::Value::Object(map)
     }
+
+    /// Return a JSON dump of all public fields. Really, this is a wrapper
+    /// around `json::stringify(model.safe_data())`
+    fn stringify_safe(&self) -> TResult<String> {
+        let safe = self.safe_data();
+        json::stringify(&safe).map_err(|e| toterr!(e))
+    }
 }
 
 /// Defines a protected model for us. We give it a model name, a set of public
@@ -70,69 +80,56 @@ pub trait Protected {
 #[macro_export]
 macro_rules! define_protected {
     (
-        $name:ident,
-        ( $( $pub_field:ident: $pub_type:ty ),* ),
-        ( $( $priv_field:ident: $priv_type:ty ),* ),
-        ( $( $extra_field:ident: $extra_type:ty ),* )
+        $(#[$struct_meta:meta])*
+        pub struct $name:ident {
+            ( $( $pub_field:ident: $pub_type:ty ),* ),
+            ( $( $priv_field:ident: $priv_type:ty ),* ),
+            ( $( $extra_field:ident: $extra_type:ty ),* )
+        }
     ) => {
-        // Damn, doesn't work:
-        //#[derive(::serde::ser::Serialize, ::serde::de::Deserialize)]
-        pub struct $name {
-            id: Option<String>,
-            body: Option<String>,
-            $(
-                #[allow(dead_code)]
-                $pub_field: Option<$pub_type>,
-            )*
-            $(
-                #[allow(dead_code)]
-                $priv_field: Option<$priv_type>,
-            )*
-            $(
-                #[allow(dead_code)]
-                $extra_field: Option<$extra_type>,
-            )*
+        serializable! {
+            #[derive(Default)]
+            pub struct $name {
+                ($( $extra_field: $extra_type ),*)
+                id: Option<String>,
+                body: Option<String>,
+                $( $pub_field: Option<$pub_type>, )*
+                $( $priv_field: Option<$priv_type>, )*
+            }
         }
 
         impl $name {
             /// Create an instance of this model, with all values set to None
             pub fn new() -> $name {
-                let map: ::std::collections::BTreeMap<String, ::util::json::Value> = ::std::collections::BTreeMap::new();
-                $name {
-                    id: None,
-                    body: None,
-                    $( $pub_field: None, )*
-                    $( $priv_field: None, )*
-                    $( $extra_field: None, )*
-                }
+                Default::default()
             }
 
-            /// Grab this model's id
+        }
+
+        impl Protected for $name {
             fn id(&self) -> Option<String> {
                 match self.id {
                     Some(ref x) => Some(x.clone()),
                     None => None
                 }
             }
-        }
 
-        impl Protected for $name {
             fn public_fields(&self) -> Vec<&str> {
                 vec![
                     "id",
                     "body",
-                    $( stringify!($pub_field), )*
+                    $( fix_type!(stringify!($pub_field)), )*
                 ]
             }
 
             fn private_fields(&self) -> Vec<&str> {
                 vec![
-                    $( stringify!($priv_field), )*
+                    $( fix_type!(stringify!($priv_field)), )*
                 ]
             }
 
             fn data(&self) -> ::util::json::Value {
-                ::util::json::Value::I64(1)
+                ::util::json::to_val(self)
             }
         }
 
@@ -145,8 +142,6 @@ macro_rules! define_protected {
                 write!(f, "{}: ({})", stringify!($name), id)
             }
         }
-
-        serializable!($name, ( $( $pub_field ),*, $( $priv_field ),* ) );
     }
 }
 
@@ -156,11 +151,13 @@ mod tests {
     use ::util::json::{self};
 
     define_protected!(
-        Dog,
-        ( size: u64 ),
-        ( name: String,
-          tags: Vec<String> ),
-        ()
+        pub struct Dog {
+            ( size: u64 ),
+            ( name: String,
+              type_: String,
+              tags: Vec<String> ),
+            ( active: bool )
+        }
     );
 
     #[test]
@@ -172,7 +169,41 @@ mod tests {
     #[test]
     fn returns_correct_private_fields() {
         let dog = Dog::new();
-        assert_eq!(dog.private_fields(), ["name", "tags"]);
+        assert_eq!(dog.private_fields(), ["name", "type", "tags"]);
+    }
+
+    #[test]
+    fn returns_data() {
+        let mut dog = Dog::new();
+        dog.name = Some(String::from("barky"));
+        let data = dog.data();
+        let name: String = json::get(&["name"], &data).unwrap();
+        let active: json::JResult<bool> = json::get(&["active"], &data);
+        assert_eq!(name, "barky");
+        match active {
+            Ok(x) => panic!("Found `active` which is an extra field and should not be serialized"),
+            Err(e) => match e {
+                json::JSONError::NotFound(..) => {},
+                _ => panic!("Got an error whiel looking for `active` field (should have gotten JSONError::NotFound)"),
+            }
+        }
+    }
+
+    #[test]
+    fn handles_safe_data() {
+        let mut dog = Dog::new();
+        dog.id = Some(String::from("123"));
+        dog.size = Some(42);
+        dog.name = Some(String::from("barky"));
+        assert_eq!(dog.stringify_safe().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+    }
+
+    #[test]
+    fn returns_an_id() {
+        let mut dog = Dog::new();
+        dog.id = Some(String::from("123"));
+        let id = dog.id().unwrap();
+        assert_eq!(id, "123");
     }
 
     #[test]
@@ -180,87 +211,14 @@ mod tests {
         let mut dog = Dog::new();
         dog.size = Some(32);
         dog.name = Some(String::from("timmy"));
+        dog.type_ = Some(String::from("tiny"));
         dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
-        assert_eq!(json::stringify(&dog).unwrap(), r#"{"size":32,"name":"timmy","tags":["canine","3-legged"]}"#);
+        // tests for presence of `extra` fields in JSON (there should be none)
+        dog.active = true;
+        assert_eq!(json::stringify(&dog).unwrap(), r#"{"id":null,"body":null,"size":32,"name":"timmy","type":"tiny","tags":["canine","3-legged"]}"#);
 
         dog.tags.as_mut().map(|mut tags| tags.push(String::from("fast")));
-        assert_eq!(json::stringify(&dog).unwrap(), r#"{"size":32,"name":"timmy","tags":["canine","3-legged","fast"]}"#);
+        assert_eq!(json::stringify(&dog).unwrap(), r#"{"id":null,"body":null,"size":32,"name":"timmy","type":"tiny","tags":["canine","3-legged","fast"]}"#);
     }
 }
-
-/*
-/// Defines a protected model for us. We give it a model name, a set of public
-/// fields, a set of private fields, and lastly a set of extra fields (neither
-/// public nor private) and it defines our model struct, and implements the
-/// Protected trait for us, as well as a handy debug trait (that won't leak
-/// private information on print).
-///
-/// NOTE that the `id` and `body` fields are always prepended to the public
-/// field list as `id: String` and `body: String` so don't include the id/body
-/// fields in your public/private field lists.
-///
-/// # Examples
-///
-/// ```
-/// # #[macro_use] mod models;
-/// # fn main() {
-/// define_protected!(Squirrel, (size: u64), (name: String), ());
-/// # }
-/// ```
-#[macro_export]
-macro_rules! define_protected {
-    (
-        $name:ident,
-        ( $( $pub_field:ident: $pub_type:ty ),* ),
-        ( $( $priv_field:ident: $priv_type:ty ),* ),
-        ( $( $extra_field:ident: $extra_type:ty ),* )
-    ) => {
-        //#[derive(Serialize, Deserialize)]
-        pub struct $name {
-            data: ::util::json::Value,
-            $( $extra_field: $extra_type, )*
-        }
-
-        impl $name {
-            pub fn new() -> $name {
-                let map: ::std::collections::BTreeMap<String, ::util::json::Value> = ::std::collections::BTreeMap::new();
-                $name {
-                    data: ::util::json::Value::Object(map),
-                    $( $extra_field: $extra_type::new(), )*
-                }
-            }
-        }
-
-        impl Protected for $name {
-            fn public_fields(&self) -> Vec<&str> {
-                vec![
-                    "id",
-                    "body",
-                    $( stringify!($pub_field), )*
-                ]
-            }
-
-            fn private_fields(&self) -> Vec<&str> {
-                vec![
-                    $( stringify!($priv_field), )*
-                ]
-            }
-
-            fn data(&self) -> &::util::json::Value {
-                &self.data
-            }
-        }
-
-        impl ::std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                let id = match self.id() {
-                    Some(x) => x,
-                    None => String::from("<no id>"),
-                };
-                write!(f, "{}: ({})", stringify!($name), id)
-            }
-        }
-    }
-}
-*/
 
