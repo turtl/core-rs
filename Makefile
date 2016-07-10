@@ -18,6 +18,9 @@ test:
 doc:
 	cargo doc -p turtl-core --no-deps
 
+macros:
+	cargo rustc -- -Z unstable-options --pretty=expanded
+
 clean:
 	rm -rf target/
 
