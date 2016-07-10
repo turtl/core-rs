@@ -11,6 +11,11 @@ quick_error! {
             description("parse error")
             display("json: parse error: {}", err)
         }
+        Stringify(err: serde_json::Error) {
+            cause(err)
+            description("stringify error")
+            display("json: stringify error: {}", err)
+        }
         DeadEnd {
             description("dead end")
             display("json: lookup dead end")
@@ -31,6 +36,12 @@ pub type JResult<T> = Result<T, JSONError>;
 pub fn parse(string: &String) -> JResult<Value> {
     let data: Value = try!(serde_json::from_str(string).map_err(JSONError::Parse));
     Ok(data)
+}
+
+pub fn stringify<T>(obj: &T) -> JResult<String>
+    where T: Serialize
+{
+    serde_json::to_string(&obj).map_err(|e| JSONError::Stringify(e))
 }
 
 pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
