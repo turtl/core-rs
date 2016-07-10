@@ -31,18 +31,22 @@ pub struct TurtlVisitor<'a, T: 'a> {
 }
 
 /// Given a &str value, checks to see if it matches "type_", and if so returns
-/// "type" instead (otherwise just returns the value).
+/// "type" instead. It also does the reverse: if it detects "type", it returns
+/// "type_". That way we can use this 
 ///
 /// This is useful for translating between rust structs, which don't allow a
 /// field named `type` and our JSON objects out in the wild, many of which *do*
 /// have a `type` field.
 #[macro_export]
 macro_rules! fix_type {
-    ($val:expr) => {
+    ( "type" ) => { "type_" };
+    ( "type_" ) => { "type" };
+    ( $val:expr ) => {
         {
             let myval = $val;
             match myval {
                 "type_" => "type",
+                "type" => "type_",
                 _ => myval
             }
         }
@@ -256,22 +260,23 @@ macro_rules! serializable {
                     // keep the API clean.
                     let val: Option<String> = try!(visitor.visit_key());
                     match val {
-                        Some(x) => match x.as_ref() {
+                        Some(x) => {
                             $(
-                                stringify!($field) => {
+                                let fieldname = fix_type!(stringify!($field));
+                                if x == fieldname {
                                     $field = Some(try!(visitor.visit_value()));
-                                }
+                                };
                             )*
-                            _ => {},
                         },
                         None => { break; },
                     };
                 }
 
                 $(
-                    let $field = match $field {
+                    let $field: $type_ = match $field {
                         Some(x) => x,
-                        None => try!(visitor.missing_field(stringify!($field))),
+                        None => Default::default(),
+                        //None => try!(visitor.missing_field(stringify!($field))),
                     };
                 )*
 
@@ -297,6 +302,7 @@ mod tests {
             // broken for now, see https://github.com/rust-lang/rust/issues/24827
             //#[allow(dead_code)]
             name: String,
+            type_: String,
             location: String,
         }
     }
@@ -305,6 +311,7 @@ mod tests {
         fn new(name: String, location: String) -> LittleCrapper {
             LittleCrapper {
                 name: name,
+                type_: String::from("sneak"),
                 location: location,
                 active: true
             }
@@ -320,16 +327,31 @@ mod tests {
     }
 
     #[test]
+    fn fixes_types() {
+        assert_eq!(fix_type!("type"), "type_");
+        assert_eq!(fix_type!("type_"), "type");
+        assert_eq!(fix_type!("tpye"), "tpye");
+        assert_eq!(fix_type!("stop ignoring me"), "stop ignoring me");
+        assert_eq!(fix_type!(stringify!(type)), "type_");
+
+        match "type" {
+            fix_type!("type_") => {},
+            _ => panic!("bad `type` match"),
+        }
+    }
+
+    #[test]
     fn can_serialize() {
-        let crapper = LittleCrapper { active: false, name: String::from("barry"), location: String::from("my pants") };
+        let crapper = LittleCrapper { active: false, name: String::from("barry"), type_: String::from("speedy"), location: String::from("my pants") };
         let json_str = json::stringify(&crapper).unwrap();
-        assert_eq!(json_str, r#"{"name":"barry","location":"my pants"}"#);
+        assert_eq!(json_str, r#"{"name":"barry","type":"speedy","location":"my pants"}"#);
     }
 
     #[test]
     fn can_deserialize() {
         let crapper: LittleCrapper = json::parse(&String::from(r#"{"name":"omg","location":"city hall"}"#)).unwrap();
         assert_eq!(crapper.name, "omg");
+        assert_eq!(crapper.type_, "");
         assert_eq!(crapper.location, "city hall");
         assert_eq!(crapper.active, false);
     }
@@ -344,7 +366,7 @@ mod tests {
             ]
         };
         let json_str = json::stringify(&tree).unwrap();
-        assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","location":"here"},{"name":"sandra","location":"the bed"}]}"#);
+        assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","type":"sneak","location":"here"},{"name":"sandra","type":"sneak","location":"the bed"}]}"#);
     }
 }
 
