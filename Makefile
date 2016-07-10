@@ -13,7 +13,7 @@ run: all
 	cargo run
 
 test:
-	cargo test $(CARGO_BUILD_ARGS)
+	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
 doc:
 	cargo doc -p turtl-core --no-deps
