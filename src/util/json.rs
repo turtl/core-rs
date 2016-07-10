@@ -33,17 +33,36 @@ quick_error! {
 
 pub type JResult<T> = Result<T, JSONError>;
 
+/// Parse a JSON string and return a Result<Value>
 pub fn parse(string: &String) -> JResult<Value> {
     let data: Value = try!(serde_json::from_str(string).map_err(JSONError::Parse));
     Ok(data)
 }
 
+/// Turn a JSON-serializable object into a Result<String> of JSON.
 pub fn stringify<T>(obj: &T) -> JResult<String>
     where T: Serialize
 {
     serde_json::to_string(&obj).map_err(|e| JSONError::Stringify(e))
 }
 
+/// Turn a JSON-serializable object into a Result<Value>
+pub fn to_val<T>(obj: &T) -> Value
+    where T: Serialize
+{
+    serde_json::to_value(obj)
+}
+
+/// Walk a JSON structure, given a key path. Traverses both objects and arrays,
+/// returning a reference to the found value, if any.
+///
+/// # Examples
+///
+/// ```
+/// let json_str = String::from(r#"{"user":{"name":"barky"}}"#);
+/// let parsed = json::parse(&json_str);
+/// let nameval = walk(&["user", "name"], &parsed).unwrap();
+/// ```
 pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     let last: bool = keys.len() == 0;
     if last { return Ok(data); }
@@ -71,6 +90,17 @@ pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     }
 }
 
+/// Like `walk`, except that this returns the raw type instead of a Value. How
+/// lovely?
+///
+/// # Examples
+///
+/// ```
+/// let json_str = String::from(r#"{"user":{"name":"barky"}}"#);
+/// let parsed = json::parse(&json_str);
+/// let name = get(&["user", "name"], &parsed).unwrap();
+/// println!("name is {}", name);
+/// ```
 pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
     match walk(keys, value) {
         Ok(ref x) => {
