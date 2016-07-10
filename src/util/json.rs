@@ -39,9 +39,8 @@ quick_error! {
 pub type JResult<T> = Result<T, JSONError>;
 
 /// Parse a JSON string and return a Result<Value>
-pub fn parse(string: &String) -> JResult<Value> {
-    let data: Value = try!(serde_json::from_str(string).map_err(JSONError::Parse));
-    Ok(data)
+pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
+    serde_json::from_str(string).map_err(JSONError::Parse)
 }
 
 pub fn parse_yaml(string: &String) -> JResult<Value> {
@@ -50,16 +49,12 @@ pub fn parse_yaml(string: &String) -> JResult<Value> {
 }
 
 /// Turn a JSON-serializable object into a Result<String> of JSON.
-pub fn stringify<T>(obj: &T) -> JResult<String>
-    where T: Serialize
-{
+pub fn stringify<T: Serialize>(obj: &T) -> JResult<String> {
     serde_json::to_string(&obj).map_err(|e| JSONError::Stringify(e))
 }
 
 /// Turn a JSON-serializable object into a Result<Value>
-pub fn to_val<T>(obj: &T) -> Value
-    where T: Serialize
-{
+pub fn to_val<T: Serialize>(obj: &T) -> Value {
     serde_json::to_value(obj)
 }
 
@@ -137,8 +132,7 @@ mod tests {
 
     #[test]
     fn can_parse() {
-        let json = get_json();
-        parse(&json).unwrap();
+        get_parsed();
     }
 
     #[test]
