@@ -90,14 +90,85 @@ macro_rules! define_ser_fields {
     }
 }
 
-/// Implements the Serialize/Deserialize traits for our struct.
-/// 
-/// Don't use this directly, use serializable!()
+/// Define a class as serializable. Takes the struct name and the serializable
+/// fields for that class and writes a set of functionality to make it
+/// serde-serializable.
+///
+/// Note that this also makes the class *de*serializable as well. IF you want
+/// one, you generally want the other.
+///
+/// TODO: Fix the crappy duplication in the macro. There are four variants that
+/// I'm convinced could be (at most) two variants, but Rust's macro system is...
+/// immature. Revisit in a year.
 #[macro_export]
-macro_rules! serializable_impl {
+macro_rules! serializable {
+    // pub w/ unserialized
     (
-        $name:ident,
-        ( $( $field:ident ),* )
+        $(#[$struct_meta:meta])*
+        pub struct $name:ident {
+            ($( $unserialized:ident: $unserialized_type:ty ),*)
+            $( $field:ident: $type_:ty, )*
+        }
+    ) => {
+        $(#[$struct_meta])*
+        pub struct $name {
+            $( $unserialized: $unserialized_type, )*
+            $( $field: $type_ ),* ,
+        }
+
+        serializable!([IMPL ($name), ($( $field ),*)]);
+    };
+
+    // pub w/ no unserialized
+    (
+        $(#[$struct_meta:meta])*
+        pub struct $name:ident {
+            $( $field:ident: $type_:ty, )*
+        }
+    ) => {
+        $(#[$struct_meta])*
+        pub struct $name {
+            $( $field: $type_ ),* ,
+        }
+
+        serializable!([IMPL ($name), ($( $field ),*)]);
+    };
+
+    // no pub w/ unserialized
+    (
+        $(#[$struct_meta:meta])*
+        struct $name:ident {
+            ($( $unserialized:ident: $unserialized_type:ty ),*)
+            $( $field:ident: $type_:ty, )*
+        }
+    ) => {
+        $(#[$struct_meta])*
+        struct $name {
+            $( $unserialized: $unserialized_type, )*
+            $( $field: $type_ ),* ,
+        }
+
+        serializable!([IMPL ($name), ($( $field ),*)]);
+    };
+
+    // no pub w/ no unserialized
+    (
+        $(#[$struct_meta:meta])*
+        struct $name:ident {
+            $( $field:ident: $type_:ty, )*
+        }
+    ) => {
+        $(#[$struct_meta])*
+        struct $name {
+            $( $field: $type_ ),* ,
+        }
+
+        serializable!([IMPL ($name), ($( $field ),*)]);
+    };
+
+    // implementation
+    (
+        [IMPL ( $name:ident ), ( $( $field:ident ),* )]
     ) => {
         impl ::serde::ser::Serialize for $name {
             fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
@@ -122,116 +193,8 @@ macro_rules! serializable_impl {
     }
 }
 
-/// Define a class as serializable. Takes the struct name and the serializable
-/// fields for that class and writes a set of functionality to make it
-/// serde-serializable.
-///
-/// Note that this also makes the class *de*serializable as well. IF you want
-/// one, you generally want the other.
-///
-/// TODO: Fix the crappy duplication in the macro. There are four variants that
-/// I'm convinced could be (at most) two variants, but Rust's macro system is...
-/// immature. Revisit in a year.
-#[macro_export]
-macro_rules! serializable {
-    // pub/unserialized
-    (
-        $(#[$struct_meta:meta])*
-        pub struct $name:ident {
-            ($( $unserialized:ident: $unserialized_type:ty ),*)
-            $(
-                //$(#[$field_meta:meta])*
-                $field:ident: $type_:ty,
-            )*
-        }
-    ) => {
-        $(#[$struct_meta])*
-        pub struct $name {
-            $(
-               //$(#[$field_meta])*
-               $unserialized: $unserialized_type,
-            )*
-            $(
-               //$(#[$field_meta])*
-               $field: $type_
-            ),* ,
-        }
-
-        serializable_impl!($name, ($( $field ),*));
-    };
-
-    // pub/no unserialized
-    (
-        $(#[$struct_meta:meta])*
-        pub struct $name:ident {
-            $(
-                //$(#[$field_meta:meta])*
-                $field:ident: $type_:ty,
-            )*
-        }
-    ) => {
-        $(#[$struct_meta])*
-        pub struct $name {
-            $(
-               //$(#[$field_meta])*
-               $field: $type_
-            ),* ,
-        }
-
-        serializable_impl!($name, ($( $field ),*));
-    };
-
-    // no pub/unserialized
-    (
-        $(#[$struct_meta:meta])*
-        struct $name:ident {
-            ($( $unserialized:ident: $unserialized_type:ty ),*)
-            $(
-                //$(#[$field_meta:meta])*
-                $field:ident: $type_:ty,
-            )*
-        }
-    ) => {
-        $(#[$struct_meta])*
-        struct $name {
-            $(
-               //$(#[$field_meta])*
-               $unserialized: $unserialized_type,
-            )*
-            $(
-               //$(#[$field_meta])*
-               $field: $type_
-            ),* ,
-        }
-
-        serializable_impl!($name, ($( $field ),*));
-    };
-
-    // no pub/no unserialized
-    (
-        $(#[$struct_meta:meta])*
-        struct $name:ident {
-            $(
-                //$(#[$field_meta:meta])*
-                $field:ident: $type_:ty,
-            )*
-        }
-    ) => {
-        $(#[$struct_meta])*
-        struct $name {
-            $(
-               //$(#[$field_meta])*
-               $field: $type_
-            ),* ,
-        }
-
-        serializable_impl!($name, ($( $field ),*));
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ::util::json::{self};
 
     serializable!{
@@ -246,11 +209,42 @@ mod tests {
         }
     }
 
+    impl LittleCrapper {
+        fn new(name: String, location: String) -> LittleCrapper {
+            LittleCrapper {
+                name: name,
+                location: location,
+                active: true
+            }
+        }
+    }
+
+    serializable!{
+        // let's make a recursive structure!
+        struct CrapTree {
+            name: String,
+            crappers: Vec<LittleCrapper>,
+        }
+    }
+
     #[test]
     fn can_serialize() {
         let crapper = LittleCrapper { active: false, name: String::from("barry"), location: String::from("my pants") };
         let json_str = json::stringify(&crapper).unwrap();
         assert_eq!(json_str, r#"{"name":"barry","location":"my pants"}"#);
+    }
+
+    #[test]
+    fn can_recurse() {
+        let tree = CrapTree {
+            name: String::from("tree of crappy wisdom"),
+            crappers: vec![
+                LittleCrapper::new(String::from("harold"), String::from("here")),
+                LittleCrapper::new(String::from("sandra"), String::from("the bed"))
+            ]
+        };
+        let json_str = json::stringify(&tree).unwrap();
+        assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","location":"here"},{"name":"sandra","location":"the bed"}]}"#);
     }
 }
 

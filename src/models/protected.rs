@@ -1,21 +1,16 @@
 use std::collections::BTreeMap;
 
 use ::error::{TResult, TError};
-use ::util::json::{self, Serialize, Deserialize};
+use ::util::json::{self};
 
 /// Defines a key struct, used by many models that have subkey data.
 serializable! {
     pub struct Key {
-        ()
         type_: String,
         item_id: String,
         key: String,
     }
 }
-
-//impl Serialize for Key {
-
-//}
 
 /// The Protected trait defines a set of functionality for our models such that
 /// they are able to be properly (de)serialized (including encryption/decryption
@@ -79,6 +74,7 @@ pub trait Protected {
 /// ```
 #[macro_export]
 macro_rules! define_protected {
+    // pub
     (
         $(#[$struct_meta:meta])*
         pub struct $name:ident {
@@ -98,6 +94,38 @@ macro_rules! define_protected {
             }
         }
 
+        define_protected!([IMPL ( $name ), ( $( $pub_field ),* ), ( $( $priv_field ),* )]);
+    };
+
+    // no pub
+    (
+        $(#[$struct_meta:meta])*
+        struct $name:ident {
+            ( $( $pub_field:ident: $pub_type:ty ),* ),
+            ( $( $priv_field:ident: $priv_type:ty ),* ),
+            ( $( $extra_field:ident: $extra_type:ty ),* )
+        }
+    ) => {
+        serializable! {
+            #[derive(Default)]
+            struct $name {
+                ($( $extra_field: $extra_type ),*)
+                id: Option<String>,
+                body: Option<String>,
+                $( $pub_field: Option<$pub_type>, )*
+                $( $priv_field: Option<$priv_type>, )*
+            }
+        }
+
+        define_protected!([IMPL ( $name ), ( $( $pub_field ),* ), ( $( $priv_field ),* )]);
+    };
+
+    // implementation
+    (
+        [IMPL ( $name:ident ),
+              ( $( $pub_field:ident ),* ),
+              ( $( $priv_field:ident ),* )]
+    ) => {
         impl $name {
             /// Create an instance of this model, with all values set to None
             pub fn new() -> $name {
@@ -150,15 +178,15 @@ mod tests {
     use super::*;
     use ::util::json::{self};
 
-    define_protected!(
-        pub struct Dog {
+    define_protected!{
+        struct Dog {
             ( size: u64 ),
             ( name: String,
               type_: String,
               tags: Vec<String> ),
             ( active: bool )
         }
-    );
+    }
 
     #[test]
     fn returns_correct_public_fields() {
@@ -181,7 +209,7 @@ mod tests {
         let active: json::JResult<bool> = json::get(&["active"], &data);
         assert_eq!(name, "barky");
         match active {
-            Ok(x) => panic!("Found `active` which is an extra field and should not be serialized"),
+            Ok(..) => panic!("Found `active` which is an extra field and should not be serialized"),
             Err(e) => match e {
                 json::JSONError::NotFound(..) => {},
                 _ => panic!("Got an error whiel looking for `active` field (should have gotten JSONError::NotFound)"),
