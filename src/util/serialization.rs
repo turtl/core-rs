@@ -10,11 +10,24 @@
 //! ...lame. Surely, the next version of Rust will support this, rendering all
 //! my code useless. But hey, it's a really good test of my macro skills.
 
-/// Define a generic class others can use for serialization. Not sure why serde
-/// doesn't just define a basic one for us, but here it is.
+/// Define a generic struct others can use for serialization. 
+///
+/// We use T here so we can implement this struct generically for any other
+/// struct that wants serialization.
 pub struct TurtlMapVisitor<'a, T: 'a> {
     pub value: &'a T,
     pub state: u8,
+}
+
+/// Define a generic struct we can use for deserialization.
+///
+/// Note that we actually need the T specifier so we can implement this struct
+/// for other structs without causing duplicate errors. This class would not
+/// be needed in the first place if we had gensyms or ident concatenation in
+/// rust macros. sigh. That said, the `value` field is only ever initialized
+/// with a `None` value, so this shouldn't be too expensive.
+pub struct TurtlVisitor<'a, T: 'a> {
+    pub value: Option<&'a T>
 }
 
 /// Given a &str value, checks to see if it matches "type_", and if so returns
@@ -90,16 +103,20 @@ macro_rules! define_ser_fields {
     }
 }
 
-/// Define a class as serializable. Takes the struct name and the serializable
-/// fields for that class and writes a set of functionality to make it
+/// Define a struct as serializable. Takes the struct name and the serializable
+/// fields for that struct and writes a set of functionality to make it
 /// serde-serializable.
 ///
-/// Note that this also makes the class *de*serializable as well. IF you want
+/// Note that this also makes the struct *de*serializable as well. IF you want
 /// one, you generally want the other.
 ///
 /// TODO: Fix the crappy duplication in the macro. There are four variants that
 /// I'm convinced could be (at most) two variants, but Rust's macro system is...
 /// immature. Revisit in a year.
+/// TODO: If rust fixes its macro system to allow ident contatenation or gensyms
+/// then we can fix some issues in the deserializer implementation that allocs
+/// String types where an enum would be more efficient (as noted in [the serde
+/// deserialization guide](https://github.com/serde-rs/serde#deserialization-without-macros)).
 #[macro_export]
 macro_rules! serializable {
     // pub w/ unserialized
@@ -110,13 +127,13 @@ macro_rules! serializable {
             $( $field:ident: $type_:ty, )*
         }
     ) => {
-        $(#[$struct_meta])*
-        pub struct $name {
-            $( $unserialized: $unserialized_type, )*
-            $( $field: $type_ ),* ,
-        }
-
-        serializable!([IMPL ($name), ($( $field ),*)]);
+        serializable!([IMPL ($name), ($( $field: $type_ ),*), ($( $unserialized: $unserialized_type ),*), (
+            ($(#[$struct_meta])*)
+            pub struct $name {
+                $( $unserialized: $unserialized_type, )*
+                $( $field: $type_ ),* ,
+            }
+        )]);
     };
 
     // pub w/ no unserialized
@@ -127,11 +144,12 @@ macro_rules! serializable {
         }
     ) => {
         $(#[$struct_meta])*
-        pub struct $name {
-            $( $field: $type_ ),* ,
-        }
-
-        serializable!([IMPL ($name), ($( $field ),*)]);
+        serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
+            ($(#[$struct_meta])*)
+            pub struct $name {
+                $( $field: $type_ ),* ,
+            }
+        )]);
     };
 
     // no pub w/ unserialized
@@ -142,13 +160,13 @@ macro_rules! serializable {
             $( $field:ident: $type_:ty, )*
         }
     ) => {
-        $(#[$struct_meta])*
-        struct $name {
-            $( $unserialized: $unserialized_type, )*
-            $( $field: $type_ ),* ,
-        }
-
-        serializable!([IMPL ($name), ($( $field ),*)]);
+        serializable!([IMPL ($name), ($( $field: $type_ ),*), ($( $unserialized: $unserialized_type ),*), (
+            ($(#[$struct_meta])*)
+            struct $name {
+                $( $unserialized: $unserialized_type, )*
+                $( $field: $type_ ),* ,
+            }
+        )]);
     };
 
     // no pub w/ no unserialized
@@ -158,18 +176,24 @@ macro_rules! serializable {
             $( $field:ident: $type_:ty, )*
         }
     ) => {
-        $(#[$struct_meta])*
-        struct $name {
-            $( $field: $type_ ),* ,
-        }
-
-        serializable!([IMPL ($name), ($( $field ),*)]);
+        serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
+            ($(#[$struct_meta])*)
+            struct $name {
+                $( $field: $type_ ),* ,
+            }
+        )]);
     };
 
     // implementation
     (
-        [IMPL ( $name:ident ), ( $( $field:ident ),* )]
+        [IMPL ( $name:ident ), ( $( $field:ident: $type_:ty ),* ), ($( $unserialized:ident: $unserialized_type:ty ),*), (
+            ($(#[$struct_meta:meta])*)
+            $thestruct:item
+        )]
     ) => {
+        $(#[$struct_meta])*
+        $thestruct
+
         impl ::serde::ser::Serialize for $name {
             fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
                 where S: ::serde::ser::Serializer
@@ -181,13 +205,81 @@ macro_rules! serializable {
             }
         }
 
-        // Implement our serializer for this struct
         impl<'a> ::serde::ser::MapVisitor for ::util::serialization::TurtlMapVisitor<'a, $name> {
             fn visit<S>(&mut self, serializer: &mut S) -> Result<Option<()>, S::Error>
                 where S: ::serde::ser::Serializer
             {
                 define_ser_fields!(0, self, serializer, $( $field ),*);
                 Ok(None)
+            }
+        }
+
+        impl ::serde::de::Deserialize for $name {
+            fn deserialize<D>(deserializer: &mut D) -> Result<$name, D::Error>
+                where D: ::serde::de::Deserializer
+            {
+                static FIELDS: &'static [&'static str] = &[ $( stringify!($field) ),* ];
+                let val: Option<&$name> = None;
+                deserializer.deserialize_struct(stringify!($name), FIELDS, ::util::serialization::TurtlVisitor { value: val })
+            }
+        }
+
+        impl<'a> ::serde::de::Visitor for ::util::serialization::TurtlVisitor<'a, $name> {
+            type Value = $name;
+
+            fn visit_map<V>(&mut self, mut visitor: V) -> Result<$name, V::Error>
+                where V: ::serde::de::MapVisitor
+            {
+                $( let mut $field: Option<$type_> = None; )*
+                loop {
+                    // note that instead of using an Enum to ENUMerate our
+                    // struct fields, we just use strings. this makes things a
+                    // lot easier to macro away (since we don't have to deal
+                    // with passing enum names down or putting things in sub
+                    // modules and digging into them to get the struct we want).
+                    //
+                    // if rust's macro system were a bit more robust, ie we
+                    // could do things like
+                    //
+                    // macro_rules! shit {
+                    //     ($name:ident) => {
+                    //         enum FieldsFor$shit {}
+                    //         ...
+                    //     }
+                    // }
+                    //
+                    // (or if we just had gensyms)
+                    //
+                    // none of this would be necessary. as mentioned, we could
+                    // just pass down the name in the macro itself, but this is
+                    // unwieldy and i'd much rather take the performance hit and
+                    // keep the API clean.
+                    let val: Option<String> = try!(visitor.visit_key());
+                    match val {
+                        Some(x) => match x.as_ref() {
+                            $(
+                                stringify!($field) => {
+                                    $field = Some(try!(visitor.visit_value()));
+                                }
+                            )*
+                            _ => {},
+                        },
+                        None => { break; },
+                    };
+                }
+
+                $(
+                    let $field = match $field {
+                        Some(x) => x,
+                        None => try!(visitor.missing_field(stringify!($field))),
+                    };
+                )*
+
+                try!(visitor.end());
+                Ok($name{
+                    $( $field: $field, )*
+                    $( $unserialized: Default::default(), )*
+                })
             }
         }
     }
@@ -232,6 +324,14 @@ mod tests {
         let crapper = LittleCrapper { active: false, name: String::from("barry"), location: String::from("my pants") };
         let json_str = json::stringify(&crapper).unwrap();
         assert_eq!(json_str, r#"{"name":"barry","location":"my pants"}"#);
+    }
+
+    #[test]
+    fn can_deserialize() {
+        let crapper: LittleCrapper = json::parse(&String::from(r#"{"name":"omg","location":"city hall"}"#)).unwrap();
+        assert_eq!(crapper.name, "omg");
+        assert_eq!(crapper.location, "city hall");
+        assert_eq!(crapper.active, false);
     }
 
     #[test]
