@@ -17,6 +17,7 @@ extern crate constant_time_eq;
 #[macro_use]
 mod error;
 mod config;
+#[macro_use]
 mod util;
 mod messaging;
 mod crypto;
