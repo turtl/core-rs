@@ -14,11 +14,11 @@ lazy_static! {
 
 /// load/parse our config file, and return the parsed JSON value
 fn load_config() -> TResult<Value> {
-    let path = Path::new("config.json");
+    let path = Path::new("config.yaml");
     let mut file = try_t!(File::open(&path));
     let mut contents = String::new();
     try_t!(file.read_to_string(&mut contents));
-    let data: Value = try_t!(json::parse(&contents));
+    let data: Value = try_t!(json::parse_yaml(&contents));
     Ok(data)
 }
 

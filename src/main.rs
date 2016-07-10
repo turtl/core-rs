@@ -6,6 +6,7 @@ extern crate log;
 extern crate quick_error;
 extern crate serde;
 extern crate serde_json;
+extern crate serde_yaml;
 extern crate nanomsg;
 #[macro_use]
 extern crate lazy_static;

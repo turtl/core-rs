@@ -2,10 +2,15 @@ use ::serde_json;
 pub use ::serde_json::Value;
 pub use ::serde::de::Deserialize;
 pub use ::serde::ser::Serialize;
+use ::serde_yaml;
 
 quick_error! {
     #[derive(Debug)]
     pub enum JSONError {
+        Custom(str: String) {
+            description("error")
+            display("json: error: {}", str)
+        }
         Parse(err: serde_json::Error) {
             cause(err)
             description("parse error")
@@ -36,6 +41,11 @@ pub type JResult<T> = Result<T, JSONError>;
 /// Parse a JSON string and return a Result<Value>
 pub fn parse(string: &String) -> JResult<Value> {
     let data: Value = try!(serde_json::from_str(string).map_err(JSONError::Parse));
+    Ok(data)
+}
+
+pub fn parse_yaml(string: &String) -> JResult<Value> {
+    let data: Value = try!(serde_yaml::from_str(string).map_err(|e| JSONError::Custom(format!("yaml parse error: {}", e))));
     Ok(data)
 }
 
