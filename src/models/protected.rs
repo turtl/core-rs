@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use ::error::{TResult, TError};
+use ::models::Model;
 use ::util::json::{self};
 
 /// Defines a key struct, used by many models that have subkey data.
@@ -19,7 +20,7 @@ serializable! {
 /// It also defines methods that make it easy to do The Right Thing (c)(r)(tm)
 /// when handling protected model data. The goal here is to eliminate all forms
 /// of data leaks while providing an interface that's easy to use.
-pub trait Protected {
+pub trait Protected: Model {
     /// Grab this model's id
     fn id(&self) -> Option<String>;
 
@@ -28,9 +29,6 @@ pub trait Protected {
 
     /// Grab the private fields for this model
     fn private_fields(&self) -> Vec<&str>;
-
-    /// Grab *all* data for this model (safe or not)
-    fn data(&self) -> json::Value;
 
     /// Grab all public fields for this model as a json Value
     fn safe_data(&self) -> json::Value {
@@ -48,7 +46,7 @@ pub trait Protected {
 
     /// Return a JSON dump of all public fields. Really, this is a wrapper
     /// around `json::stringify(model.safe_data())`
-    fn stringify_safe(&self) -> TResult<String> {
+    fn safe_stringify(&self) -> TResult<String> {
         let safe = self.safe_data();
         json::stringify(&safe).map_err(|e| toterr!(e))
     }
@@ -134,6 +132,12 @@ macro_rules! define_protected {
 
         }
 
+        impl ::models::Model for $name {
+            fn data(&self) -> ::util::json::Value {
+                ::util::json::to_val(self)
+            }
+        }
+
         impl Protected for $name {
             fn id(&self) -> Option<String> {
                 match self.id {
@@ -154,10 +158,6 @@ macro_rules! define_protected {
                 vec![
                     $( fix_type!(stringify!($priv_field)), )*
                 ]
-            }
-
-            fn data(&self) -> ::util::json::Value {
-                ::util::json::to_val(self)
             }
         }
 
@@ -223,7 +223,7 @@ mod tests {
         dog.id = Some(String::from("123"));
         dog.size = Some(42);
         dog.name = Some(String::from("barky"));
-        assert_eq!(dog.stringify_safe().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(dog.safe_stringify().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
 
     #[test]
