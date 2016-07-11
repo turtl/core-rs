@@ -19,8 +19,6 @@ pub use ::crypto::low::{
     from_hex,
     to_base64,
     from_base64,
-    sha256,
-    sha512,
 };
 
 /// Stores our current crypto version. This gets encoded into a header in the
@@ -645,7 +643,6 @@ fn deserialize_version_0(serialized: &Vec<u8>) -> CResult<CryptoData> {
     Ok(CryptoData::new(0, desc, iv, Vec::new(), ciphertext))
 }
 
-#[allow(dead_code)]
 /// Ugh. Serialize a CryptoData container to version 0. See "dunce" comment
 /// above.
 fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
@@ -655,7 +652,11 @@ fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
     Ok(Vec::from(ser.as_bytes()))
 }
 
-#[allow(dead_code)]
+/// Like encrypt(), but deals with string data (as was originally intended)
+/// and uses version 0 serialization.
+///
+/// Note that the ONLY reason this was included is to maintain backwards compat
+/// with the login system. *NOTHING SHOULD __EVER__ USE VERSION 0 TO ENCRYPT!*
 pub fn encrypt_v0(key: &Vec<u8>, iv: &Vec<u8>, plaintext: &String) -> CResult<String> {
     let desc = try!(PayloadDescription::from(&[0, 0]));
     let enc = try!(low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923));

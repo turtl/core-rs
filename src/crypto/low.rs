@@ -37,8 +37,8 @@ const GCRYPT_MAC_FLAGS: gcrypt::mac::Flags = gcrypt::mac::FLAG_SECURE;
 const GCRYPT_RANDOM_STRENGTH: gcrypt::rand::Level = gcrypt::rand::VERY_STRONG_RANDOM;
 
 quick_error! {
-    #[derive(Debug)]
     /// Define a type for cryptography errors.
+    #[derive(Debug)]
     pub enum CryptoError {
         Msg(str: String) {
             description(str)
@@ -67,15 +67,16 @@ macro_rules! try_c {
     ($e:expr) => (try!($e.map_err(|e| tocterr!(e))))
 }
 
-#[derive(Debug)]
 /// Specifies what type of padding we want to use when encrypting data via CBC.
+#[derive(Debug)]
 pub enum PadMode {
+    #[allow(dead_code)]
     PKCS7,
     ANSIX923,
 }
 
-#[derive(Debug)]
 /// Specifies the hash algorithms available for hashing or PBKDF2/HMAC
+#[derive(Debug)]
 pub enum Hasher {
     SHA1,
     SHA256,
@@ -96,19 +97,20 @@ fn hash(hasher: Hasher, data: &[u8]) -> CResult<Vec<u8>> {
     Ok(result)
 }
 
+/// SHA1 some data and return a u8 vec result.
 #[allow(dead_code)]
-/// SHA256 some data and return a u8 vec result.
 pub fn sha1(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA1, data)
 }
 
 /// SHA256 some data and return a u8 vec result.
+#[allow(dead_code)]
 pub fn sha256(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA256, data)
 }
 
-#[allow(dead_code)]
 /// SHA512 some data and return a u8 vec result.
+#[allow(dead_code)]
 pub fn sha512(data: &[u8]) -> CResult<Vec<u8>> {
     hash(Hasher::SHA512, data)
 }
@@ -175,9 +177,9 @@ pub fn rand_int() -> CResult<u64> {
     Ok(val)
 }
 
-#[allow(dead_code)]
 /// Generate a random floating point (f64) between 0.0 and 1.0. Uses rand_int()
 /// and divides it by u64::MAX to get the value.
+#[allow(dead_code)]
 pub fn rand_float() -> CResult<f64> {
     Ok((try!(rand_int()) as f64) / (::std::u64::MAX as f64))
 }
