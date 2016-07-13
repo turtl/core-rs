@@ -43,6 +43,7 @@ pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
 }
 
+/// Parse a YAML string and return a Value type
 pub fn parse_yaml(string: &String) -> JResult<Value> {
     let data: Value = try!(serde_yaml::from_str(string).map_err(|e| JSONError::Custom(format!("yaml parse error: {}", e))));
     Ok(data)
@@ -56,6 +57,44 @@ pub fn stringify<T: Serialize>(obj: &T) -> JResult<String> {
 /// Turn a JSON-serializable object into a Result<Value>
 pub fn to_val<T: Serialize>(obj: &T) -> Value {
     serde_json::to_value(obj)
+}
+
+/// Walk a JSON structure, given a key path. Traverses both objects and arrays,
+/// returning a reference to the found value, if any. This function takes and
+/// returns a mutable reference to the Value.
+///
+/// # Examples
+///
+/// ```
+/// let json_str = String::from(r#"{"user":{"name":"barky"}}"#);
+/// let parsed = json::parse(&json_str);
+/// let nameval = walk(&["user", "name"], &parsed).unwrap();
+/// ```
+pub fn walk_mut<'a>(keys: &[&str], data: &'a mut Value) -> JResult<&'a mut Value> {
+    let last: bool = keys.len() == 0;
+    if last { return Ok(data); }
+
+    let key = keys[0];
+
+    match *data {
+        Value::Object(ref mut obj) => {
+            match obj.get_mut(key) {
+                Some(d) => walk_mut(&keys[1..].to_vec(), d),
+                None => Err(JSONError::NotFound(key.to_owned())),
+            }
+        },
+        Value::Array(ref mut arr) => {
+            let ukey = match key.parse::<usize>() {
+                Ok(x) => x,
+                Err(..) => return Err(JSONError::InvalidKey(key.to_owned())),
+            };
+            match arr.get_mut(ukey) {
+                Some(d) => walk_mut(&keys[1..].to_vec(), d),
+                None => Err(JSONError::NotFound(key.to_owned())),
+            }
+        },
+        _ => return Err(JSONError::DeadEnd),
+    }
 }
 
 /// Walk a JSON structure, given a key path. Traverses both objects and arrays,
@@ -116,6 +155,38 @@ pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
         },
         Err(e) => Err(e),
     }
+}
+
+/// Set a field into a mutable JSON Value
+pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResult<()> {
+    if keys.len() == 0 {
+        return Err(JSONError::InvalidKey(format!("set: no keys given")));
+    }
+
+    let butlast = &keys[0..(keys.len() - 1)];
+    let last = (keys[(keys.len() - 1)..])[0];
+
+    let mut val = try!(walk_mut(butlast, container));
+    match *val {
+        Value::Object(ref mut x) => {
+            x.insert(String::from(last), to_val(to));
+            Ok(())
+        },
+        Value::Array(ref mut x) => {
+            let ukey = match last.parse::<usize>() {
+                Ok(x) => x,
+                Err(..) => return Err(JSONError::InvalidKey(last.to_owned())),
+            };
+            *(&mut x[ukey]) = to_val(to);
+            Ok(())
+        },
+        _ => Err(JSONError::DeadEnd),
+    }
+}
+
+/// Returns a blank Value hash/object type
+pub fn obj() -> Value {
+    Value::Object(::std::collections::BTreeMap::new())
 }
 
 #[cfg(test)]
