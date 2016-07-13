@@ -54,7 +54,8 @@ pub fn bind(dispatch: &Fn(&String) -> TResult<()>) -> TResult<()> {
                 match dispatch(&message) {
                     Ok(..) => (),
                     Err(e) => match e {
-                        TError::Msg(e) => error!("dispatch: error processing message: {}", e),
+                        TError::Msg(e) | TError::BadValue(e)
+                            => error!("dispatch: error processing message: {}", e),
                         TError::Shutdown => {
                             warn!("dispatch: got shutdown signal, quitting");
                             util::sleep(10);

@@ -9,6 +9,10 @@ quick_error! {
             description(str)
             display("error: {}", str)
         }
+        BadValue(str: String) {
+            description(str)
+            display("bad value: {}", str)
+        }
     }
 }
 
