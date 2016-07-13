@@ -2,20 +2,22 @@ use ::error::{TResult, TError};
 use ::crypto;
 use ::models::protected::Protected;
 
-define_protected!{
+protected!{
     pub struct User {
         ( storage: i64 ),
         ( settings: ::util::json::Value ),
-        ( logged_in: bool,
-          changing_password: bool,
-          auth: String )
+        (
+            auth: String
+            //logged_in: bool,
+            //changing_password: bool
+        )
     }
 }
 
 fn use_code(username: &String, password: &String) -> TResult<()> {
-    let mut user = User::new();
-    user.logged_in = true;
-    user.changing_password = false;
+    let mut user = User::blank();
+    user.set("logged_in", &true).unwrap();
+    user.set("changing_password", &false).unwrap();
     let key = try_t!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
     let key2 = try_t!(crypto::random_key());
     let auth = try_t!(crypto::encrypt_v0(&key, &try_t!(crypto::random_iv()), &String::from("message")));
