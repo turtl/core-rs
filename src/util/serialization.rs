@@ -1,3 +1,4 @@
+/*
 //! This module provides helpers/macros for serializing (mainyl for structs).
 //! Note this is all more or less written as a replacement for the derive()
 //! attributes that no longer work in serde:
@@ -369,4 +370,5 @@ mod tests {
         assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","type":"sneak","location":"here"},{"name":"sandra","type":"sneak","location":"the bed"}]}"#);
     }
 }
+*/
 
