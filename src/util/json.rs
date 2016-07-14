@@ -60,6 +60,43 @@ pub fn to_val<T: Serialize>(obj: &T) -> Value {
 }
 
 /// Walk a JSON structure, given a key path. Traverses both objects and arrays,
+/// returning a reference to the found value, if any.
+///
+/// # Examples
+///
+/// ```
+/// let json_str = String::from(r#"{"user":{"name":"barky"}}"#);
+/// let parsed = json::parse(&json_str);
+/// let nameval = walk(&["user", "name"], &parsed).unwrap();
+/// ```
+pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
+    let last: bool = keys.len() == 0;
+    if last { return Ok(data); }
+
+    let key = keys[0];
+
+    match *data {
+        Value::Object(ref obj) => {
+            match obj.get(key) {
+                Some(d) => walk(&keys[1..].to_vec(), d),
+                None => Err(JSONError::NotFound(key.to_owned())),
+            }
+        },
+        Value::Array(ref arr) => {
+            let ukey = match key.parse::<usize>() {
+                Ok(x) => x,
+                Err(..) => return Err(JSONError::InvalidKey(key.to_owned())),
+            };
+            match arr.get(ukey) {
+                Some(d) => walk(&keys[1..].to_vec(), d),
+                None => Err(JSONError::NotFound(key.to_owned())),
+            }
+        },
+        _ => return Err(JSONError::DeadEnd),
+    }
+}
+
+/// Walk a JSON structure, given a key path. Traverses both objects and arrays,
 /// returning a reference to the found value, if any. This function takes and
 /// returns a mutable reference to the Value.
 ///
@@ -90,43 +127,6 @@ pub fn walk_mut<'a>(keys: &[&str], data: &'a mut Value) -> JResult<&'a mut Value
             };
             match arr.get_mut(ukey) {
                 Some(d) => walk_mut(&keys[1..].to_vec(), d),
-                None => Err(JSONError::NotFound(key.to_owned())),
-            }
-        },
-        _ => return Err(JSONError::DeadEnd),
-    }
-}
-
-/// Walk a JSON structure, given a key path. Traverses both objects and arrays,
-/// returning a reference to the found value, if any.
-///
-/// # Examples
-///
-/// ```
-/// let json_str = String::from(r#"{"user":{"name":"barky"}}"#);
-/// let parsed = json::parse(&json_str);
-/// let nameval = walk(&["user", "name"], &parsed).unwrap();
-/// ```
-pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
-    let last: bool = keys.len() == 0;
-    if last { return Ok(data); }
-
-    let key = keys[0];
-
-    match *data {
-        Value::Object(ref obj) => {
-            match obj.get(key) {
-                Some(d) => walk(&keys[1..].to_vec(), d),
-                None => Err(JSONError::NotFound(key.to_owned())),
-            }
-        },
-        Value::Array(ref arr) => {
-            let ukey = match key.parse::<usize>() {
-                Ok(x) => x,
-                Err(..) => return Err(JSONError::InvalidKey(key.to_owned())),
-            };
-            match arr.get(ukey) {
-                Some(d) => walk(&keys[1..].to_vec(), d),
                 None => Err(JSONError::NotFound(key.to_owned())),
             }
         },
