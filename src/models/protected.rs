@@ -21,7 +21,7 @@ pub trait Protected: Model + fmt::Debug {
     fn private_fields(&self) -> Vec<&str>;
 
     /// Grab all public fields for this model as a json Value
-    fn safe_data(&self) -> json::Value {
+    fn untrusted_data(&self) -> json::Value {
         let mut map: BTreeMap<String, json::Value> = BTreeMap::new();
         let data = self.data();
         for field in &self.public_fields() {
@@ -34,34 +34,27 @@ pub trait Protected: Model + fmt::Debug {
         json::Value::Object(map)
     }
 
-    /// Return a JSON dump of all public fields. Really, this is a wrapper
-    /// around `json::stringify(model.safe_data())`
-    fn safe_stringify(&self) -> TResult<String> {
-        let safe = self.safe_data();
+    /// Return a JSON dump of all fields. Really, this is a wrapper around
+    /// `json::stringify(model.data())`.
+    ///
+    /// Use this function when sending a model to a trusted source (ie inproc
+    /// messaging to our view layer).
+    ///
+    /// __NEVER__ use this function to save data to disk or transmit over a
+    /// network connection.
+    fn stringify_trusted(&self) -> TResult<String> {
+        let safe = self.data();
         json::stringify(&safe).map_err(|e| toterr!(e))
     }
-}
 
-/// Given a &str value, checks to see if it matches "type_", and if so returns
-/// "type" instead. It also does the reverse: if it detects "type", it returns
-/// "type_". That way we can use this
-///
-/// This is useful for translating between rust structs, which don't allow a
-/// field named `type` and our JSON objects out in the wild, many of which *do*
-/// have a `type` field.
-#[macro_export]
-macro_rules! fix_type {
-    ( "type" ) => { "type_" };
-    ( "type_" ) => { "type" };
-    ( $val:expr ) => {
-        {
-            let myval = $val;
-            match myval {
-                "type_" => "type",
-                "type" => "type_",
-                _ => myval
-            }
-        }
+    /// Return a JSON dump of all public fields. Really, this is a wrapper
+    /// around `json::stringify(model.untrusted_data())`.
+    ///
+    /// Use this function for sending a model to an *untrusted* source, such as
+    /// saving to disk or over a network connection.
+    fn stringify_untrusted(&self) -> TResult<String> {
+        let safe = self.untrusted_data();
+        json::stringify(&safe).map_err(|e| toterr!(e))
     }
 }
 
@@ -195,13 +188,13 @@ macro_rules! protected {
                 vec![
                     "id",
                     "body",
-                    $( fix_type!(stringify!($pub_field)), )*
+                    $( stringify!($pub_field), )*
                 ]
             }
 
             fn private_fields(&self) -> Vec<&str> {
                 vec![
-                    $( fix_type!(stringify!($priv_field)), )*
+                    $( stringify!($priv_field), )*
                 ]
             }
         }
@@ -224,7 +217,7 @@ mod tests {
         struct Dog {
             ( size: u64 ),
             ( name: String,
-              type_: String,
+              type: String,
               tags: Vec<String> ),
             ( active: bool )
         }
@@ -243,31 +236,36 @@ mod tests {
     }
 
     #[test]
-    fn handles_safe_data() {
+    fn handles_untrusted_data() {
         let mut dog = Dog::blank();
         dog.active = true;
         dog.set("id", &String::from("123")).unwrap();
         dog.set("size", &42).unwrap();
         dog.set("name", &String::from("barky")).unwrap();
-        assert_eq!(json::stringify(&dog.safe_data()).unwrap(), r#"{"id":"123","size":42}"#);
-        assert_eq!(dog.safe_stringify().unwrap(), r#"{"id":"123","size":42}"#);
+        assert_eq!(json::stringify(&dog.untrusted_data()).unwrap(), r#"{"id":"123","size":42}"#);
+        assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"id":"123","size":42}"#);
     }
 
     #[test]
     fn can_serialize_json() {
-        /*
-        let mut dog = Dog::new();
-        dog.size = Some(32);
-        dog.name = Some(String::from("timmy"));
-        dog.type_ = Some(String::from("tiny"));
-        dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
+        let mut dog = Dog::blank();
+        dog.set("size", &32).unwrap();
+        dog.set("name", &String::from("timmy")).unwrap();
+        dog.set("type", &String::from("tiny")).unwrap();
+        dog.set("tags", &vec![String::from("canine"), String::from("3-legged")]).unwrap();
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(json::stringify(&dog).unwrap(), r#"{"id":null,"body":null,"size":32,"name":"timmy","type":"tiny","tags":["canine","3-legged"]}"#);
-
-        dog.tags.as_mut().map(|mut tags| tags.push(String::from("fast")));
-        assert_eq!(json::stringify(&dog).unwrap(), r#"{"id":null,"body":null,"size":32,"name":"timmy","type":"tiny","tags":["canine","3-legged","fast"]}"#);
-        */
+        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        {
+            let mut val: &mut json::Value = dog.get_mut("tags").unwrap();
+            match val {
+                &mut json::Value::Array(ref mut tags) => {
+                    tags.push(json::to_val(&String::from("fast")));
+                },
+                _ => panic!("bad value"),
+            };
+        }
+        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 }
 

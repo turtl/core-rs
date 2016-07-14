@@ -24,7 +24,7 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
     user.auth = auth;
     let auth2 = try_t!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try_t!(crypto::CryptoOp::new("aes", "gcm"))));
     let test = try_t!(crypto::decrypt(&key, &auth2.clone()));
-    println!("debug stuff: {:?}", (user.safe_stringify(), auth2, test));
+    println!("debug stuff: {:?}", (user.stringify_trusted(), auth2, test));
     Ok(())
 }
 

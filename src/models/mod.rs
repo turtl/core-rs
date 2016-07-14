@@ -38,6 +38,14 @@ pub trait Model {
         }
     }
 
+    /// Get a nested Value from this model's data
+    fn get_nest_mut(&mut self, fields: &[&str]) -> Option<&mut json::Value> {
+        match json::walk_mut(fields, self.data_mut()) {
+            Ok(x) => Some(x),
+            Err(..) => None,
+        }
+    }
+
     /// Set a nested value into this model's data
     fn set_nest<T>(&mut self, fields: &[&str], value: &T) -> TResult<()>
         where T: json::Serialize + json::Deserialize
@@ -51,6 +59,11 @@ pub trait Model {
         where T: json::Serialize + json::Deserialize
     {
         self.get_nest(&[field])
+    }
+
+    /// Get a mutable Value from this model's data
+    fn get_mut(&mut self, field: &str) -> Option<&mut json::Value> {
+        self.get_nest_mut(&[field])
     }
 
     /// Set a value into this model's data
