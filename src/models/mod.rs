@@ -73,6 +73,24 @@ pub trait Model {
         self.set_nest(&[field], value)
     }
 
+    /// Like set(), but instead of setting a T value into a key in the model, we
+    /// pass a set of json Value data and set each item in there into the
+    /// model's data.
+    fn set_multi(&mut self, data: json::Value) -> TResult<()> {
+        let hash = match data {
+            json::Value::Object(x) => x,
+            _ => return Err(TError::BadValue(format!("Model::set_multi() - `data` value given was not an object type"))),
+        };
+        let self_data = match self.data_mut() {
+            &mut json::Value::Object(ref mut x) => x,
+            _ => return Err(TError::BadValue(format!("Model::set_multi() - self.data_mut() returned non-object type"))),
+        };
+        for (key, val) in hash {
+            self_data.insert(key, val);
+        }
+        Ok(())
+    }
+
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
         json::stringify(self.data())
@@ -165,5 +183,17 @@ mod tests {
         rabbit2.reset(rabbit1.data().clone()).unwrap();
         assert_eq!(rabbit2.id::<String>().unwrap(), "omglol");
         assert_eq!(rabbit2.get::<String>("name").unwrap(), "hoppy");
+    }
+
+    #[test]
+    fn set_multi() {
+        let mut rabbit = Rabbit::new();
+        rabbit.set("name", &String::from("flirty")).unwrap();
+        assert_eq!(rabbit.get::<String>("name").unwrap(), "flirty");
+        assert_eq!(rabbit.get::<i64>("age"), None);
+        let json = json::parse(&String::from(r#"{"name":"vozzie","age":3}"#)).unwrap();
+        rabbit.set_multi(json).unwrap();
+        assert_eq!(rabbit.get::<String>("name").unwrap(), "vozzie");
+        assert_eq!(rabbit.get::<i64>("age").unwrap(), 3);
     }
 }
