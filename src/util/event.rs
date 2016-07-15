@@ -7,7 +7,7 @@ use ::std::collections::HashMap;
 use ::util::json::Value;
 
 /// Define an easy Callback type for us
-pub type CallbackType<'cb> = Fn(&Value) -> () + 'cb;
+pub type CallbackType = Fn(&Value) -> ();
 
 /// Defines what type of binding we have
 enum BindType {
@@ -17,7 +17,7 @@ enum BindType {
 
 /// Holds information about a callback.
 pub struct Callback<'cb> {
-    cb: &'cb CallbackType<'cb>,
+    cb: &'cb CallbackType,
     binding: BindType,
     name: &'cb str,
 }
