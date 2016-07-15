@@ -13,6 +13,10 @@ quick_error! {
             description(str)
             display("bad value: {}", str)
         }
+        MissingField(str: String) {
+            description(str)
+            display("missing field: {}", str)
+        }
     }
 }
 
