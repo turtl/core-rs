@@ -1,3 +1,7 @@
+//! TODO: ^ docs
+//! TODO: events for clear/reset
+//! TODO: reset should use clear/set_multi
+
 #[macro_use]
 pub mod protected;
 pub mod user;
@@ -6,9 +10,9 @@ pub mod note;
 
 use ::error::{TError, TResult};
 use ::util::json;
-use ::util::event;
+use ::util::event::Emitter;
 
-pub trait Model {
+pub trait Model<'event>: Emitter<'event> {
     /// Grab *all* data for this model (safe or not)
     fn data(&self) -> &json::Value;
 
@@ -70,7 +74,9 @@ pub trait Model {
     fn set<T>(&mut self, field: &str, value: &T) -> TResult<()>
         where T: json::Serialize + json::Deserialize
     {
-        self.set_nest(&[field], value)
+        let res = try!(self.set_nest(&[field], value));
+        self.trigger(&format!("set:{}", field)[..], &json::to_val(&value));
+        Ok(res)
     }
 
     /// Like set(), but instead of setting a T value into a key in the model, we
@@ -81,12 +87,20 @@ pub trait Model {
             json::Value::Object(x) => x,
             _ => return Err(TError::BadValue(format!("Model::set_multi() - `data` value given was not an object type"))),
         };
-        let self_data = match self.data_mut() {
-            &mut json::Value::Object(ref mut x) => x,
-            _ => return Err(TError::BadValue(format!("Model::set_multi() - self.data_mut() returned non-object type"))),
-        };
-        for (key, val) in hash {
-            self_data.insert(key, val);
+        let mut events: Vec<(String, json::Value)> = Vec::new();
+        {
+            let self_data = match self.data_mut() {
+                &mut json::Value::Object(ref mut x) => x,
+                _ => return Err(TError::BadValue(format!("Model::set_multi() - self.data_mut() returned non-object type"))),
+            };
+            for (key, val) in hash {
+                let val_clone = val.clone();
+                self_data.insert(key.clone(), val);
+                events.push((key, val_clone));
+            }
+        }
+        for (key, val) in events {
+            self.trigger(&format!("set:{}", key)[..], &val);
         }
         Ok(())
     }
@@ -101,26 +115,38 @@ pub trait Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::util::json;
+    use ::util::json::{self, Value};
     use ::std::collections::HashMap;
     use ::error::{TError};
+    use ::util::event::{self, Emitter};
+    use std::sync::{Arc, RwLock};
 
-    struct Rabbit {
-        _data: json::Value,
+    struct Rabbit<'event> {
+        _data: Value,
+        emitter: ::util::event::EventEmitter<'event>,
     }
 
-    impl Rabbit {
-        fn new() -> Rabbit {
-            Rabbit { _data: json::obj() }
+    impl<'event> Rabbit<'event> {
+        fn new() -> Rabbit<'event> {
+            Rabbit {
+                _data: json::obj(),
+                emitter: event::EventEmitter::new(),
+            }
         }
     }
 
-    impl Model for Rabbit {
-        fn data(&self) -> &json::Value {
+    impl<'event> Emitter<'event> for Rabbit<'event> {
+        fn bindings(&mut self) -> &mut ::std::collections::HashMap<&'event str, Vec<::util::event::Callback<'event>>> {
+            self.emitter.bindings()
+        }
+    }
+
+    impl<'event> Model<'event> for Rabbit<'event> {
+        fn data(&self) -> &Value {
             &self._data
         }
 
-        fn data_mut(&mut self) -> &mut json::Value {
+        fn data_mut(&mut self) -> &mut Value {
             &mut self._data
         }
 
@@ -128,9 +154,9 @@ mod tests {
             self._data = json::obj();
         }
 
-        fn reset(&mut self, data: ::util::json::Value) -> ::error::TResult<()> {
+        fn reset(&mut self, data: Value) -> ::error::TResult<()> {
             match data {
-                json::Value::Object(..) => {
+                Value::Object(..) => {
                     self._data = data;
                     Ok(())
                 }
@@ -196,4 +222,70 @@ mod tests {
         assert_eq!(rabbit.get::<String>("name").unwrap(), "vozzie");
         assert_eq!(rabbit.get::<i64>("age").unwrap(), 3);
     }
+
+    #[test]
+    fn bind_trigger() {
+        let data = Arc::new(RwLock::new(vec![0]));
+        let rdata = data.clone();
+        {
+            let data = data.clone();
+            let cb = move |_: &Value| {
+                data.write().unwrap()[0] += 1;
+            };
+            let mut rabbit = Rabbit::new();
+            rabbit.bind("hop", &cb, "rabbit:hop");
+
+            let jval = json::obj();
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            rabbit.trigger("hellp", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 1);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+
+            rabbit.unbind("hop", "rabbit:hop");
+
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+        }
+    }
+
+    #[test]
+    fn built_in_events() {
+        let map: HashMap<String, i64> = HashMap::new();
+        let data = Arc::new(RwLock::new(map));
+        let rdata = data.clone();
+        {
+            let data = data.clone();
+            let cb = move |val: &Value| {
+                let string = match *val {
+                    json::Value::String(ref x) => x.clone(),
+                    _ => panic!("got non-string type"),
+                };
+                let mut hash = data.write().unwrap();
+                let count = match hash.get(&string) {
+                    Some(x) => x.clone(),
+                    None => 0i64,
+                };
+                hash.insert(string, count + 1);
+            };
+
+            let mut rabbit = Rabbit::new();
+            rabbit.bind("set:name", &cb, "setters");
+            rabbit.bind("set:second_name", &cb, "setters");
+            let hash = rdata.read().unwrap();
+            assert_eq!(hash.get(&String::from("blackberry")), None);
+            assert_eq!(hash.get(&String::from("murdery")), None);
+            drop(hash);
+            rabbit.set("name", &String::from("blackberry")).unwrap();
+            rabbit.set("second_name", &String::from("murdery")).unwrap();
+            let hash = rdata.read().unwrap();
+            assert_eq!(hash.get(&String::from("blackberry")), Some(&1));
+            assert_eq!(hash.get(&String::from("murdery")), Some(&1));
+        }
+    }
 }
+
