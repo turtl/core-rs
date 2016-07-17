@@ -1,8 +1,5 @@
 //! The `Model` module defines a container for data, and also interfaces for
 //! syncing said data to local databases.
-//!
-//! TODO: events for clear/reset
-//! TODO: reset should use clear/set_multi
 
 #[macro_use]
 pub mod protected;
