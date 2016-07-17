@@ -259,20 +259,6 @@ macro_rules! protected {
             fn data_mut(&mut self) -> &mut ::util::json::Value {
                 &mut self._data
             }
-
-            fn clear(&mut self) -> () {
-                self._data = ::util::json::obj();
-            }
-
-            fn reset(&mut self, data: ::util::json::Value) -> ::error::TResult<()> {
-                match data {
-                    ::util::json::Value::Object(..) => {
-                        self._data = data;
-                        Ok(())
-                    }
-                    _ => Err(::error::TError::BadValue(String::from("Model::reset(): `data` is not an object type"))),
-                }
-            }
         }
 
         // make sure printing out a model doesn't leak data

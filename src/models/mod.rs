@@ -1,4 +1,6 @@
-//! TODO: ^ docs
+//! The `Model` module defines a container for data, and also interfaces for
+//! syncing said data to local databases.
+//!
 //! TODO: events for clear/reset
 //! TODO: reset should use clear/set_multi
 
@@ -20,10 +22,21 @@ pub trait Model<'event>: Emitter<'event> {
     fn data_mut(&mut self) -> &mut json::Value;
 
     /// Clear out the data in this Model
-    fn clear(&mut self) -> ();
+    fn clear(&mut self) -> () {
+        match self.data_mut() {
+            &mut json::Value::Object(ref mut x) => { x.clear(); },
+            _ => {},
+        }
+        self.trigger("clear", &json::obj());
+    }
 
     /// Reset the data in this Model with a new Value
-    fn reset(&mut self, data: json::Value) -> TResult<()>;
+    fn reset(&mut self, data: json::Value) -> TResult<()> {
+        self.clear();
+        try!(self.set_multi(data));
+        self.trigger("reset", &json::obj());
+        Ok(())
+    }
 
     /// Get this model's id
     fn id<T>(&self) -> Option<T>
