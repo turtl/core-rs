@@ -153,6 +153,11 @@ pub trait Protected<'event>: Model<'event> + fmt::Debug {
         try!(self.set_multi(parsed));
         Ok(self.trusted_data())
     }
+
+    fn ensure_key(&mut self) -> Option<&Vec<u8>> {
+        let key = self.key();
+        key
+    }
 }
 
 /// Defines a protected model for us. We give it a model name, a set of public
@@ -163,7 +168,7 @@ pub trait Protected<'event>: Model<'event> + fmt::Debug {
 ///
 /// NOTE that the `id` and `body` fields are always prepended to the public
 /// field list as `id: String` and `body: String` so don't include the id/body
-/// fields in your public/private field lists.
+/// fields in your public/private field lists. OR ELSE.
 ///
 /// # Examples
 ///
