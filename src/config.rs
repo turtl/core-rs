@@ -5,8 +5,8 @@ use std::io::prelude::*;
 use ::error::{TResult, TError};
 use ::util::json::{self, Value, Deserialize};
 
-/// create a static/global CONFIG var, and load it with our config data
 lazy_static! {
+    /// create a static/global CONFIG var, and load it with our config data
     static ref CONFIG: Value = {
         load_config().unwrap()
     };
