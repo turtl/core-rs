@@ -14,6 +14,7 @@ extern crate rustc_serialize as serialize;
 extern crate gcrypt;
 extern crate crypto as rust_crypto;
 extern crate constant_time_eq;
+//extern crate crossbeam;
 
 #[macro_use]
 mod error;
@@ -24,6 +25,7 @@ mod messaging;
 mod crypto;
 mod models;
 mod dispatch;
+mod turtl;
 
 use std::thread;
 
@@ -42,13 +44,26 @@ pub fn init() -> TResult<()> {
 pub fn start() -> TResult<()> {
     let handle = thread::spawn(dispatch::main);
     util::sleep(10);
-    //let msg = r#"["user:login",{"username":"andrew","password":"passsss"}]"#;
-    //messaging::send(&msg.to_owned()).unwrap();
     match handle.join() {
         Ok(..) => Ok(()),
         Err(_) => Err(TError::Msg(format!("error joining dispatch thread"))),
     }
 }
+
+/*
+fn queue() -> TResult<()> {
+    let queue: crossbeam::sync::MsQueue<String> = crossbeam::sync::MsQueue::new();
+    crossbeam::scope(|scope| {
+        scope.spawn(|| {
+            queue.push(String::from("jazzzz"));
+        });
+        scope.spawn(|| {
+            println!("got: {}", queue.pop());
+        });
+    });
+    Ok(())
+}
+*/
 
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 /// TODO: when calling this from C, handle all panics, or get rid of panics.
@@ -56,6 +71,7 @@ pub fn start() -> TResult<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
+    //queue().unwrap();
     start().unwrap();
 }
 

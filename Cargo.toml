@@ -21,6 +21,7 @@ rust-crypto = "0.2.36"
 #gpgme = "0.4.0"
 rusqlite = "0.7.3"
 constant_time_eq = "0.1.2"
+crossbeam = "0.2.9"
 
 [features]
 #default = ["openssl/pkcs5_pbkdf2_hmac"]
