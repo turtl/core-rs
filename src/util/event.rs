@@ -19,13 +19,13 @@ enum BindType {
 pub struct Callback<'cb> {
     cb: &'cb CallbackType,
     binding: BindType,
-    name: &'cb str,
+    name: String,
 }
 
 /// The Emitter class holds a set of event bindings. It implements the `Emitter`
 /// trait and can be used as a standalone event emitter object.
 pub struct EventEmitter<'cb> {
-    _bindings: HashMap<&'cb str, Vec<Callback<'cb>>>,
+    _bindings: HashMap<String, Vec<Callback<'cb>>>,
 }
 
 /// Defines an interface for an event emitter, including binding/triggering
@@ -33,10 +33,10 @@ pub struct EventEmitter<'cb> {
 /// to return a mutable reference to a HashMap of bindings.
 pub trait Emitter<'cb> {
     /// Grab a mutable ref to this emitter's bindings
-    fn bindings(&mut self) -> &mut HashMap<&'cb str, Vec<Callback<'cb>>>;
+    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback<'cb>>>;
 
     /// Binds a callback to an event name.
-    fn do_bind(&mut self, name: &'cb str, cb: Callback<'cb>) -> () {
+    fn do_bind(&mut self, name: &str, cb: Callback<'cb>) -> () {
         let mut bindings = self.bindings();
         if bindings.contains_key(name) {
             match bindings.get_mut(name) {
@@ -45,7 +45,7 @@ pub trait Emitter<'cb> {
             }
         } else {
             let events = vec![cb];
-            bindings.insert(name, events);
+            bindings.insert(String::from(name), events);
         }
     }
 
@@ -55,7 +55,7 @@ pub trait Emitter<'cb> {
         self.do_bind(event_name, Callback {
             cb: cb,
             binding: BindType::Every,
-            name: bind_name,
+            name: String::from(bind_name),
         });
     }
 
@@ -65,7 +65,7 @@ pub trait Emitter<'cb> {
         self.do_bind(event_name, Callback {
             cb: cb,
             binding: BindType::Once,
-            name: bind_name,
+            name: String::from(bind_name),
         });
     }
 
@@ -76,8 +76,7 @@ pub trait Emitter<'cb> {
             Some(x) => {
                 let mut removed = false;
                 for idx in (0..(x.len())).rev() {
-                    let callback_name = x[idx].name;
-                    if callback_name == bind_name {
+                    if &x[idx].name == bind_name {
                         x.remove(idx);
                         removed = true;
                     }
@@ -127,7 +126,7 @@ impl<'cb> EventEmitter<'cb> {
 }
 
 impl<'cb> Emitter<'cb> for EventEmitter<'cb> {
-    fn bindings(&mut self) -> &mut HashMap<&'cb str, Vec<Callback<'cb>>> {
+    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback<'cb>>> {
         &mut self._bindings
     }
 }
@@ -152,6 +151,7 @@ mod tests {
             let mut emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind("fire", &cb, "test:fire");
+            emitter.bind("omg", &cb, "test:test");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             emitter.trigger("hellp", &jval);

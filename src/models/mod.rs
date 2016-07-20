@@ -146,7 +146,7 @@ mod tests {
     }
 
     impl<'event> Emitter<'event> for Rabbit<'event> {
-        fn bindings(&mut self) -> &mut ::std::collections::HashMap<&'event str, Vec<::util::event::Callback<'event>>> {
+        fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback<'event>>> {
             self.emitter.bindings()
         }
     }

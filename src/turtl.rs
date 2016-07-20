@@ -13,7 +13,7 @@ struct Turtl<'event> {
 
 /*
 lazy_static! {
-    static ref TURTL: RwLock<Turtl<'static>> = RwLock::new(Turtl {
+    static ref TURTL: RwLock<Turtl> = RwLock::new(Turtl {
         events: event::EventEmitter::new(),
         user: User::blank(),
     });

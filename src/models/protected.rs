@@ -251,7 +251,7 @@ macro_rules! protected {
         }
 
         impl<'event> PEmitter<'event> for $name<'event> {
-            fn bindings(&mut self) -> &mut ::std::collections::HashMap<&'event str, Vec<::util::event::Callback<'event>>> {
+            fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback<'event>>> {
                 self.emitter.bindings()
             }
         }
