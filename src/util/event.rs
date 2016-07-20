@@ -51,7 +51,7 @@ pub trait Emitter<'cb> {
 
     /// Bind a callback to an event name. The binding takes a name, which makes
     /// it easy to unbind later (by name).
-    fn bind(&mut self, event_name: &'cb str, cb: &'cb CallbackType, bind_name: &'cb str) -> () {
+    fn bind(&mut self, event_name: &str, cb: &'cb CallbackType, bind_name: &str) -> () {
         self.do_bind(event_name, Callback {
             cb: cb,
             binding: BindType::Every,
@@ -61,7 +61,7 @@ pub trait Emitter<'cb> {
 
     /// Bind a ont-time callback to an event name. The binding takes a name,
     /// which makes it easy to unbind later (by name).
-    fn bind_once(&mut self, event_name: &'cb str, cb: &'cb CallbackType, bind_name: &'cb str) -> () {
+    fn bind_once(&mut self, event_name: &str, cb: &'cb CallbackType, bind_name: &str) -> () {
         self.do_bind(event_name, Callback {
             cb: cb,
             binding: BindType::Once,
