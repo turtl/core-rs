@@ -6,9 +6,9 @@ use ::models::user::User;
 use std::sync::RwLock;
 
 /// Defines a container for our app's state
-struct Turtl<'event> {
-    pub events: event::EventEmitter<'event>,
-    pub user: User<'event>
+struct Turtl {
+    pub events: event::EventEmitter,
+    pub user: User
 }
 
 /*

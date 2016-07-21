@@ -44,7 +44,7 @@ use ::crypto::{self, CryptoOp};
 /// It also defines methods that make it easy to do The Right Thing (c)(r)(tm)
 /// when handling protected model data. The goal here is to eliminate all forms
 /// of data leaks while providing an interface that's easy to use.
-pub trait Protected<'event>: Model<'event> + fmt::Debug {
+pub trait Protected: Model + fmt::Debug {
     /// Get the key for this model
     fn key(&self) -> Option<&Vec<u8>>;
 
@@ -190,7 +190,7 @@ macro_rules! protected {
     ) => {
         // define the struct
         $(#[$struct_meta])*
-        pub struct $name<'event> {
+        pub struct $name {
             /// Holds our cryptographic key for this model
             key: Option<Vec<u8>>,
 
@@ -201,7 +201,7 @@ macro_rules! protected {
             _data: ::util::json::Value,
 
             /// Our event emitter!
-            emitter: ::util::event::EventEmitter<'event>,
+            emitter: ::util::event::EventEmitter,
 
             $( $extra_field: $extra_type, )*
         }
@@ -222,10 +222,10 @@ macro_rules! protected {
         use ::models::Model as PModel;
         use ::util::event::Emitter as PEmitter;
 
-        impl<'event> $name<'event> {
+        impl $name {
             /// Create an instance of this model, with all values set to None
             #[allow(dead_code)]
-            pub fn blank() -> $name<'event> {
+            pub fn blank() -> $name {
                 $name {
                     key: None,
                     model_type: String::from(stringify!($name)),
@@ -239,7 +239,7 @@ macro_rules! protected {
 
             /// Create an instance of this model, given a block of a JSON Value
             #[allow(dead_code)]
-            pub fn new(data: ::util::json::Value) -> ::error::TResult<$name<'event>> {
+            pub fn new(data: ::util::json::Value) -> ::error::TResult<$name> {
                 match &data {
                     &::util::json::Value::Object(..) => {},
                     _ => return Err(::error::TError::BadValue(format!("Protected::new(): `data` is not a JSON object"))),
@@ -250,13 +250,13 @@ macro_rules! protected {
             }
         }
 
-        impl<'event> PEmitter<'event> for $name<'event> {
-            fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback<'event>>> {
+        impl PEmitter for $name {
+            fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback>> {
                 self.emitter.bindings()
             }
         }
 
-        impl<'event> PModel<'event> for $name<'event> {
+        impl PModel for $name {
             fn data(&self) -> &::util::json::Value {
                 &self._data
             }
@@ -267,7 +267,7 @@ macro_rules! protected {
         }
 
         // make sure printing out a model doesn't leak data
-        impl<'event> ::std::fmt::Debug for $name<'event> {
+        impl ::std::fmt::Debug for $name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                 let id = match self.id() {
                     Some(x) => x,
@@ -277,7 +277,7 @@ macro_rules! protected {
             }
         }
 
-        impl<'event> Protected<'event> for $name<'event> {
+        impl Protected for $name {
             fn key(&self) -> Option<&Vec<u8>> {
                 match self.key {
                     Some(ref x) => Some(x),

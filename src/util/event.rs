@@ -7,7 +7,7 @@ use ::std::collections::HashMap;
 use ::util::json::Value;
 
 /// Define an easy Callback type for us
-pub type CallbackType = Fn(&Value) -> ();
+pub type CallbackType = Fn(&Value) + 'static;
 
 /// Defines what type of binding we have
 enum BindType {
@@ -16,27 +16,27 @@ enum BindType {
 }
 
 /// Holds information about a callback.
-pub struct Callback<'cb> {
-    cb: &'cb CallbackType,
+pub struct Callback {
+    cb: Box<CallbackType>,
     binding: BindType,
     name: String,
 }
 
 /// The Emitter class holds a set of event bindings. It implements the `Emitter`
 /// trait and can be used as a standalone event emitter object.
-pub struct EventEmitter<'cb> {
-    _bindings: HashMap<String, Vec<Callback<'cb>>>,
+pub struct EventEmitter {
+    _bindings: HashMap<String, Vec<Callback>>,
 }
 
 /// Defines an interface for an event emitter, including binding/triggering
 /// events. The only non-provided method is the `bindings` function, which has
 /// to return a mutable reference to a HashMap of bindings.
-pub trait Emitter<'cb> {
+pub trait Emitter {
     /// Grab a mutable ref to this emitter's bindings
-    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback<'cb>>>;
+    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback>>;
 
     /// Binds a callback to an event name.
-    fn do_bind(&mut self, name: &str, cb: Callback<'cb>) -> () {
+    fn do_bind(&mut self, name: &str, cb: Callback) {
         let mut bindings = self.bindings();
         if bindings.contains_key(name) {
             match bindings.get_mut(name) {
@@ -51,9 +51,11 @@ pub trait Emitter<'cb> {
 
     /// Bind a callback to an event name. The binding takes a name, which makes
     /// it easy to unbind later (by name).
-    fn bind(&mut self, event_name: &str, cb: &'cb CallbackType, bind_name: &str) -> () {
+    fn bind<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
+        where F: Fn(&Value) + 'static
+    {
         self.do_bind(event_name, Callback {
-            cb: cb,
+            cb: Box::new(cb),
             binding: BindType::Every,
             name: String::from(bind_name),
         });
@@ -61,9 +63,11 @@ pub trait Emitter<'cb> {
 
     /// Bind a ont-time callback to an event name. The binding takes a name,
     /// which makes it easy to unbind later (by name).
-    fn bind_once(&mut self, event_name: &str, cb: &'cb CallbackType, bind_name: &str) -> () {
+    fn bind_once<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
+        where F: Fn(&Value) + 'static
+    {
         self.do_bind(event_name, Callback {
-            cb: cb,
+            cb: Box::new(cb),
             binding: BindType::Once,
             name: String::from(bind_name),
         });
@@ -118,15 +122,15 @@ pub trait Emitter<'cb> {
     }
 }
 
-impl<'cb> EventEmitter<'cb> {
+impl EventEmitter {
     /// Make a new Emitter.
-    pub fn new() -> EventEmitter<'cb> {
+    pub fn new() -> EventEmitter {
         EventEmitter { _bindings: HashMap::new() }
     }
 }
 
-impl<'cb> Emitter<'cb> for EventEmitter<'cb> {
-    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback<'cb>>> {
+impl Emitter for EventEmitter {
+    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback>> {
         &mut self._bindings
     }
 }
@@ -150,8 +154,8 @@ mod tests {
             };
             let mut emitter = EventEmitter::new();
             //let data = data.clone();
-            emitter.bind("fire", &cb, "test:fire");
-            emitter.bind("omg", &cb, "test:test");
+            emitter.bind("fire", cb, "test:fire");
+            //emitter.bind("omg", cb, "test:test");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             emitter.trigger("hellp", &jval);
@@ -176,7 +180,7 @@ mod tests {
             };
             let mut emitter = EventEmitter::new();
             //let data = data.clone();
-            emitter.bind_once("fire", &cb, "test:fire");
+            emitter.bind_once("fire", cb, "test:fire");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             emitter.trigger("hellp", &jval);
@@ -201,7 +205,7 @@ mod tests {
             };
             let mut emitter = EventEmitter::new();
             //let data = data.clone();
-            emitter.bind("fire", &cb, "test:fire");
+            emitter.bind("fire", cb, "test:fire");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             emitter.trigger("fire", &jval);

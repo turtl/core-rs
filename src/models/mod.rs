@@ -11,7 +11,7 @@ use ::error::{TError, TResult};
 use ::util::json;
 use ::util::event::Emitter;
 
-pub trait Model<'event>: Emitter<'event> {
+pub trait Model: Emitter {
     /// Grab *all* data for this model (safe or not)
     fn data(&self) -> &json::Value;
 
@@ -131,13 +131,13 @@ mod tests {
     use ::util::event::{self, Emitter};
     use std::sync::{Arc, RwLock};
 
-    struct Rabbit<'event> {
+    struct Rabbit {
         _data: Value,
-        emitter: ::util::event::EventEmitter<'event>,
+        emitter: ::util::event::EventEmitter,
     }
 
-    impl<'event> Rabbit<'event> {
-        fn new() -> Rabbit<'event> {
+    impl Rabbit {
+        fn new() -> Rabbit {
             Rabbit {
                 _data: json::obj(),
                 emitter: event::EventEmitter::new(),
@@ -145,13 +145,13 @@ mod tests {
         }
     }
 
-    impl<'event> Emitter<'event> for Rabbit<'event> {
-        fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback<'event>>> {
+    impl Emitter for Rabbit {
+        fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback>> {
             self.emitter.bindings()
         }
     }
 
-    impl<'event> Model<'event> for Rabbit<'event> {
+    impl Model for Rabbit {
         fn data(&self) -> &Value {
             &self._data
         }
@@ -243,7 +243,7 @@ mod tests {
                 data.write().unwrap()[0] += 1;
             };
             let mut rabbit = Rabbit::new();
-            rabbit.bind("hop", &cb, "rabbit:hop");
+            rabbit.bind("hop", cb, "rabbit:hop");
 
             let jval = json::obj();
             assert_eq!(rdata.read().unwrap()[0], 0);
@@ -269,23 +269,34 @@ mod tests {
         let data = Arc::new(RwLock::new(map));
         let rdata = data.clone();
         {
-            let data = data.clone();
-            let cb = move |val: &Value| {
+            let data1 = data.clone();
+            let data2 = data.clone();
+
+            let mut rabbit = Rabbit::new();
+            rabbit.bind("set:name", move |val: &Value| {
                 let string = match *val {
                     json::Value::String(ref x) => x.clone(),
                     _ => panic!("got non-string type"),
                 };
-                let mut hash = data.write().unwrap();
+                let mut hash = data1.write().unwrap();
                 let count = match hash.get(&string) {
                     Some(x) => x.clone(),
                     None => 0i64,
                 };
                 hash.insert(string, count + 1);
-            };
-
-            let mut rabbit = Rabbit::new();
-            rabbit.bind("set:name", &cb, "setters");
-            rabbit.bind("set:second_name", &cb, "setters");
+            }, "setters");
+            rabbit.bind("set:second_name", move |val: &Value| {
+                let string = match *val {
+                    json::Value::String(ref x) => x.clone(),
+                    _ => panic!("got non-string type"),
+                };
+                let mut hash = data2.write().unwrap();
+                let count = match hash.get(&string) {
+                    Some(x) => x.clone(),
+                    None => 0i64,
+                };
+                hash.insert(string, count + 1);
+            }, "setters");
             let hash = rdata.read().unwrap();
             assert_eq!(hash.get(&String::from("blackberry")), None);
             assert_eq!(hash.get(&String::from("murdery")), None);
