@@ -2,11 +2,11 @@ use ::error::{TResult, TError};
 use ::messaging;
 use ::util::json;
 use ::util::json::Value;
-use ::models::user;
+use ::turtl::Turtl;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
-pub fn process(msg: &String) -> TResult<()> {
+pub fn process(turtl: &mut Turtl, msg: &String) -> TResult<()> {
     let data: Value = try_t!(json::parse(msg));
 
     // grab the command from the data
@@ -16,7 +16,7 @@ pub fn process(msg: &String) -> TResult<()> {
         "user:login" => {
             let username = try_t!(json::get(&["1", "username"], &data));
             let password = try_t!(json::get(&["1", "password"], &data));
-            user::login(username, password)
+            turtl.user.login(username, password)
         },
         "ping" => {
             info!("ping!");
@@ -29,8 +29,11 @@ pub fn process(msg: &String) -> TResult<()> {
 
 /// our main dispatch loop. really, just calls into messaging::bind and hands it
 /// our process function
-pub fn main() {
-    match messaging::bind(&process) {
+pub fn main(mut turtl: Turtl) {
+    let mut wrapper = |msg: &String| {
+        process(&mut turtl, msg)
+    };
+    match messaging::bind(&mut wrapper) {
         Ok(..) => (),
         Err(e) => panic!("dispatch: error starting messaging system: {}", e),
     }

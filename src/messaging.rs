@@ -15,6 +15,7 @@ struct MessageState {
     socket: Socket
 }
 
+// NOTE: should messaging be "owned" by the Turtl object??
 lazy_static! {
     /// our global MessageState object. it's local to this module allowing the
     /// rest of the app to transparently call bind()/send() without worrying
@@ -33,7 +34,7 @@ lazy_static! {
 /// we log out errors and keep processing, but also catch a special "Shutdown"
 /// error that the dispatch function can pass back to tell us to quit the loop
 /// and unbind.
-pub fn bind(dispatch: &Fn(&String) -> TResult<()>) -> TResult<()> {
+pub fn bind(dispatch: &mut FnMut(&String) -> TResult<()>) -> TResult<()> {
     let mut message = String::new();
     let address: String = try!(config::get(&["messaging", "address"]));
     info!("messaging: binding: address: {}", address);
@@ -68,7 +69,7 @@ pub fn bind(dispatch: &Fn(&String) -> TResult<()>) -> TResult<()> {
                         }
                     },
                 };
-            }
+            },
             Err(e) => error!("messaging: error reading message: {}", e),
         }
         message.clear()
@@ -97,7 +98,7 @@ pub fn send(message: &String) -> TResult<()> {
     if !(*MSGSTATE.write().unwrap()).bound {
         return Err(TError::Msg("messaging: sending on unbound socket".to_owned()));
     }
-    send_sock(&mut((*MSGSTATE).write().unwrap()).socket, message)
+    send_sock(&mut ((*MSGSTATE).write().unwrap()).socket, message)
 }
 
 #[cfg(test)]
@@ -154,7 +155,7 @@ mod tests {
         let panicref = panic.clone();
         let pongref = pong.clone();
         let handle = thread::spawn(move || {
-            let process = move |msg: &String| -> TResult<()> {
+            let mut process = move |msg: &String| -> TResult<()> {
                 match msg.as_ref() {
                     "ping" => {
                         let mut pong = try_t!(pongref.lock());
@@ -164,7 +165,7 @@ mod tests {
                     _ => Err(TError::Msg(format!("bad command: {}", msg))),
                 }
             };
-            match bind(&process) {
+            match bind(&mut process) {
                 Ok(..) => (),
                 Err(..) => {
                     let mut panic = panicref.lock().unwrap();

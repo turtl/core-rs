@@ -14,7 +14,7 @@ extern crate rustc_serialize as serialize;
 extern crate gcrypt;
 extern crate crypto as rust_crypto;
 extern crate constant_time_eq;
-//extern crate crossbeam;
+extern crate crossbeam;
 
 #[macro_use]
 mod error;
@@ -42,7 +42,9 @@ pub fn init() -> TResult<()> {
 /// start our app. basically, start listening for incoming messages on a new
 /// thread and process them
 pub fn start() -> TResult<()> {
-    let handle = thread::spawn(dispatch::main);
+    let handle = thread::spawn(|| {
+        dispatch::main(turtl::Turtl::new());
+    });
     util::sleep(10);
     match handle.join() {
         Ok(..) => Ok(()),
@@ -50,7 +52,6 @@ pub fn start() -> TResult<()> {
     }
 }
 
-/*
 fn queue() -> TResult<()> {
     let queue: crossbeam::sync::MsQueue<String> = crossbeam::sync::MsQueue::new();
     crossbeam::scope(|scope| {
@@ -63,7 +64,6 @@ fn queue() -> TResult<()> {
     });
     Ok(())
 }
-*/
 
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 /// TODO: when calling this from C, handle all panics, or get rid of panics.
@@ -71,7 +71,7 @@ fn queue() -> TResult<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    //queue().unwrap();
+    queue().unwrap();
     start().unwrap();
 }
 

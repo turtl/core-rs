@@ -28,9 +28,11 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
     Ok(())
 }
 
-pub fn login(username: String, password: String) -> TResult<()> {
-    use_code(&username, &password).unwrap();
-    println!("logged in! {}/{}", username, password);
-    Ok(())
+impl User {
+    pub fn login(&mut self, username: String, password: String) -> TResult<()> {
+        use_code(&username, &password).unwrap();
+        println!("logged in! {}/{}", username, password);
+        Ok(())
+    }
 }
 
