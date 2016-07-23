@@ -3,20 +3,20 @@
 
 use ::util::event;
 use ::models::user::User;
-use std::sync::RwLock;
 
 /// Defines a container for our app's state
-struct Turtl {
+pub struct Turtl {
     pub events: event::EventEmitter,
     pub user: User
 }
 
-/*
-lazy_static! {
-    static ref TURTL: RwLock<Turtl> = RwLock::new(Turtl {
-        events: event::EventEmitter::new(),
-        user: User::blank(),
-    });
+impl Turtl {
+    /// Create a new Turtl app
+    pub fn new() -> Turtl {
+        Turtl {
+            events: event::EventEmitter::new(),
+            user: User::blank(),
+        }
+    }
 }
-*/
 
