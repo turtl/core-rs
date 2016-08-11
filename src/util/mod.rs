@@ -6,6 +6,7 @@ pub mod logger;
 pub mod serialization;
 pub mod json;
 pub mod event;
+pub mod reqres;
 
 pub fn sleep(millis: u64) {
     thread::sleep(Duration::from_millis(millis));
