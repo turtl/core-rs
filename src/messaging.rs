@@ -15,7 +15,6 @@ struct MessageState {
     socket: Socket
 }
 
-// NOTE: should messaging be "owned" by the Turtl object??
 lazy_static! {
     /// our global MessageState object. it's local to this module allowing the
     /// rest of the app to transparently call bind()/send() without worrying

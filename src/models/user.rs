@@ -14,6 +14,8 @@ protected!{
     }
 }
 
+/// A worthless function that doesn't do much of anything except keepts the
+/// compiler from bitching about all my unused crypto code.
 fn use_code(username: &String, password: &String) -> TResult<()> {
     let mut user = User::blank();
     user.set("logged_in", &true).unwrap();
