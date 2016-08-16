@@ -23,17 +23,20 @@ mod config;
 #[macro_use]
 mod util;
 mod messaging;
+mod api;
+mod storage;
 mod crypto;
 mod models;
 mod dispatch;
 mod turtl;
 
-use std::thread;
-use std::sync::{mpsc};
-use std::io::Read;
-use std::cell::RefCell;
+use ::std::thread;
+use ::std::sync::{mpsc};
+use ::std::io::Read;
 
-use error::{TError, TResult};
+use ::error::{TError, TResult};
+use ::util::thredder;
+use ::util::reqres::ReqRes;
 
 /// init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -46,6 +49,21 @@ pub fn init() -> TResult<()> {
 /// start our app. basically, start listening for incoming messages on a new
 /// thread and process them
 pub fn start() -> TResult<()> {
+    let (tx_to_main, rx_main) = mpsc::channel();
+    let reqres = ReqRes::new();
+    //let thredder_messaging = thredder::spawn("messaging", tx_to_main.clone(), messaging::dispatch);
+    let thredder_api = thredder::spawn("api", tx_to_main.clone(), api::dispatch);
+    //let thredder_storage = thredder::spawn("storage", tx_to_main.clone(), storage::dispatch);
+    //let (tx_to_worker, handle_worker) = thredder::spawn();
+
+    loop {
+        match rx_main.recv() {
+            Ok(x) => {
+                //recres.
+            },
+            Err(e) => error!("thread: main: recv error: {}", e),
+        }
+    }
     let handle = thread::spawn(|| {
         dispatch::main(turtl::Turtl::new());
     });

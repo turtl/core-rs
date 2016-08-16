@@ -22,7 +22,9 @@ rust-crypto = "0.2.36"
 #gpgme = "0.4.0"
 rusqlite = "0.7.3"
 constant_time_eq = "0.1.2"
+futures = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
 crossbeam = "0.2.9"
+threadpool = "1.3.1"
 
 [features]
 #default = ["openssl/pkcs5_pbkdf2_hmac"]
