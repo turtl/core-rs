@@ -54,7 +54,7 @@ pub fn bind(dispatch: &mut FnMut(&String) -> TResult<()>) -> TResult<()> {
                 match dispatch(&message) {
                     Ok(..) => (),
                     Err(e) => match e {
-                        TError::Msg(e) | TError::BadValue(e) | TError::MissingField(e)
+                        TError::Msg(e) | TError::BadValue(e) | TError::MissingField(e) | TError::MissingData(e)
                             => error!("dispatch: error processing message: {}", e),
                         TError::Shutdown => {
                             warn!("dispatch: got shutdown signal, quitting");
