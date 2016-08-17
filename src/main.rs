@@ -14,8 +14,9 @@ extern crate rustc_serialize as serialize;
 extern crate gcrypt;
 extern crate crypto as rust_crypto;
 extern crate constant_time_eq;
-extern crate crossbeam;
 extern crate hyper;
+extern crate futures;
+extern crate futures_cpupool;
 
 #[macro_use]
 mod error;
@@ -30,15 +31,12 @@ mod models;
 mod dispatch;
 mod turtl;
 
-use ::std::thread;
-use ::std::sync::{mpsc};
-use ::std::io::Read;
+use ::std::sync::mpsc;
 
 use ::error::{TError, TResult};
-use ::util::thredder;
-use ::util::reqres::ReqRes;
+use ::util::thredder::{Thredder, OpData};
 
-/// init any state/logging/etc the app needs
+/// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
     match util::logger::setup_logger() {
         Ok(..) => Ok(()),
@@ -46,24 +44,28 @@ pub fn init() -> TResult<()> {
     }
 }
 
-/// start our app. basically, start listening for incoming messages on a new
-/// thread and process them
+/// Start our app...spawns all our worker/helper threads, including our comm
+/// system that listens for external messages.
 pub fn start() -> TResult<()> {
     let (tx_to_main, rx_main) = mpsc::channel();
-    let reqres = ReqRes::new();
-    //let thredder_messaging = thredder::spawn("messaging", tx_to_main.clone(), messaging::dispatch);
-    let thredder_api = thredder::spawn("api", tx_to_main.clone(), api::dispatch);
-    //let thredder_storage = thredder::spawn("storage", tx_to_main.clone(), storage::dispatch);
-    //let (tx_to_worker, handle_worker) = thredder::spawn();
+    let thredder_api: Thredder = Thredder::new("api", tx_to_main.clone(), 2);
+    let api = api::Api::new(String::from("https://api.turtl.it/v2"));
 
+    thredder_api.run(move || {
+        api.get("/users")
+    }, |data: TResult<OpData>| {
+        println!("response! {:?}", data);
+    });
     loop {
+        debug!("turtl: main thread message loop");
         match rx_main.recv() {
             Ok(x) => {
-                //recres.
+                x.call_box();
             },
             Err(e) => error!("thread: main: recv error: {}", e),
         }
     }
+    /*
     let handle = thread::spawn(|| {
         dispatch::main(turtl::Turtl::new());
     });
@@ -72,48 +74,7 @@ pub fn start() -> TResult<()> {
         Ok(..) => Ok(()),
         Err(_) => Err(TError::Msg(format!("error joining dispatch thread"))),
     }
-}
-
-fn queue() -> TResult<()> {
-    let queue: crossbeam::sync::MsQueue<String> = crossbeam::sync::MsQueue::new();
-    crossbeam::scope(|scope| {
-        scope.spawn(|| {
-            let data = String::from("get a job");
-            println!("addr: thread: {:p}", &(data.as_bytes()[0]));
-            queue.push(data);
-        });
-        /*
-        scope.spawn(|| {
-            println!("got: {:?}", queue.pop());
-        });
-        */
-    });
-    let data = queue.pop();
-    println!("addr: thread: {:p}", &(data.as_bytes()[0]));
-    println!("got: {:?}", data);
-    Ok(())
-}
-
-fn http() -> TResult<()> {
-    let client = hyper::Client::new();
-    let mut out = String::new();
-    let mut res = try_t!(client.get("https://api.turtl.it/v2").send());
-    res.read_to_string(&mut out);
-    println!("res {}", out);
-    Ok(())
-}
-
-fn send() -> TResult<()> {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let data: Vec<u8> = vec![1,2,3,4,5];
-        println!("addr: thread: {:p} -- {:p}", &data, &data[0]);
-        tx.send(data).unwrap();
-    });
-    let data = rx.recv().unwrap();
-    println!("addr: main: {:p} -- {:p}", &data, &data[0]);
-    println!("got: {}", data[0]);
-    Ok(())
+    */
 }
 
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -122,9 +83,6 @@ fn send() -> TResult<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    queue().unwrap();
-    //http().unwrap();
-    //send().unwrap();
     start().unwrap();
 }
 

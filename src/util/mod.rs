@@ -6,7 +6,6 @@ pub mod logger;
 pub mod serialization;
 pub mod json;
 pub mod event;
-pub mod reqres;
 pub mod thredder;
 
 pub fn sleep(millis: u64) {
