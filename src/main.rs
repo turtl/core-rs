@@ -31,6 +31,7 @@ mod models;
 mod dispatch;
 mod turtl;
 
+use ::std::thread;
 use ::std::sync::mpsc;
 
 use ::error::{TError, TResult};
@@ -48,14 +49,16 @@ pub fn init() -> TResult<()> {
 /// system that listens for external messages.
 pub fn start() -> TResult<()> {
     let (tx_to_main, rx_main) = mpsc::channel();
+    /*
     let thredder_api: Thredder = Thredder::new("api", tx_to_main.clone(), 2);
-    let api = api::Api::new(String::from("https://api.turtl.it/v2"));
-
     thredder_api.run(move || {
         api.get("/users")
     }, |data: TResult<OpData>| {
         println!("response! {:?}", data);
     });
+    */
+    let mut turtl = turtl::Turtl::new(tx_to_main.clone());
+    turtl.api.set_endpoint(String::from("https://api.turtl.it/v2"));
     loop {
         debug!("turtl: main thread message loop");
         match rx_main.recv() {
@@ -65,9 +68,10 @@ pub fn start() -> TResult<()> {
             Err(e) => error!("thread: main: recv error: {}", e),
         }
     }
+
     /*
-    let handle = thread::spawn(|| {
-        dispatch::main(turtl::Turtl::new());
+    let handle = thread::spawn(move || {
+        dispatch::main(turtl::Turtl::new(tx_to_main.clone()));
     });
     util::sleep(10);
     match handle.join() {

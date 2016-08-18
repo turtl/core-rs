@@ -5,10 +5,10 @@
 use ::std::sync::mpsc::Sender;
 use ::std::marker::Send;
 
-use ::futures::Future;
+use ::futures::{Future, Oneshot};
 use ::futures_cpupool::CpuPool;
 
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::util::json::Value;
 
 #[derive(Debug)]
@@ -19,35 +19,47 @@ pub enum OpData {
 }
 
 /// A simple trait for allowing easy conversion from data into OpData
-pub trait OpConvertible {
+pub trait OpConverter : Sized {
     /// Convert a piece of data into an OpData enum
     fn to_opdata(self) -> TResult<OpData>;
+
+    /// Convert an OpData back to its raw form
+    fn to_value(TResult<OpData>) -> Self;
 }
-impl OpConvertible for TResult<Vec<u8>> {
-    fn to_opdata(self) -> TResult<OpData> {
-        self.map(|x| OpData::Bin(x))
-    }
-}
-impl OpConvertible for TResult<String> {
-    fn to_opdata(self) -> TResult<OpData> {
-        self.map(|x| OpData::Str(x))
-    }
-}
-impl OpConvertible for TResult<Value> {
-    fn to_opdata(self) -> TResult<OpData> {
-        self.map(|x| OpData::JSON(x))
+
+impl OpData {
+    /// Convert an OpData into its raw contained self
+    pub fn to_value<T>(val: TResult<OpData>) -> T
+        where T: OpConverter
+    {
+        T::to_value(val)
     }
 }
 
-/// Stores state information for a thread we've spawned
-pub struct Thredder {
-    /// Our Thredder's name
-    pub name: String,
-    /// Allows sending messages to our thread
-    tx: Sender<Box<Thunk>>,
-    /// Stores the thread pooler for this Thredder
-    pool: CpuPool,
+/// Makes creating conversions between Type -> OpData and back again easy
+macro_rules! make_converter {
+    ($conv_type:ty, $enumfield:ident) => (
+        impl OpConverter for TResult<$conv_type> {
+            fn to_opdata(self) -> TResult<OpData> {
+                self.map(|x| OpData::$enumfield(x))
+            }
+
+            fn to_value(data: TResult<OpData>) -> Self {
+                match data {
+                    Ok(x) => match x {
+                        OpData::$enumfield(x) => Ok(x),
+                        _ => Err(TError::BadValue(format!("OpConverter: problem converting {}", stringify!($conv_type)))),
+                    },
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    )
 }
+
+make_converter!(Vec<u8>, Bin);
+make_converter!(String, Str);
+make_converter!(Value, JSON);
 
 /// Creates a way to call a Box<FnOnce> basically
 pub trait Thunk: Send + 'static {
@@ -59,9 +71,22 @@ impl<F: FnOnce() + Send + 'static> Thunk for F {
     }
 }
 
+/// Abstract our tx_main type
+pub type Pipeline = Sender<Box<Thunk>>;
+
+/// Stores state information for a thread we've spawned
+pub struct Thredder {
+    /// Our Thredder's name
+    pub name: String,
+    /// Allows sending messages to our thread
+    tx: Pipeline,
+    /// Stores the thread pooler for this Thredder
+    pool: CpuPool,
+}
+
 impl Thredder {
     /// Create a new thredder
-    pub fn new(name: &str, tx_main: Sender<Box<Thunk>>, workers: u32) -> Thredder {
+    pub fn new(name: &str, tx_main: Pipeline, workers: u32) -> Thredder {
         Thredder {
             name: String::from(name),
             tx: tx_main,
@@ -71,7 +96,7 @@ impl Thredder {
 
     /// Run an operation on this pool
     pub fn run<F, C, T>(&self, run: F, handler: C)
-        where T: OpConvertible + Send + 'static,
+        where T: OpConverter + Send + 'static,
               F: FnOnce() -> T + Send + 'static,
               C: FnOnce(TResult<OpData>) + Send + 'static
     {
