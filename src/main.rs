@@ -49,16 +49,19 @@ pub fn init() -> TResult<()> {
 /// system that listens for external messages.
 pub fn start() -> TResult<()> {
     let (tx_to_main, rx_main) = mpsc::channel();
-    /*
-    let thredder_api: Thredder = Thredder::new("api", tx_to_main.clone(), 2);
-    thredder_api.run(move || {
-        api.get("/users")
-    }, |data: TResult<OpData>| {
-        println!("response! {:?}", data);
-    });
-    */
     let mut turtl = turtl::Turtl::new(tx_to_main.clone());
     turtl.api.set_endpoint(String::from("https://api.turtl.it/v2"));
+    /*
+    turtl.api.get("/users")
+        .and_then(|x| {
+            println!("api: users: got: {:?}", x);
+            x
+        })
+        .or_else(|e| {
+            println!("api: users: error: {:?}", e);
+            e
+        });
+    */
     loop {
         debug!("turtl: main thread message loop");
         match rx_main.recv() {

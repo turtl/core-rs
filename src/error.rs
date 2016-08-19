@@ -1,3 +1,5 @@
+use ::futures::BoxFuture;
+
 quick_error! {
     #[derive(Debug)]
     pub enum TError {
@@ -25,6 +27,7 @@ quick_error! {
 }
 
 pub type TResult<T> = Result<T, TError>;
+pub type TFutureResult<T> = BoxFuture<T, TError>;
 
 /// converts non-TError errors to TError. this is a macro because I am sure this
 /// is the "wrong" way to do this and once I know a better way, I can hopefully

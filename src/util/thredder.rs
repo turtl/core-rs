@@ -5,10 +5,10 @@
 use ::std::sync::mpsc::Sender;
 use ::std::marker::Send;
 
-use ::futures::{Future, Oneshot};
+use ::futures::{self, Future, Oneshot, BoxFuture, Canceled};
 use ::futures_cpupool::CpuPool;
 
-use ::error::{TResult, TError};
+use ::error::{TResult, TFutureResult, TError};
 use ::util::json::Value;
 
 #[derive(Debug)]
@@ -21,15 +21,15 @@ pub enum OpData {
 /// A simple trait for allowing easy conversion from data into OpData
 pub trait OpConverter : Sized {
     /// Convert a piece of data into an OpData enum
-    fn to_opdata(self) -> TResult<OpData>;
+    fn to_opdata(self) -> OpData;
 
     /// Convert an OpData back to its raw form
-    fn to_value(TResult<OpData>) -> Self;
+    fn to_value(OpData) -> TResult<Self>;
 }
 
 impl OpData {
     /// Convert an OpData into its raw contained self
-    pub fn to_value<T>(val: TResult<OpData>) -> T
+    pub fn to_value<T>(val: OpData) -> TResult<T>
         where T: OpConverter
     {
         T::to_value(val)
@@ -39,18 +39,15 @@ impl OpData {
 /// Makes creating conversions between Type -> OpData and back again easy
 macro_rules! make_converter {
     ($conv_type:ty, $enumfield:ident) => (
-        impl OpConverter for TResult<$conv_type> {
-            fn to_opdata(self) -> TResult<OpData> {
-                self.map(|x| OpData::$enumfield(x))
+        impl OpConverter for $conv_type {
+            fn to_opdata(self) -> OpData {
+                OpData::$enumfield(self)
             }
 
-            fn to_value(data: TResult<OpData>) -> Self {
+            fn to_value(data: OpData) -> TResult<Self> {
                 match data {
-                    Ok(x) => match x {
-                        OpData::$enumfield(x) => Ok(x),
-                        _ => Err(TError::BadValue(format!("OpConverter: problem converting {}", stringify!($conv_type)))),
-                    },
-                    Err(e) => Err(e),
+                    OpData::$enumfield(x) => Ok(x),
+                    _ => Err(TError::BadValue(format!("OpConverter: problem converting {}", stringify!($conv_type)))),
                 }
             }
         }
@@ -95,18 +92,28 @@ impl Thredder {
     }
 
     /// Run an operation on this pool
-    pub fn run<F, C, T>(&self, run: F, handler: C)
+    pub fn run<F, T>(&self, run: F) -> TFutureResult<T>
         where T: OpConverter + Send + 'static,
-              F: FnOnce() -> T + Send + 'static,
-              C: FnOnce(TResult<OpData>) + Send + 'static
+              F: FnOnce() -> TResult<T> + Send + 'static,
     {
-        let tx = self.tx.clone();
-        let handler = Box::new(handler);
-        self.pool.execute(|| {
-            run().to_opdata()
-        }).and_then(move |res: TResult<OpData>| {
-            Ok(tx.send(Box::new(move || { handler(res); })))
-        }).forget();
+        let (fut_tx, fut_rx) = futures::oneshot::<TResult<OpData>>();
+        let tx_main = self.tx.clone();
+        let thread_name = String::from(&self.name[..]);
+        self.pool.execute(|| run().map(|x| x.to_opdata()))
+            .and_then(move |res: TResult<OpData>| {
+                Ok(tx_main.send(Box::new(move || { fut_tx.complete(res) })))
+            }).forget();
+        fut_rx
+            .then(move |res: Result<TResult<OpData>, Canceled>| {
+                match res {
+                    Ok(x) => match x {
+                        Ok(x) => futures::done(OpData::to_value(x)),
+                        Err(x) => futures::done(Err(x)),
+                    },
+                    Err(e) => futures::done(Err(TError::Msg(format!("thredder: {}: pool oneshot future canceled", &thread_name)))),
+                }
+            })
+            .boxed()
     }
 }
 

@@ -2,9 +2,9 @@ use ::std::io::Read;
 
 use ::hyper;
 use ::hyper::method::Method;
-use ::futures::{self, Oneshot};
+use ::futures::{self, BoxFuture};
 
-use ::error::{TResult, TError};
+use ::error::{TFutureResult, TError};
 use ::util::json::{self, Value};
 use ::util::thredder::{Thredder, OpData, Pipeline};
 
@@ -27,8 +27,7 @@ impl Api {
         self.endpoint = endpoint;
     }
 
-    pub fn call(&self, method: Method, resource: &str) -> Oneshot<TResult<Value>> {
-        let (tx, rx) = futures::oneshot();
+    pub fn call(&self, method: Method, resource: &str) -> TFutureResult<Value> {
         let mut url = String::with_capacity(self.endpoint.len() + resource.len());
         url.push_str(&self.endpoint[..]);
         url.push_str(resource);
@@ -43,13 +42,10 @@ impl Api {
                         .and_then(move |_| Ok(out))
                 })
                 .and_then(|out| json::parse::<Value>(&out).map_err(|e| toterr!(e)))
-        }, move |data: TResult<OpData>| {
-            tx.complete(OpData::to_value(data));
-        });
-        rx
+        })
     }
 
-    pub fn get(&self, resource: &str) -> Oneshot<TResult<Value>> {
+    pub fn get(&self, resource: &str) -> TFutureResult<Value> {
         self.call(Method::Get, resource)
     }
 }
