@@ -1,4 +1,4 @@
-use ::std::io::{Write};
+use ::std::io::{Read, Write};
 use ::std::thread::{self, JoinHandle};
 use ::std::sync::mpsc::{self, Sender, TryRecvError};
 
@@ -28,10 +28,24 @@ impl Messenger {
     }
 
     fn bind(&mut self, address: &String) -> TResult<()> {
-        info!("messaging: binding: address: {}", address);
+        info!("messaging: bind: address: {}", address);
         self.endpoint = Some(try_t!(self.socket.bind(address)));
         util::sleep(100);
         Ok(())
+    }
+
+    fn connect(&mut self, address: &String) -> TResult<()> {
+        info!("messaging: connect: address: {}", address);
+        self.endpoint = Some(try_t!(self.socket.connect(address)));
+        util::sleep(100);
+        Ok(())
+    }
+
+    fn recv(&mut self) -> TResult<String> {
+        let mut message = String::new();
+        try_t!(self.socket.read_to_string(&mut message));
+        info!("messaging: recv");
+        Ok(message)
     }
 
     fn recv_nb(&mut self) -> TResult<String> {
@@ -63,6 +77,12 @@ impl Messenger {
 
     pub fn is_bound(&self) -> bool {
         self.endpoint.is_some()
+    }
+}
+
+impl Drop for Messenger {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -256,7 +276,7 @@ mod tests {
     use std::thread;
     use std::sync::{Arc, Mutex};
 
-    use nanomsg::{Socket, Protocol};
+    use nanomsg::Socket;
 
     use ::config;
     use super::*;
@@ -270,18 +290,6 @@ mod tests {
         info!("messaging: recv: address: {}", address);
 
         try_t!(socket.read_to_string(message));
-        Ok(())
-    }
-
-    /// send a message, then receive the response (blocks the thread)
-    fn send_recv(outgoing: &String, incoming: &mut String) -> TResult<()> {
-        let mut socket = try_t!(Socket::new(Protocol::Pair));
-        let address: String = try!(config::get(&["messaging", "address"]));
-        let mut endpoint = try_t!(socket.connect(&address));
-
-        try!(send_sock(&mut socket, &outgoing));
-        try!(recv(&mut socket, incoming));
-        try_t!(endpoint.shutdown());
         Ok(())
     }
 
@@ -305,29 +313,34 @@ mod tests {
         let panicref = panic.clone();
         let pongref = pong.clone();
         let handle = thread::spawn(move || {
-            let mut process = move |msg: &String| -> TResult<()> {
-                match msg.as_ref() {
-                    "ping" => {
-                        let mut pong = try_t!(pongref.lock());
-                        *pong = true;
-                        Err(TError::Shutdown)
-                    },
-                    _ => Err(TError::Msg(format!("bad command: {}", msg))),
-                }
+            let mut messenger = Messenger::new();
+            messenger.bind(&String::from("inproc://turtltest"));
+            let message = messenger.recv().unwrap();
+
+            let res = match message.as_ref() {
+                "ping" => {
+                    let mut pong = pongref.lock().unwrap();
+                    *pong = true;
+                    messenger.send(String::from("pong"));
+                    Ok(())
+                },
+                _ => Err(TError::Msg(format!("bad command: {}", message))),
             };
-            match bind(&mut process) {
-                Ok(..) => (),
-                Err(..) => {
+
+            match res {
+                Ok(x) => (),
+                Err(e) => {
                     let mut panic = panicref.lock().unwrap();
                     *panic = true;
-                },
-            };
+                }
+            }
         });
 
-        let mut response = String::new();
-        send_recv(&String::from("ping"), &mut response).unwrap();
-        handle.join().unwrap();
-        assert_eq!(response, r#"{"e":"shutdown"}"#);
+        let mut messenger = Messenger::new();
+        messenger.connect(&String::from("inproc://turtltest"));
+        messenger.send(String::from("ping")).unwrap();
+        let response = messenger.recv().unwrap();
+        assert_eq!(response, r#"pong"#);
         assert_eq!(grab_locked_bool(&pong), true);
         assert_eq!(grab_locked_bool(&panic), false);
     }
