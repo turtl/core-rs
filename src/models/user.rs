@@ -32,9 +32,11 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
 
 impl User {
     pub fn login(&mut self, username: String, password: String) -> TResult<()> {
-        use_code(&username, &password).unwrap();
-        println!("logged in! {}/{}", username, password);
-        Ok(())
+        use_code(&username, &password)
+            .map(|_| {
+                println!("logged in! {}/{}", username, password);
+                ()
+            })
     }
 }
 

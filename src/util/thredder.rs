@@ -5,11 +5,12 @@
 use ::std::sync::mpsc::Sender;
 use ::std::marker::Send;
 
-use ::futures::{self, Future, Oneshot, BoxFuture, Canceled};
+use ::futures::{self, Future, Canceled};
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util::json::Value;
+use ::turtl::Turtl;
 
 #[derive(Debug)]
 pub enum OpData {
@@ -60,11 +61,11 @@ make_converter!(Value, JSON);
 
 /// Creates a way to call a Box<FnOnce> basically
 pub trait Thunk: Send + 'static {
-    fn call_box(self: Box<Self>);
+    fn call_box(self: Box<Self>, &mut Turtl);
 }
-impl<F: FnOnce() + Send + 'static> Thunk for F {
-    fn call_box(self: Box<Self>) {
-        (*self)();
+impl<F: FnOnce(&mut Turtl) + Send + 'static> Thunk for F {
+    fn call_box(self: Box<Self>, turtl: &mut Turtl) {
+        (*self)(turtl);
     }
 }
 
@@ -101,7 +102,7 @@ impl Thredder {
         let thread_name = String::from(&self.name[..]);
         self.pool.execute(|| run().map(|x| x.to_opdata()))
             .and_then(move |res: TResult<OpData>| {
-                Ok(tx_main.send(Box::new(move || { fut_tx.complete(res) })))
+                Ok(tx_main.send(Box::new(move |_: &mut Turtl| { fut_tx.complete(res) })))
             }).forget();
         fut_rx
             .then(move |res: Result<TResult<OpData>, Canceled>| {
@@ -110,7 +111,7 @@ impl Thredder {
                         Ok(x) => futures::done(OpData::to_value(x)),
                         Err(x) => futures::done(Err(x)),
                     },
-                    Err(e) => futures::done(Err(TError::Msg(format!("thredder: {}: pool oneshot future canceled", &thread_name)))),
+                    Err(_) => futures::done(Err(TError::Msg(format!("thredder: {}: pool oneshot future canceled", &thread_name)))),
                 }
             })
             .boxed()

@@ -23,6 +23,10 @@ quick_error! {
             description(str)
             display("missing data: {}", str)
         }
+        TryAgain {
+            description("try again")
+            display("try again")
+        }
     }
 }
 

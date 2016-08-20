@@ -1,8 +1,8 @@
 use ::error::{TResult, TError};
-use ::messaging;
-use ::util::json;
+use ::util::{self, json};
 use ::util::json::Value;
 use ::turtl::Turtl;
+use ::stop;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
@@ -12,7 +12,7 @@ pub fn process(turtl: &mut Turtl, msg: &String) -> TResult<()> {
     // grab the command from the data
     let cmd: String = try_t!(json::get(&["0"], &data));
 
-    match cmd.as_ref() {
+    let res = match cmd.as_ref() {
         "user:login" => {
             let username = try_t!(json::get(&["1", "username"], &data));
             let password = try_t!(json::get(&["1", "password"], &data));
@@ -20,22 +20,28 @@ pub fn process(turtl: &mut Turtl, msg: &String) -> TResult<()> {
         },
         "ping" => {
             info!("ping!");
-            return messaging::send(&"{\"e\":\"pong\"}".to_owned())
+            return turtl.remote_send("{\"e\":\"pong\"}".to_owned())
         }
         "shutdown" => return Err(TError::Shutdown),
         _ => Err(TError::Msg(format!("bad command: {}", cmd))),
-    }
-}
-
-/// our main dispatch loop. really, just calls into messaging::bind and hands it
-/// our process function
-pub fn main(mut turtl: Turtl) {
-    let mut wrapper = |msg: &String| {
-        process(&mut turtl, msg)
     };
-    match messaging::bind(&mut wrapper) {
+    match res {
         Ok(..) => (),
-        Err(e) => panic!("dispatch: error starting messaging system: {}", e),
-    }
+        Err(e) => match e {
+            TError::Msg(_) | TError::BadValue(_) | TError::MissingField(_) | TError::MissingData(_) | TError::TryAgain
+                => error!("dispatch: error processing message: {}", e),
+            TError::Shutdown => {
+                warn!("dispatch: got shutdown signal, quitting");
+                util::sleep(10);
+                match turtl.remote_send("{\"e\":\"shutdown\"}".to_owned()) {
+                    Ok(..) => (),
+                    Err(..) => (),
+                }
+                util::sleep(10);
+                stop();
+            }
+        },
+    };
+    Ok(())
 }
 

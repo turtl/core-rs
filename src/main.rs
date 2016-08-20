@@ -32,10 +32,11 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
-use ::std::sync::mpsc;
+use ::std::sync::{mpsc, RwLock};
+
+use ::futures::Future;
 
 use ::error::{TError, TResult};
-use ::util::thredder::{Thredder, OpData};
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -45,43 +46,71 @@ pub fn init() -> TResult<()> {
     }
 }
 
+lazy_static!{
+    static ref RUN: RwLock<bool> = RwLock::new(false);
+}
+
+/// Determines if the main thread should be running or not.
+fn running() -> bool {
+    let guard = (*RUN).read();
+    match guard {
+        Ok(x) => *x,
+        Err(_) => false,
+    }
+}
+
+/// Sets the running state of the main thread
+fn set_running(val: bool) {
+    let mut guard = (*RUN).write().unwrap();
+    *guard = val;
+}
+
 /// Start our app...spawns all our worker/helper threads, including our comm
 /// system that listens for external messages.
-pub fn start() -> TResult<()> {
-    let (tx_to_main, rx_main) = mpsc::channel();
-    let mut turtl = turtl::Turtl::new(tx_to_main.clone());
-    turtl.api.set_endpoint(String::from("https://api.turtl.it/v2"));
-    /*
-    turtl.api.get("/users")
-        .and_then(|x| {
-            println!("api: users: got: {:?}", x);
-            x
-        })
-        .or_else(|e| {
-            println!("api: users: error: {:?}", e);
-            e
-        });
-    */
-    loop {
-        debug!("turtl: main thread message loop");
-        match rx_main.recv() {
-            Ok(x) => {
-                x.call_box();
-            },
-            Err(e) => error!("thread: main: recv error: {}", e),
-        }
-    }
+pub fn start() -> thread::JoinHandle<()> {
+    set_running(true);
+    thread::spawn(|| {
+        let (tx_to_main, rx_main) = mpsc::channel();
 
-    /*
-    let handle = thread::spawn(move || {
-        dispatch::main(turtl::Turtl::new(tx_to_main.clone()));
-    });
-    util::sleep(10);
-    match handle.join() {
-        Ok(..) => Ok(()),
-        Err(_) => Err(TError::Msg(format!("error joining dispatch thread"))),
-    }
-    */
+        // start our messaging thread
+        let (tx_msg, handle) = messaging::start(tx_to_main.clone());
+
+        // create our turtl object
+        let mut turtl = turtl::Turtl::new(tx_to_main.clone(), tx_msg);
+
+        // run any post-init setup turtl needs
+        turtl.api.set_endpoint(String::from("https://api.turtl.it/v2"));
+
+        turtl.api.get("/")
+            .and_then(|x| {
+                println!("x is {:?}", x);
+                futures::done(Ok(()))
+            })
+            .forget();
+
+        // run our main loop. all threads pipe their data/responses into this
+        // loop, meaning <main> only has to check one place to grab messages.
+        // this creates an event loop of sorts, without all the grossness.
+        while running() {
+            debug!("turtl: main thread message loop");
+            match rx_main.recv() {
+                Ok(x) => {
+                    x.call_box(&mut turtl);
+                },
+                Err(e) => error!("thread: main: recv error: {}", e),
+            }
+        }
+        turtl.shutdown();
+        match handle.join() {
+            Ok(..) => {},
+            Err(e) => error!("main: problem joining message thread: {:?}", e),
+        }
+    })
+}
+
+/// Stop all threads and close down Turtl
+pub fn stop() {
+    set_running(false);
 }
 
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -90,6 +119,6 @@ pub fn start() -> TResult<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    start().unwrap();
+    start().join().unwrap();
 }
 

@@ -1,32 +1,182 @@
-use nanomsg::{Socket, Protocol};
+use ::std::io::{Write};
+use ::std::thread::{self, JoinHandle};
+use ::std::sync::mpsc::{self, Sender, TryRecvError};
+
+use ::nanomsg::{Socket, Protocol};
+use ::nanomsg::Error as NanoError;
+use ::nanomsg::endpoint::Endpoint;
 
 use ::config;
 use ::error::{TResult, TError};
 use ::util;
+use ::util::thredder::Pipeline;
+use ::dispatch;
+use ::turtl::Turtl;
+use ::stop;
 
-use std::io::{Read, Write};
-use std::sync::RwLock;
-
-/// MessageState holds our main socket for the app, and whether or not the
-/// socket is currently bound (which send() checks for when blasting out
-/// messages).
-struct MessageState {
-    bound: bool,
-    socket: Socket
+pub struct Messenger {
+    socket: Socket,
+    endpoint: Option<Endpoint>,
 }
 
-lazy_static! {
-    /// our global MessageState object. it's local to this module allowing the
-    /// rest of the app to transparently call bind()/send() without worrying
-    /// about passing sockets/state everywhere that needs to send out events.
-    /// note that we wrap in RwLock so we can access the values inside mutably,
-    /// but this also gives us thread safety for free, which is nice.
-    static ref MSGSTATE: RwLock<MessageState> = RwLock::new(MessageState {
-        bound: false,
-        socket: Socket::new(Protocol::Pair).unwrap()
+impl Messenger {
+    fn new() -> Messenger {
+        Messenger {
+            socket: Socket::new(Protocol::Pair).unwrap(),
+            endpoint: None,
+        }
+    }
+
+    fn bind(&mut self, address: &String) -> TResult<()> {
+        info!("messaging: binding: address: {}", address);
+        self.endpoint = Some(try_t!(self.socket.bind(address)));
+        util::sleep(100);
+        Ok(())
+    }
+
+    fn recv_nb(&mut self) -> TResult<String> {
+        let mut bin = Vec::<u8>::new();
+        try!(self.socket.nb_read_to_end(&mut bin).map_err(|e| {
+            match e {
+                NanoError::TryAgain => TError::TryAgain,
+                _ => toterr!(e),
+            }
+        }));
+
+        let msg = try_t!(String::from_utf8(bin));
+        info!("messaging: recv");   // no byte count, no identifying info
+        Ok(msg)
+    }
+
+    pub fn send(&mut self, msg: String) -> TResult<()> {
+        debug!("messaging: send");
+        let msg_bytes = msg.as_bytes();
+        try_t!(self.socket.write_all(msg_bytes));
+        Ok(())
+    }
+
+    pub fn shutdown(&mut self) {
+        if self.endpoint.is_none() { return; }
+        self.endpoint.as_mut().map(|mut x| x.shutdown());
+        self.endpoint = None;
+    }
+
+    pub fn is_bound(&self) -> bool {
+        self.endpoint.is_some()
+    }
+}
+
+/// Creates a way to call a Box<FnOnce> basically
+pub trait MsgThunk: Send + 'static {
+    fn call_box(self: Box<Self>, &mut Messenger);
+}
+impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
+    fn call_box(self: Box<Self>, messenger: &mut Messenger) {
+        (*self)(messenger);
+    }
+}
+
+pub type MsgSender = Sender<Box<MsgThunk>>;
+
+/// Start a thread that handles proxying messages between main and nanomsg.
+///
+/// Currently, the implementation relies on polling. This may change once the
+/// nanomsg-rs lib gets multithread support (https://github.com/thehydroimpulse/nanomsg.rs/issues/70)
+/// but until then we do this the stupid way.
+pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
+    let (tx, rx) = mpsc::channel::<Box<MsgThunk>>();
+    let handle = thread::spawn(move || {
+        let mut messenger = Messenger::new();
+        let address: String = match config::get(&["messaging", "address"]) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("messaging: problem grabbing address from config, using default: {}", e);
+                String::from("inproc://turtl")
+            }
+        };
+        match messenger.bind(&address) {
+            Ok(..) => (),
+            Err(e) => {
+                error!("messaging: error binding {}: {}", address, e);
+                return;
+            }
+        }
+
+        fn terminate(mut messenger: Messenger) {
+            messenger.shutdown();
+            stop();
+        }
+
+        let delay_min: u64 = 1;
+        let delay_max: u64 = 100;
+
+        // how long we sleep between polls
+        let mut delay: u64 = delay_max;
+        // how many iterations we've done since our last incoming message
+        let mut counter: u64 = 0;
+        // our recv/nano error count. these should ideally never be counted up,
+        // and are reset if a successful message does come through on that
+        // channel, but otherwise keeps us from doing infinite message loops on
+        // a broken channel.
+        let mut rx_errcount: u64 = 0;
+        let mut nn_errcount: u64 = 0;
+        while messenger.is_bound() {
+            match rx.try_recv() {
+                Ok(x) => {
+                    rx_errcount = 0;
+                    delay = delay_min;
+                    counter = 0;
+                    x.call_box(&mut messenger);
+                },
+                Err(TryRecvError::Empty) => (),
+                Err(e) => {
+                    rx_errcount += 1;
+                    error!("messaging: error receving: {:?}", e);
+                    util::sleep(1000);
+                    if rx_errcount > 10 {
+                        error!("messaging: too many recv failures, leaving");
+                        terminate(messenger);
+                        break;
+                    }
+                }
+            }
+            match messenger.recv_nb() {
+                Ok(x) => {
+                    nn_errcount = 0;
+                    delay = delay_min;
+                    counter = 0;
+                    let send = tx_main.send(Box::new(move |turtl: &mut Turtl| {
+                        let msg = x;
+                        match dispatch::process(turtl, &msg) {
+                            Ok(..) => (),
+                            Err(e) => error!("messaging: dispatch: {}", e),
+                        }
+                    }));
+                    match send {
+                        Ok(..) => (),
+                        Err(e) => error!("messaging: error proxying nanomsg message to main: {}", e),
+                    }
+                },
+                Err(TError::TryAgain) => (),
+                Err(e) => {
+                    nn_errcount += 1;
+                    error!("messaging: problem polling nanomsg socket: {:?}", e);
+                    if nn_errcount > 10 {
+                        error!("messaging: too many nanomsg failures, leaving");
+                        terminate(messenger);
+                        break;
+                    }
+                }
+            }
+            util::sleep(delay);
+            counter += 1;
+            if counter > 20 { delay = delay_max; }
+        }
     });
+    (tx, handle)
 }
 
+/*
 /// bind our messaging (nanomsg) and loop infinitely, grabbing messages as they
 /// come in and process them via the given `dispatch` function.
 ///
@@ -99,6 +249,7 @@ pub fn send(message: &String) -> TResult<()> {
     }
     send_sock(&mut ((*MSGSTATE).write().unwrap()).socket, message)
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -180,17 +331,5 @@ mod tests {
         assert_eq!(grab_locked_bool(&pong), true);
         assert_eq!(grab_locked_bool(&panic), false);
     }
-}
-
-
-#[allow(dead_code)]
-fn send_new(message: &String) -> TResult<()> {
-    let mut socket = try_t!(Socket::new(Protocol::Pair));
-    let address: String = try!(config::get(&["messaging", "address"]));
-    let mut endpoint = try_t!(socket.connect(&address));
-
-    try!(send_sock(&mut socket, &message));
-    try_t!(endpoint.shutdown());
-    Ok(())
 }
 

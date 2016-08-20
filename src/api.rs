@@ -2,11 +2,10 @@ use ::std::io::Read;
 
 use ::hyper;
 use ::hyper::method::Method;
-use ::futures::{self, BoxFuture};
 
 use ::error::{TFutureResult, TError};
 use ::util::json::{self, Value};
-use ::util::thredder::{Thredder, OpData, Pipeline};
+use ::util::thredder::{Thredder, Pipeline};
 
 pub struct Api {
     endpoint: String,
