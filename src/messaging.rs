@@ -1,3 +1,9 @@
+//! The messenger is responsible for proxing messages between nanomsg (our
+//! remote) and our main thread.
+//!
+//! This module is essentially the window into the app, essentially acting as an
+//! event bus to/from our remote sender (generally, this is a UI of some sort).
+
 use ::std::io::{Read, Write};
 use ::std::thread::{self, JoinHandle};
 use ::std::sync::mpsc::{self, Sender, TryRecvError};
@@ -15,11 +21,14 @@ use ::turtl::Turtl;
 use ::stop;
 
 pub struct Messenger {
+    /// The nanomsg socket
     socket: Socket,
+    /// The endpoint we're bound/connected to
     endpoint: Option<Endpoint>,
 }
 
 impl Messenger {
+    /// Create a new messenger
     fn new() -> Messenger {
         Messenger {
             socket: Socket::new(Protocol::Pair).unwrap(),
@@ -27,6 +36,7 @@ impl Messenger {
         }
     }
 
+    /// Bind to a nanomsg socket
     fn bind(&mut self, address: &String) -> TResult<()> {
         info!("messaging: bind: address: {}", address);
         self.endpoint = Some(try_t!(self.socket.bind(address)));
@@ -34,6 +44,7 @@ impl Messenger {
         Ok(())
     }
 
+    /// Connect to a nanomsg socket
     fn connect(&mut self, address: &String) -> TResult<()> {
         info!("messaging: connect: address: {}", address);
         self.endpoint = Some(try_t!(self.socket.connect(address)));
@@ -41,14 +52,19 @@ impl Messenger {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    /// Blocking receive on the nanomsg socket.
     fn recv(&mut self) -> TResult<String> {
+        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         let mut message = String::new();
         try_t!(self.socket.read_to_string(&mut message));
         info!("messaging: recv");
         Ok(message)
     }
 
+    /// Non-blocking receive on the nanomsg socket.
     fn recv_nb(&mut self) -> TResult<String> {
+        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         let mut bin = Vec::<u8>::new();
         try!(self.socket.nb_read_to_end(&mut bin).map_err(|e| {
             match e {
@@ -62,19 +78,23 @@ impl Messenger {
         Ok(msg)
     }
 
+    /// Send a message out on the nanomsg socket
     pub fn send(&mut self, msg: String) -> TResult<()> {
+        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         debug!("messaging: send");
         let msg_bytes = msg.as_bytes();
         try_t!(self.socket.write_all(msg_bytes));
         Ok(())
     }
 
+    /// Shutdown the bound/connected socket endpoint
     pub fn shutdown(&mut self) {
         if self.endpoint.is_none() { return; }
         self.endpoint.as_mut().map(|mut x| x.shutdown());
         self.endpoint = None;
     }
 
+    /// Are we bound/connected?
     pub fn is_bound(&self) -> bool {
         self.endpoint.is_some()
     }
@@ -106,7 +126,11 @@ pub type MsgSender = Sender<Box<MsgThunk>>;
 pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel::<Box<MsgThunk>>();
     let handle = thread::spawn(move || {
+        // create our messenger! this binds to nanomsg and lets us send/recv
+        // messages from our remote friend
         let mut messenger = Messenger::new();
+
+        // read our bind address from config, otherwise use a default
         let address: String = match config::get(&["messaging", "address"]) {
             Ok(x) => x,
             Err(e) => {
@@ -114,6 +138,8 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                 String::from("inproc://turtl")
             }
         };
+
+        // bind to nanomsg
         match messenger.bind(&address) {
             Ok(..) => (),
             Err(e) => {
@@ -122,11 +148,15 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
             }
         }
 
+        // a simple internal function called when we have a problem and don't
+        // want to panic. this stops the messenger and also kills the main
+        // thread
         fn terminate(mut messenger: Messenger) {
             messenger.shutdown();
             stop();
         }
 
+        // use these to adjust our active/passive poll delay
         let delay_min: u64 = 1;
         let delay_max: u64 = 100;
 
@@ -141,6 +171,7 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
         let mut rx_errcount: u64 = 0;
         let mut nn_errcount: u64 = 0;
         while messenger.is_bound() {
+            // grab a message from main (non-blocking)
             match rx.try_recv() {
                 Ok(x) => {
                     rx_errcount = 0;
@@ -160,6 +191,8 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                     }
                 }
             }
+
+            // grab a message from our nanomsg remote (non-blocking)
             match messenger.recv_nb() {
                 Ok(x) => {
                     nn_errcount = 0;
@@ -188,88 +221,18 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                     }
                 }
             }
+
+            // sleep our poller. since both our readers are non-blocking, we
+            // need a sleep to keep from spinning cpu
             util::sleep(delay);
+            // if we have no action on either recv for 20 loops, switch back to
+            // long polling (saves cpu)
             counter += 1;
             if counter > 20 { delay = delay_max; }
         }
     });
     (tx, handle)
 }
-
-/*
-/// bind our messaging (nanomsg) and loop infinitely, grabbing messages as they
-/// come in and process them via the given `dispatch` function.
-///
-/// we log out errors and keep processing, but also catch a special "Shutdown"
-/// error that the dispatch function can pass back to tell us to quit the loop
-/// and unbind.
-pub fn bind(dispatch: &mut FnMut(&String) -> TResult<()>) -> TResult<()> {
-    let mut message = String::new();
-    let address: String = try!(config::get(&["messaging", "address"]));
-    info!("messaging: binding: address: {}", address);
-
-    // bind our socket and mark it as bound so send() knows it can use it
-    let mut endpoint = try_t!(((*MSGSTATE).write().unwrap()).socket.bind(&address));
-    ((*MSGSTATE).write().unwrap()).bound = true;
-
-    util::sleep(100);
-
-    loop {
-        let mut guard_msg_state = try_t!((*MSGSTATE).write());
-        let result = guard_msg_state.socket.read_to_string(&mut message);
-        drop(guard_msg_state);      // release the lock ASAP
-        match result {
-            Ok(..) => {
-                info!("messaging: recv");
-                match dispatch(&message) {
-                    Ok(..) => (),
-                    Err(e) => match e {
-                        TError::Msg(e) | TError::BadValue(e) | TError::MissingField(e) | TError::MissingData(e)
-                            => error!("dispatch: error processing message: {}", e),
-                        TError::Shutdown => {
-                            warn!("dispatch: got shutdown signal, quitting");
-                            util::sleep(10);
-                            match send(&"{\"e\":\"shutdown\"}".to_owned()) {
-                                Ok(..) => (),
-                                Err(..) => (),
-                            }
-                            util::sleep(10);
-                            break;
-                        }
-                    },
-                };
-            },
-            Err(e) => error!("messaging: error reading message: {}", e),
-        }
-        message.clear()
-    }
-
-    // make sure we shut down the socket and mark it as unbound so any further
-    // calls to send() will error
-    try_t!(endpoint.shutdown());
-    let mut guard_msg_state = try_t!((*MSGSTATE).write());
-    guard_msg_state.bound = false;
-    drop(guard_msg_state);      // release the lock ASAP
-
-    Ok(())
-}
-
-/// send a message out on an existing socket
-pub fn send_sock(socket: &mut Socket, message: &String) -> TResult<()> {
-    debug!("messaging: send");
-    let msg_bytes = message.as_bytes();
-    try_t!(socket.write_all(msg_bytes));
-    Ok(())
-}
-
-/// grab our global socket from the state and send out a message on it
-pub fn send(message: &String) -> TResult<()> {
-    if !(*MSGSTATE.write().unwrap()).bound {
-        return Err(TError::Msg("messaging: sending on unbound socket".to_owned()));
-    }
-    send_sock(&mut ((*MSGSTATE).write().unwrap()).socket, message)
-}
-*/
 
 #[cfg(test)]
 mod tests {
