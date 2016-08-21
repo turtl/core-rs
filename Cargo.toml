@@ -4,28 +4,24 @@ version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
-quick-error = "1.1.0"
+constant_time_eq = "0.1.2"
+fern = "0.3.5"
+futures = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
+futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
+gcrypt = "0.3.0"
+hyper = "0.9.10"
 lazy_static = "0.2.1"
 log = "0.3.6"
-fern = "0.3.5"
-time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
-#mio = "0.5.1"
+nanomsg = "0.6.0"
+quick-error = "1.1.0"
+rusqlite = "0.7.3"
+rust-crypto = "0.2.36"
+rustc-serialize = "0.3.19"
 serde = "0.7.14"
 serde_json = "0.7.4"
 serde_yaml = "0.3.0"
-rustc-serialize = "0.3.19"
-hyper = "0.9.10"
-# ffi stuff
-nanomsg = "0.6.0"
-gcrypt = "0.3.0"
-rust-crypto = "0.2.36"
-#gpgme = "0.4.0"
-rusqlite = "0.7.3"
-constant_time_eq = "0.1.2"
-futures = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
-futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
-#scoped_threadpool = "0.1.7"
+time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
-[features]
+#[features]
 #default = ["openssl/pkcs5_pbkdf2_hmac"]
 
