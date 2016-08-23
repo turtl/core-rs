@@ -2,14 +2,16 @@
 //! specific purposes, but sets up communication channels between the threads
 //! and tracks the state of them.
 
-use ::std::sync::mpsc::Sender;
 use ::std::marker::Send;
+use ::std::sync::Arc;
 
+use ::crossbeam::sync::MsQueue;
 use ::futures::{self, Future, Canceled};
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util::json::Value;
+use ::util::thunk::Thunk;
 use ::turtl::{TurtlWrap};
 
 #[derive(Debug)]
@@ -61,18 +63,8 @@ make_converter!(String, Str);
 make_converter!(Value, JSON);
 make_converter!((), Null);
 
-/// Creates a way to call a Box<FnOnce> basically
-pub trait Thunk: Send + 'static {
-    fn call_box(self: Box<Self>, TurtlWrap);
-}
-impl<F: FnOnce(TurtlWrap) + Send + 'static> Thunk for F {
-    fn call_box(self: Box<Self>, turtl: TurtlWrap) {
-        (*self)(turtl);
-    }
-}
-
 /// Abstract our tx_main type
-pub type Pipeline = Sender<Box<Thunk>>;
+pub type Pipeline = Arc<MsQueue<Box<Thunk<TurtlWrap>>>>;
 
 /// Stores state information for a thread we've spawned
 pub struct Thredder {
@@ -104,7 +96,7 @@ impl Thredder {
         let thread_name = String::from(&self.name[..]);
         self.pool.execute(|| run().map(|x| x.to_opdata()))
             .and_then(move |res: TResult<OpData>| {
-                Ok(tx_main.send(Box::new(move |_: TurtlWrap| { fut_tx.complete(res) })))
+                Ok(tx_main.push(Box::new(move |_: TurtlWrap| { fut_tx.complete(res) })))
             }).forget();
         fut_rx
             .then(move |res: Result<TResult<OpData>, Canceled>| {

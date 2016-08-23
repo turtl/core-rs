@@ -6,18 +6,25 @@
 use ::std::collections::HashMap;
 use ::util::json::Value;
 
-/// Define an easy Callback type for us
-pub type CallbackType = Fn(&Value) + Send + 'static;
-
 /// Defines what type of binding we have
 enum BindType {
     Every,
     Once,
 }
 
+/// Define a trait for our event callbacks.
+pub trait EventThunk: Send + 'static {
+    fn call_box(&self, &Value);
+}
+impl<F: Fn(&Value) + Send + 'static> EventThunk for F {
+    fn call_box(&self, val: &Value) {
+        (*self)(val);
+    }
+}
+
 /// Holds information about a callback.
 pub struct Callback {
-    cb: Box<CallbackType>,
+    cb: Box<EventThunk>,
     binding: BindType,
     name: String,
 }
@@ -102,7 +109,7 @@ pub trait Emitter {
                     let callback = &x[idx];
                     let cb = &callback.cb;
                     let binding = &callback.binding;
-                    cb(&data);
+                    cb.call_box(&data);
                     match *binding {
                         BindType::Once => {
                             removes.push(idx);

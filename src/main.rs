@@ -17,6 +17,7 @@ extern crate constant_time_eq;
 extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate crossbeam;
 
 #[macro_use]
 mod error;
@@ -32,8 +33,9 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
-use ::std::sync::{mpsc, Arc, RwLock};
+use ::std::sync::{Arc, RwLock};
 
+use ::crossbeam::sync::MsQueue;
 use ::futures::Future;
 
 use ::error::{TError, TResult};
@@ -70,13 +72,13 @@ fn set_running(val: bool) {
 pub fn start() -> thread::JoinHandle<()> {
     set_running(true);
     thread::spawn(|| {
-        let (tx_to_main, rx_main) = mpsc::channel();
+        let queue_main = Arc::new(MsQueue::new());
 
         // start our messaging thread
-        let (tx_msg, handle) = messaging::start(tx_to_main.clone());
+        let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(tx_to_main.clone(), tx_msg)));
+        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(queue_main.clone(), tx_msg)));
 
         // run any post-init setup turtl needs
         turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
@@ -94,12 +96,8 @@ pub fn start() -> thread::JoinHandle<()> {
         // this creates an event loop of sorts, without all the grossness.
         while running() {
             debug!("turtl: main thread message loop");
-            match rx_main.recv() {
-                Ok(x) => {
-                    x.call_box(turtl.clone());
-                },
-                Err(e) => error!("thread: main: recv error: {}", e),
-            }
+            let handler = queue_main.pop();
+            handler.call_box(turtl.clone());
         }
         turtl.write().unwrap().shutdown();
         match handle.join() {

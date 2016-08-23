@@ -42,9 +42,10 @@ impl Turtl {
         let sender = &self.msg;
         match *sender {
             Some(ref x) => {
-                x.send(Box::new(cb)).map_err(|e| toterr!(e))
+                x.push(Box::new(cb));
+                Ok(())
             },
-            None => Err(TError::MissingField(format!("turtl: missing `msg`"))),
+            None => Err(TError::MissingField(format!("turtl::with_remote_sender() -- missing `turtl.msg`"))),
         }
     }
 
@@ -52,14 +53,14 @@ impl Turtl {
         self.with_remote_sender(move |messenger| {
             match messenger.send(msg) {
                 Ok(..) => (),
-                Err(e) => error!("turtl: remote_send: {:?}", e),
+                Err(e) => error!("turtl::remote_send() -- {:?}", e),
             }
         })
     }
 
     pub fn shutdown(&mut self) {
-        match self.with_remote_sender(|messenger| { messenger.shutdown(); }) {
-            Err(e) => error!("dispatch: error shutting down messenger thread: {}", e),
+        match self.with_remote_sender(|messenger| messenger.shutdown()) {
+            Err(e) => error!("turtl::shutdown() -- error shutting down messenger thread: {:?}", e),
             _ => (),
         }
     }

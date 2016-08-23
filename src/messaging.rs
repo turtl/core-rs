@@ -7,7 +7,9 @@
 use ::std::io::{Read, Write};
 use ::std::thread::{self, JoinHandle};
 use ::std::sync::mpsc::{self, Sender, TryRecvError};
+use ::std::sync::Arc;
 
+use ::crossbeam::sync::MsQueue;
 use ::nanomsg::{Socket, Protocol};
 use ::nanomsg::Error as NanoError;
 use ::nanomsg::endpoint::Endpoint;
@@ -15,6 +17,7 @@ use ::nanomsg::endpoint::Endpoint;
 use ::config;
 use ::error::{TResult, TError};
 use ::util;
+use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::dispatch;
 use ::turtl::TurtlWrap;
@@ -106,7 +109,11 @@ impl Drop for Messenger {
     }
 }
 
-/// Creates a way to call a Box<FnOnce> basically
+/// Defines our callback type for the messaging system.
+///
+/// NOTE!! I'd love to just use util::Thunk<&mut Messenger> here, however it
+/// bitches about lifetimes and lifetimes are so horribly infectious that I
+/// can't justify rewriting a bunch of shit to satisfy it.
 pub trait MsgThunk: Send + 'static {
     fn call_box(self: Box<Self>, &mut Messenger);
 }
@@ -116,7 +123,9 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
     }
 }
 
-pub type MsgSender = Sender<Box<MsgThunk>>;
+/// A handy type alias for our messaging system channel.
+//pub type MsgThunk = Thunk<&mut Messenger>;
+pub type MsgSender = Arc<MsQueue<Box<MsgThunk>>>;
 
 /// Start a thread that handles proxying messages between main and nanomsg.
 ///
@@ -124,7 +133,13 @@ pub type MsgSender = Sender<Box<MsgThunk>>;
 /// nanomsg-rs lib gets multithread support (https://github.com/thehydroimpulse/nanomsg.rs/issues/70)
 /// but until then we do this the stupid way.
 pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
-    let (tx, rx) = mpsc::channel::<Box<MsgThunk>>();
+    // create our main <--> messaging communication channel
+    let queue = Arc::new(MsQueue::new());
+
+    // clone a receiver for our queue, since the main ref will be returned
+    // from this function
+    let recv = queue.clone();
+
     let handle = thread::spawn(move || {
         // create our messenger! this binds to nanomsg and lets us send/recv
         // messages from our remote friend
@@ -168,28 +183,18 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
         // and are reset if a successful message does come through on that
         // channel, but otherwise keeps us from doing infinite message loops on
         // a broken channel.
-        let mut rx_errcount: u64 = 0;
         let mut nn_errcount: u64 = 0;
+
         while messenger.is_bound() {
             // grab a message from main (non-blocking)
-            match rx.try_recv() {
-                Ok(x) => {
-                    rx_errcount = 0;
+            match recv.try_pop() {
+                Some(x) => {
+                    let x: Box<MsgThunk> = x;
                     delay = delay_min;
                     counter = 0;
                     x.call_box(&mut messenger);
                 },
-                Err(TryRecvError::Empty) => (),
-                Err(e) => {
-                    rx_errcount += 1;
-                    error!("messaging: error receving: {:?}", e);
-                    util::sleep(1000);
-                    if rx_errcount > 10 {
-                        error!("messaging: too many recv failures, leaving");
-                        terminate(messenger);
-                        break;
-                    }
-                }
+                None => (),
             }
 
             // grab a message from our nanomsg remote (non-blocking)
@@ -198,17 +203,13 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                     nn_errcount = 0;
                     delay = delay_min;
                     counter = 0;
-                    let send = tx_main.send(Box::new(move |turtl: TurtlWrap| {
+                    tx_main.push(Box::new(move |turtl: TurtlWrap| {
                         let msg = x;
                         match dispatch::process(turtl, &msg) {
                             Ok(..) => (),
                             Err(e) => error!("messaging: dispatch: {}", e),
                         }
                     }));
-                    match send {
-                        Ok(..) => (),
-                        Err(e) => error!("messaging: error proxying nanomsg message to main: {}", e),
-                    }
                 },
                 Err(TError::TryAgain) => (),
                 Err(e) => {
@@ -231,7 +232,7 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
             if counter > 20 { delay = delay_max; }
         }
     });
-    (tx, handle)
+    (queue, handle)
 }
 
 #[cfg(test)]

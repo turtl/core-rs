@@ -2,8 +2,7 @@ use std::thread;
 use std::time::Duration;
 
 pub mod logger;
-#[macro_use]
-pub mod serialization;
+pub mod thunk;
 pub mod json;
 pub mod event;
 pub mod thredder;

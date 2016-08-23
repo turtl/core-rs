@@ -75,7 +75,7 @@ impl User {
         work.run(move || generate_auth(username, password, 1))
             .and_then(|auth: String| {
                 println!("auth: {}", auth);
-                //let ref turtl = turtlc.read().unwrap();
+                let ref turtl = turtlc.read().unwrap();
                 //work.run(|| use_code(&String::from("ass"), &String::from("butt")));
                 futures::done(Ok(()))
             })
