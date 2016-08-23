@@ -10,6 +10,10 @@
 //!
 //! For a higher-level set of turtl-core crypto, check out one module up,
 //! ::crypto.
+//!
+//! Also note that a goal of this module is to only wrap *one* underlying crypto
+//! lib, but thanks to various issues with PBKDF2 (which MUST be supported for
+//! backwards compat), it currently uses both gcrypt and rust-crypto.
 
 use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
@@ -186,6 +190,9 @@ pub fn rand_float() -> CResult<f64> {
 
 /*
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses gcrypt.
+///
+/// NOTE that gcrypt does NOT allow zero-length salts, which of course v0 auth
+/// generation relies on.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let hashtype = match hasher {
         Hasher::SHA1 => gcrypt::digest::MD_SHA1,
@@ -200,6 +207,9 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 
 /*
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses openssl.
+///
+/// NOTE that openssl requires the salt be a utf8 string, so cannot possibly
+/// work with binary data. useless.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let pbfn = match hasher {
         Hasher::SHA1 => pkcs5::pbkdf2_hmac_sha1,
@@ -241,6 +251,11 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 }
 
 /// Pad a byte vector using padding of type PadMode.
+///
+/// Note that most crypto libs either pad for you or assume you have done your
+/// own padding, so we implement ours here. Also note that this is only actually
+/// used in a handful of places, where later crypto primitives (AES-GCM, for
+/// instance) can't be used due to backwards compat issues.
 fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
     let blocksize: usize = *AES_BLOCK_SIZE;
     let mut pad_len = blocksize - (data.len() % blocksize);
@@ -456,15 +471,11 @@ mod tests {
         let key = keystr.as_bytes();
         let res = to_hex(&hmac(Hasher::SHA256, &key, &data.as_bytes()).unwrap()).unwrap();
         assert_eq!(res, "b1a698ee4ea7105e79723dfbab65912dffa01c822038b24fbf413a587f241f10");
-
-        /*
-        let data = from_base64(&String::from("NwAAAACYXkuLtAfNol1rwDAaib9kZwWEpSMT1U6i3bHHEqBA2inow6Qyrqy1tsBG3yW1uxVBvwjnBJN11wZQlqkHpKl3876Vnud5hUE220ib6RveZ6RbgCNIGs0EUal+qwbM4GndlVWmRQEnCUJPf9kl1RdT0qoWVser/W416yJG1cS6BNEziu0ppag68+8XJ7qawYMjF5x2MmMja1Im/iYK8+qd6c/D0fMYYOnpTWz2v8Va12wahF/G4M+0goTO5ebi3gKPEyXH/zd85XvHETgSd4xFM6VFR/wwzR6o2QOoB4Mrxg206Z0kuzddVdFga8++Hp5H1Zx6YttyWLPWCqMSalz5RNYusv9cOVsNwJDZFpy8kugSrqLmiCQxrtdPKMoaGuA=")).unwrap();
-        let key = from_base64(&String::from("S6jy3U3rgIIFuItBVNTfCniyYGplEOZCZ9qORZ+qQXM=")).unwrap();
-        let res = to_hex(&hmac(Hasher::SHA256, key.as_slice(), data.as_slice()).unwrap()).unwrap();
-        assert_eq!(res, "a97240de0729ae76dd409c2329354584ff7800e7704509755f9797915d1ea1da");
-        */
     }
 
+    // NOTE: Disabled because the test fails randomly. Luckily we only need this
+    // when using old versions of the crypto format (CBC+HMAC) so for now we can
+    // cross our fingers and hope it works.
     /*
     #[test]
     fn constant_time_compare() {

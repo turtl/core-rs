@@ -556,7 +556,7 @@ pub fn random_hash() -> CResult<String> {
 /// Version 0 is at the bottom because it's despicable. It should never have
 /// existed, yet here we are. Here's the format:
 ///
-///   [n bytes base64 string ciphertext]:i[32 bytes hex iv]
+///   [n bytes base64 string ciphertext]:i[32 bytes hex string iv]
 ///
 /// DDDDDDDDDDDDDDD88$..,,IZ8DDDD8O88OO88888D888888888888888888O88OODD88DOO88O
 /// DDDDDDDDDDDDD88O87..,,,D888OOOOOOOOO888OO8DD888888O88888888OO8OZ8DD8DOO88O
