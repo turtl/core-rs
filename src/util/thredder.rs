@@ -10,13 +10,14 @@ use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util::json::Value;
-use ::turtl::Turtl;
+use ::turtl::{TurtlWrap};
 
 #[derive(Debug)]
 pub enum OpData {
     Bin(Vec<u8>),
     Str(String),
     JSON(Value),
+    Null(()),
 }
 
 /// A simple trait for allowing easy conversion from data into OpData
@@ -58,13 +59,14 @@ macro_rules! make_converter {
 make_converter!(Vec<u8>, Bin);
 make_converter!(String, Str);
 make_converter!(Value, JSON);
+make_converter!((), Null);
 
 /// Creates a way to call a Box<FnOnce> basically
 pub trait Thunk: Send + 'static {
-    fn call_box(self: Box<Self>, &mut Turtl);
+    fn call_box(self: Box<Self>, TurtlWrap);
 }
-impl<F: FnOnce(&mut Turtl) + Send + 'static> Thunk for F {
-    fn call_box(self: Box<Self>, turtl: &mut Turtl) {
+impl<F: FnOnce(TurtlWrap) + Send + 'static> Thunk for F {
+    fn call_box(self: Box<Self>, turtl: TurtlWrap) {
         (*self)(turtl);
     }
 }
@@ -102,7 +104,7 @@ impl Thredder {
         let thread_name = String::from(&self.name[..]);
         self.pool.execute(|| run().map(|x| x.to_opdata()))
             .and_then(move |res: TResult<OpData>| {
-                Ok(tx_main.send(Box::new(move |_: &mut Turtl| { fut_tx.complete(res) })))
+                Ok(tx_main.send(Box::new(move |_: TurtlWrap| { fut_tx.complete(res) })))
             }).forget();
         fut_rx
             .then(move |res: Result<TResult<OpData>, Canceled>| {

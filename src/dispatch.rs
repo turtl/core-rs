@@ -1,12 +1,34 @@
+use ::futures;
+
 use ::error::{TResult, TError};
 use ::util::{self, json};
 use ::util::json::Value;
-use ::turtl::Turtl;
+use ::turtl::TurtlWrap;
+use ::models::user::User;
 use ::stop;
+
+fn process_res(turtl: TurtlWrap, res: TResult<()>) {
+    match res {
+        Ok(..) => (),
+        Err(e) => match e {
+            TError::Shutdown => {
+                warn!("dispatch: got shutdown signal, quitting");
+                util::sleep(10);
+                match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
+                    Ok(..) => (),
+                    Err(..) => (),
+                }
+                util::sleep(10);
+                stop();
+            }
+            _ => error!("dispatch: error processing message: {}", e),
+        },
+    };
+}
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
-pub fn process(turtl: &mut Turtl, msg: &String) -> TResult<()> {
+pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
     let data: Value = try_t!(json::parse(msg));
 
     // grab the command from the data
@@ -16,32 +38,18 @@ pub fn process(turtl: &mut Turtl, msg: &String) -> TResult<()> {
         "user:login" => {
             let username = try_t!(json::get(&["1", "username"], &data));
             let password = try_t!(json::get(&["1", "password"], &data));
-            turtl.user.login(username, password)
+            User::login(turtl.clone(), username, password);
+            Ok(())
         },
         "ping" => {
             info!("ping!");
-            return turtl.remote_send("{\"e\":\"pong\"}".to_owned())
+            turtl.read().unwrap().remote_send("{\"e\":\"pong\"}".to_owned())
+                .map(|_| ())
         }
-        "shutdown" => return Err(TError::Shutdown),
+        "shutdown" => Err(TError::Shutdown),
         _ => Err(TError::Msg(format!("bad command: {}", cmd))),
     };
-    match res {
-        Ok(..) => (),
-        Err(e) => match e {
-            TError::Msg(_) | TError::BadValue(_) | TError::MissingField(_) | TError::MissingData(_) | TError::TryAgain
-                => error!("dispatch: error processing message: {}", e),
-            TError::Shutdown => {
-                warn!("dispatch: got shutdown signal, quitting");
-                util::sleep(10);
-                match turtl.remote_send("{\"e\":\"shutdown\"}".to_owned()) {
-                    Ok(..) => (),
-                    Err(..) => (),
-                }
-                util::sleep(10);
-                stop();
-            }
-        },
-    };
+    process_res(turtl, res);
     Ok(())
 }
 

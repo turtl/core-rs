@@ -5,6 +5,7 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
 constant_time_eq = "0.1.2"
+crossbeam = "0.2.10"
 fern = "0.3.5"
 futures = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
 futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }

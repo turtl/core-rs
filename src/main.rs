@@ -32,7 +32,7 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
-use ::std::sync::{mpsc, RwLock};
+use ::std::sync::{mpsc, Arc, RwLock};
 
 use ::futures::Future;
 
@@ -76,17 +76,18 @@ pub fn start() -> thread::JoinHandle<()> {
         let (tx_msg, handle) = messaging::start(tx_to_main.clone());
 
         // create our turtl object
-        let mut turtl = turtl::Turtl::new(tx_to_main.clone(), tx_msg);
+        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(tx_to_main.clone(), tx_msg)));
 
         // run any post-init setup turtl needs
-        turtl.api.set_endpoint(String::from("https://api.turtl.it/v2"));
+        turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
 
-        turtl.api.get("/")
-            .and_then(|x| {
+        /*
+        turtl.read().unwrap().api.get("/")
+            .map(|x| {
                 println!("x is {:?}", x);
-                futures::done(Ok(()))
             })
             .forget();
+        */
 
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.
@@ -95,12 +96,12 @@ pub fn start() -> thread::JoinHandle<()> {
             debug!("turtl: main thread message loop");
             match rx_main.recv() {
                 Ok(x) => {
-                    x.call_box(&mut turtl);
+                    x.call_box(turtl.clone());
                 },
                 Err(e) => error!("thread: main: recv error: {}", e),
             }
         }
-        turtl.shutdown();
+        turtl.write().unwrap().shutdown();
         match handle.join() {
             Ok(..) => {},
             Err(e) => error!("main: problem joining message thread: {:?}", e),

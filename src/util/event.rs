@@ -7,7 +7,7 @@ use ::std::collections::HashMap;
 use ::util::json::Value;
 
 /// Define an easy Callback type for us
-pub type CallbackType = Fn(&Value);
+pub type CallbackType = Fn(&Value) + Send + 'static;
 
 /// Defines what type of binding we have
 enum BindType {
@@ -52,7 +52,7 @@ pub trait Emitter {
     /// Bind a callback to an event name. The binding takes a name, which makes
     /// it easy to unbind later (by name).
     fn bind<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
-        where F: Fn(&Value) + 'static
+        where F: Fn(&Value) + Send + 'static
     {
         self.do_bind(event_name, Callback {
             cb: Box::new(cb),
@@ -64,7 +64,7 @@ pub trait Emitter {
     /// Bind a ont-time callback to an event name. The binding takes a name,
     /// which makes it easy to unbind later (by name).
     fn bind_once<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
-        where F: Fn(&Value) + 'static
+        where F: Fn(&Value) + Send + 'static
     {
         self.do_bind(event_name, Callback {
             cb: Box::new(cb),

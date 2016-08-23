@@ -17,7 +17,7 @@ use ::error::{TResult, TError};
 use ::util;
 use ::util::thredder::Pipeline;
 use ::dispatch;
-use ::turtl::Turtl;
+use ::turtl::TurtlWrap;
 use ::stop;
 
 pub struct Messenger {
@@ -198,7 +198,7 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                     nn_errcount = 0;
                     delay = delay_min;
                     counter = 0;
-                    let send = tx_main.send(Box::new(move |turtl: &mut Turtl| {
+                    let send = tx_main.send(Box::new(move |turtl: TurtlWrap| {
                         let msg = x;
                         match dispatch::process(turtl, &msg) {
                             Ok(..) => (),

@@ -1,6 +1,9 @@
-use ::error::{TResult, TError};
+use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
+use ::api::Api;
 use ::models::protected::Protected;
+use ::futures::{self, Future};
+use ::turtl::TurtlWrap;
 
 protected!{
     pub struct User {
@@ -12,6 +15,41 @@ protected!{
             //changing_password: bool
         )
     }
+}
+
+impl User {
+}
+
+fn generate_key(username: &String, password: &String, version: u16) -> TResult<Vec<u8>> {
+    let key: Vec<u8> = match version {
+        0 => {
+            let mut salt = String::from(&username[..]);
+            // and laughter too
+            salt.push_str(":a_pinch_of_salt");
+            let res_key = crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400)
+                .map_err(|e| TError::CryptoError(e));
+            try!(res_key)
+        },
+        1 => {
+            Vec::new()
+        },
+        _ => return Err(TError::NotImplemented),
+    };
+    Ok(key)
+}
+
+fn generate_auth(username: String, password: String, version: u16) -> TResult<String> {
+    let key = try!(generate_key(&username, &password, 1));
+    let auth = match version {
+        0 => {
+            String::new()
+        },
+        1 => {
+            String::new()
+        },
+        _ => return Err(TError::NotImplemented),
+    };
+    Ok(auth)
 }
 
 /// A worthless function that doesn't do much of anything except keepts the
@@ -31,12 +69,18 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
 }
 
 impl User {
-    pub fn login(&mut self, username: String, password: String) -> TResult<()> {
-        use_code(&username, &password)
-            .map(|_| {
-                println!("logged in! {}/{}", username, password);
-                ()
+    pub fn login(turtl: TurtlWrap, username: String, password: String) -> TFutureResult<()> {
+        let ref work = turtl.read().unwrap().work;
+        let turtlc = turtl.clone();
+        work.run(move || generate_auth(username, password, 1))
+            .and_then(|auth: String| {
+                println!("auth: {}", auth);
+                //let ref turtl = turtlc.read().unwrap();
+                //work.run(|| use_code(&String::from("ass"), &String::from("butt")));
+                futures::done(Ok(()))
             })
+            .map(|_| ())
+            .boxed()
     }
 }
 

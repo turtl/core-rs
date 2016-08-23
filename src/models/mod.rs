@@ -80,6 +80,18 @@ pub trait Model: Emitter {
         self.get_nest_mut(&[field])
     }
 
+    /// Get a value from this model's data, but if it's None, return a TError
+    /// MissingField error.
+    fn get_err<T>(&self, field: &str) -> TResult<T>
+        where T: json::Serialize + json::Deserialize
+    {
+        match self.get_nest(&[field]) {
+            Some(x) => Ok(x),
+            None => Err(TError::MissingField(String::from(field))),
+        }
+    }
+
+
     /// Set a value into this model's data
     fn set<T>(&mut self, field: &str, value: &T) -> TResult<()>
         where T: json::Serialize + json::Deserialize

@@ -1,4 +1,5 @@
 use ::futures::BoxFuture;
+use ::crypto;
 
 quick_error! {
     #[derive(Debug)]
@@ -23,9 +24,18 @@ quick_error! {
             description(str)
             display("missing data: {}", str)
         }
+        CryptoError(err: crypto::CryptoError) {
+            cause(err)
+            description("crypto error")
+            display("crypto error: {}", err)
+        }
         TryAgain {
             description("try again")
             display("try again")
+        }
+        NotImplemented {
+            description("not implemented")
+            display("not implemented")
         }
     }
 }
