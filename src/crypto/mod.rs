@@ -15,6 +15,7 @@ pub use ::crypto::low::{
     CryptoError,
     PadMode,
     Hasher,
+    sha256,
     to_hex,
     from_hex,
     to_base64,
@@ -454,7 +455,7 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
                 plaintext_utf = Vec::with_capacity(1 + plaintext.len());
                 let utf8_byte = match op.utf8_random {
                     Some(x) => x,
-                    None => try!(low::rand_bytes(1))[0] & 0b1111111,
+                    None => try!(low::rand_bytes(1))[0] & 0b01111111,
                 };
                 plaintext_utf.push(utf8_byte);
                 plaintext_utf.append(&mut plaintext);

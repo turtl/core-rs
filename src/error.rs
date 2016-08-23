@@ -57,3 +57,10 @@ macro_rules! try_t {
     ($e:expr) => (try!($e.map_err(|e| toterr!(e))))
 }
 
+/// Like try_t! but specifically for when we know we're going to get a crypto
+/// error.
+#[macro_export]
+macro_rules! try_c {
+    ($e:expr) => (try!($e.map_err(|e| TError::CryptoError(e))))
+}
+
