@@ -15,6 +15,9 @@ use ::util::thunk::Thunk;
 use ::turtl::{TurtlWrap};
 
 #[derive(Debug)]
+/// Holds data we return from Thredder instances that can be passed around and
+/// converted back to its original type easily. This makes it so we can pass in
+/// callbacks that return different types generically.
 pub enum OpData {
     Bin(Vec<u8>),
     Str(String),

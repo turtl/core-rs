@@ -49,10 +49,10 @@ fn generate_auth(username: String, password: String, version: u16) -> TResult<St
         },
         _ => return Err(TError::NotImplemented),
     };
-    Ok(auth)
+    Ok(auth + "test")
 }
 
-/// A worthless function that doesn't do much of anything except keepts the
+/// A worthless function that doesn't do much of anything except keeps the
 /// compiler from bitching about all my unused crypto code.
 fn use_code(username: &String, password: &String) -> TResult<()> {
     let mut user = User::blank();
@@ -72,14 +72,14 @@ impl User {
     pub fn login(turtl: TurtlWrap, username: String, password: String) -> TFutureResult<()> {
         let ref work = turtl.read().unwrap().work;
         let turtlc = turtl.clone();
+        println!("- user: gen auth");
         work.run(move || generate_auth(username, password, 1))
-            .and_then(|auth: String| {
-                println!("auth: {}", auth);
-                let ref turtl = turtlc.read().unwrap();
-                //work.run(|| use_code(&String::from("ass"), &String::from("butt")));
-                futures::done(Ok(()))
+            .and_then(move |auth: String| {
+                println!("- user: auth: {}", auth);
+                let ref work = turtlc.read().unwrap().work;
+                work.run(|| use_code(&String::from("ass"), &String::from("butt")))
             })
-            .map(|_| ())
+            .map(|_| println!("- user: used code"))
             .boxed()
     }
 }

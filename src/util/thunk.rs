@@ -2,10 +2,10 @@
 //! threads inside of a box.
 
 /// Creates a way to call a Box<FnOnce> basically
-pub trait Thunk<T: ?Sized>: Send + 'static {
+pub trait Thunk<T: ?Sized>: Sync + Send + 'static {
     fn call_box(self: Box<Self>, T);
 }
-impl<T, F: FnOnce(T) + Send + 'static> Thunk<T> for F {
+impl<T, F: FnOnce(T) + Sync + Send + 'static> Thunk<T> for F {
     fn call_box(self: Box<Self>, arg1: T) {
         (*self)(arg1);
     }

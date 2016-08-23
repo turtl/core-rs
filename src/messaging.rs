@@ -61,7 +61,7 @@ impl Messenger {
         if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         let mut message = String::new();
         try_t!(self.socket.read_to_string(&mut message));
-        info!("messaging: recv");
+        debug!("messaging: recv");
         Ok(message)
     }
 
@@ -77,7 +77,7 @@ impl Messenger {
         }));
 
         let msg = try_t!(String::from_utf8(bin));
-        info!("messaging: recv");   // no byte count, no identifying info
+        debug!("messaging: recv");   // no byte count, no identifying info
         Ok(msg)
     }
 
@@ -251,7 +251,7 @@ mod tests {
     /// mutable string (passed in)
     fn recv(socket: &mut Socket, message: &mut String) -> TResult<()> {
         let address: String = try!(config::get(&["messaging", "address"]));
-        info!("messaging: recv: address: {}", address);
+        trace!("messaging: recv: address: {}", address);
 
         try_t!(socket.read_to_string(message));
         Ok(())

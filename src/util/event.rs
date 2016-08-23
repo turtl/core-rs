@@ -13,10 +13,10 @@ enum BindType {
 }
 
 /// Define a trait for our event callbacks.
-pub trait EventThunk: Send + 'static {
+pub trait EventThunk: Send + Sync + 'static {
     fn call_box(&self, &Value);
 }
-impl<F: Fn(&Value) + Send + 'static> EventThunk for F {
+impl<F: Fn(&Value) + Send + Sync + 'static> EventThunk for F {
     fn call_box(&self, val: &Value) {
         (*self)(val);
     }
@@ -59,7 +59,7 @@ pub trait Emitter {
     /// Bind a callback to an event name. The binding takes a name, which makes
     /// it easy to unbind later (by name).
     fn bind<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
-        where F: Fn(&Value) + Send + 'static
+        where F: Fn(&Value) + Send + Sync + 'static
     {
         self.do_bind(event_name, Callback {
             cb: Box::new(cb),
@@ -71,7 +71,7 @@ pub trait Emitter {
     /// Bind a ont-time callback to an event name. The binding takes a name,
     /// which makes it easy to unbind later (by name).
     fn bind_once<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
-        where F: Fn(&Value) + Send + 'static
+        where F: Fn(&Value) + Send + Sync + 'static
     {
         self.do_bind(event_name, Callback {
             cb: Box::new(cb),

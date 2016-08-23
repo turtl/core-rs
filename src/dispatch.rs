@@ -1,4 +1,4 @@
-use ::futures;
+use ::futures::Future;
 
 use ::error::{TResult, TError};
 use ::util::{self, json};
@@ -38,7 +38,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "user:login" => {
             let username = try_t!(json::get(&["1", "username"], &data));
             let password = try_t!(json::get(&["1", "password"], &data));
-            User::login(turtl.clone(), username, password);
+            User::login(turtl.clone(), username, password)
+                .forget();
             Ok(())
         },
         "ping" => {
