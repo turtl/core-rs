@@ -153,12 +153,6 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
 }
 
 impl User {
-    pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
-        self.key = Some(key);
-        self.auth = Some(auth);
-        self.trigger("login", &json::to_val(&()));
-    }
-
     pub fn login(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
         // -------------------------
         // TODO: removeme
@@ -169,6 +163,12 @@ impl User {
         // -------------------------
 
         try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 1)
+    }
+
+    pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
+        self.key = Some(key);
+        self.auth = Some(auth);
+        self.trigger("login", &json::to_val(&()));
     }
 }
 
