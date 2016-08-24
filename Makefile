@@ -6,10 +6,12 @@
 CARGO := $(shell which cargo)
 CARGO_BUILD_ARGS :=
 
-all:
-	cargo build $(CARGO_BUILD_ARGS)
+all: build
 
-run: all
+build: 
+	cargo build
+
+run: build
 	cargo run
 
 test:
@@ -23,4 +25,5 @@ macros:
 
 clean:
 	rm -rf target/
+	rm -f Cargo.lock
 

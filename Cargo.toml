@@ -2,6 +2,7 @@
 name = "turtl-core"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 constant_time_eq = "0.1.2"
@@ -26,4 +27,8 @@ time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get ti
 
 #[features]
 #default = ["openssl/pkcs5_pbkdf2_hmac"]
+
+#[target.'cfg(windows)']
+#rustc-link-search = ["c:/Windows/System32"]
+#rustc-link = ["mswsock"]
 
