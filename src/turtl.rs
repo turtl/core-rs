@@ -4,6 +4,7 @@
 use ::std::sync::{Arc, RwLock};
 
 use ::util::event;
+use ::storage::Storage;
 use ::api::Api;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
@@ -17,6 +18,7 @@ pub struct Turtl {
     pub api: Api,
     pub work: Thredder,
     pub msg: Option<MsgSender>,
+    //pub db: Storage,
 }
 
 /// A handy type alias for passing Turtl around
@@ -24,12 +26,13 @@ pub type TurtlWrap = Arc<RwLock<Turtl>>;
 
 impl Turtl {
     /// Create a new Turtl app
-    pub fn new(tx_main: Pipeline, tx_msg: MsgSender) -> Turtl {
+    pub fn new(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> Turtl {
         // TODO: match num processors - 1
         let num_workers = 3;
         Turtl {
             events: event::EventEmitter::new(),
             user: User::blank(),
+            //storage: Storage::new(db_location),
             api: Api::new(String::new(), tx_main.clone()),
             msg: Some(tx_msg),
             work: Thredder::new("work", tx_main.clone(), num_workers),

@@ -23,6 +23,7 @@ protected!{
 impl User {
 }
 
+/// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Vec<u8>> {
     let key: Vec<u8> = match version {
         0 => {
@@ -39,6 +40,7 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
     Ok(key)
 }
 
+/// Generate a user's auth token given some variables or something
 fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
     let key_auth = match version {
         0 => {
@@ -153,6 +155,8 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
 }
 
 impl User {
+    /// Given a turtl, a username, and a password, see if we can log this user
+    /// in.
     pub fn login(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
         // -------------------------
         // TODO: removeme
@@ -165,6 +169,7 @@ impl User {
         try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 1)
     }
 
+    /// We have a successful key/auth pair. Log the user in.
     pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
         self.key = Some(key);
         self.auth = Some(auth);

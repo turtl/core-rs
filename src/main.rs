@@ -18,6 +18,7 @@ extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate crossbeam;
+extern crate sqlite3;
 
 #[macro_use]
 mod error;
@@ -25,8 +26,8 @@ mod config;
 #[macro_use]
 mod util;
 mod messaging;
-mod api;
 mod storage;
+mod api;
 mod crypto;
 mod models;
 mod dispatch;
@@ -68,16 +69,16 @@ fn set_running(val: bool) {
 
 /// Start our app...spawns all our worker/helper threads, including our comm
 /// system that listens for external messages.
-pub fn start() -> thread::JoinHandle<()> {
+pub fn start(db_location: String) -> thread::JoinHandle<()> {
     set_running(true);
-    thread::Builder::new().name(String::from("turtl-main")).spawn(|| {
+    thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let queue_main = Arc::new(MsQueue::new());
 
         // start our messaging thread
         let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(queue_main.clone(), tx_msg)));
+        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(queue_main.clone(), tx_msg, &db_location)));
 
         // run any post-init setup turtl needs
         turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
@@ -109,6 +110,6 @@ pub fn stop() {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    start().join().unwrap();
+    start(String::from("d:/tmp/turtl-rs.sqlite")).join().unwrap();
 }
 
