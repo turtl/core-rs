@@ -36,7 +36,6 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock};
 
 use ::crossbeam::sync::MsQueue;
-use ::futures::Future;
 
 use ::error::{TError, TResult};
 
@@ -71,7 +70,7 @@ fn set_running(val: bool) {
 /// system that listens for external messages.
 pub fn start() -> thread::JoinHandle<()> {
     set_running(true);
-    thread::spawn(|| {
+    thread::Builder::new().name(String::from("turtl-main")).spawn(|| {
         let queue_main = Arc::new(MsQueue::new());
 
         // start our messaging thread
@@ -82,14 +81,6 @@ pub fn start() -> thread::JoinHandle<()> {
 
         // run any post-init setup turtl needs
         turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
-
-        /*
-        turtl.read().unwrap().api.get("/")
-            .map(|x| {
-                println!("x is {:?}", x);
-            })
-            .forget();
-        */
 
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.
@@ -104,7 +95,7 @@ pub fn start() -> thread::JoinHandle<()> {
             Ok(..) => {},
             Err(e) => error!("main: problem joining message thread: {:?}", e),
         }
-    })
+    }).unwrap()
 }
 
 /// Stop all threads and close down Turtl

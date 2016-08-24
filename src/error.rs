@@ -1,4 +1,6 @@
 use ::futures::BoxFuture;
+use ::hyper::status::StatusCode;
+
 use ::crypto;
 
 quick_error! {
@@ -28,6 +30,10 @@ quick_error! {
             cause(err)
             description("crypto error")
             display("crypto error: {}", err)
+        }
+        ApiError(status: StatusCode) {
+            description("API error")
+            display("api error: {}", status.canonical_reason().unwrap_or("unknown"))
         }
         TryAgain {
             description("try again")

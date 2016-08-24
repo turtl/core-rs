@@ -38,7 +38,24 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "user:login" => {
             let username = try_t!(json::get(&["1", "username"], &data));
             let password = try_t!(json::get(&["1", "password"], &data));
-            User::login(turtl.clone(), username, password)
+            let turtl1 = turtl.clone();
+            let turtl2 = turtl.clone();
+            User::login(turtl.clone(), &username, &password)
+                .map(move |_| {
+                    let turtl_inner = turtl1.read().unwrap();
+                    match turtl_inner.remote_send(String::from(r#"{"e":"login"}"#)) {
+                        Err(e) => error!("dispatch -- problem sending login message: {}", e),
+                        _ => ()
+                    }
+                })
+                .map_err(move |_| {
+                    let mut turtl_inner = turtl2.write().unwrap();
+                    turtl_inner.api.clear_auth();
+                    match turtl_inner.remote_send(String::from(r#"{"e":"error","data":{"name":"login-failed"}}"#)) {
+                        Err(e) => error!("dispatch -- problem sending login message: {}", e),
+                        _ => ()
+                    }
+                })
                 .forget();
             Ok(())
         },

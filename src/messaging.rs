@@ -6,7 +6,6 @@
 
 use ::std::io::{Read, Write};
 use ::std::thread::{self, JoinHandle};
-use ::std::sync::mpsc::{self, Sender, TryRecvError};
 use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
@@ -17,7 +16,6 @@ use ::nanomsg::endpoint::Endpoint;
 use ::config;
 use ::error::{TResult, TError};
 use ::util;
-use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::dispatch;
 use ::turtl::TurtlWrap;
@@ -47,6 +45,7 @@ impl Messenger {
         Ok(())
     }
 
+    #[allow(dead_code)]
     /// Connect to a nanomsg socket
     fn connect(&mut self, address: &String) -> TResult<()> {
         info!("messaging: connect: address: {}", address);

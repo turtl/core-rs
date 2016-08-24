@@ -1,16 +1,19 @@
+use ::std::collections::HashMap;
+
 use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
-use ::api::Api;
+use ::api::Status;
 use ::models::protected::Protected;
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
+use ::util::json;
 
 protected!{
     pub struct User {
         ( storage: i64 ),
         ( settings: ::util::json::Value ),
         (
-            auth: String
+            auth: Option<String>
             //logged_in: bool,
             //changing_password: bool
         )
@@ -36,8 +39,8 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
     Ok(key)
 }
 
-fn generate_auth(username: String, password: String, version: u16) -> TResult<String> {
-    let auth = match version {
+fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
+    let key_auth = match version {
         0 => {
             let key = try!(generate_key(&username, &password, version, 0));
             let iv_str = String::from(&username[..]) + "4c281987249be78a";
@@ -46,7 +49,8 @@ fn generate_auth(username: String, password: String, version: u16) -> TResult<St
             let mut user_record = try_c!(crypto::to_hex(&try_c!(crypto::sha256(&password.as_bytes()))));
             user_record.push_str(":");
             user_record.push_str(&username[..]);
-            try_c!(crypto::encrypt_v0(&key, &iv, &user_record))
+            let auth = try_c!(crypto::encrypt_v0(&key, &iv, &user_record));
+            (key, auth)
         },
         1 => {
             let key = try!(generate_key(&username, &password, version, 100000));
@@ -65,42 +69,106 @@ fn generate_auth(username: String, password: String, version: u16) -> TResult<St
             let utf8_random: u8 = (((utf8_byte as f64) / 256.0) * 128.0).floor() as u8;
             let op = try_c!(crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random));
             let auth_bin = try_c!(crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op));
-            try_c!(crypto::to_base64(&auth_bin))
+            let auth = try_c!(crypto::to_base64(&auth_bin));
+            (key, auth)
 
         },
         _ => return Err(TError::NotImplemented),
     };
-    Ok(auth)
+    Ok(key_auth)
 }
 
 /// A worthless function that doesn't do much of anything except keeps the
 /// compiler from bitching about all my unused crypto code.
 fn use_code(username: &String, password: &String) -> TResult<()> {
     let mut user = User::blank();
+    user.bind("growl", |_| {
+        println!("user growl...");
+    }, "user:growl");
+    user.bind_once("growl", |_| {
+        println!("user growl...");
+    }, "user:growl");
+    user.unbind("growl", "user:growl");
     user.set("logged_in", &true).unwrap();
     user.set("changing_password", &false).unwrap();
     let key = try_t!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
     let key2 = try_t!(crypto::random_key());
     let auth = try_t!(crypto::encrypt_v0(&key, &try_t!(crypto::random_iv()), &String::from("message")));
-    user.auth = auth;
+    user.auth = Some(auth);
     let auth2 = try_t!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try_t!(crypto::CryptoOp::new("aes", "gcm"))));
     let test = String::from_utf8(try_t!(crypto::decrypt(&key2, &auth2.clone())));
     trace!("debug stuff: {:?}", (user.stringify_trusted(), auth2, test));
     Ok(())
 }
 
+fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) -> TFutureResult<()> {
+    debug!("user::try_auth() -- trying auth version {}", &version);
+    let turtl1 = turtl.clone();
+    let turtl2 = turtl.clone();
+    let ref work = turtl.read().unwrap().work;
+    let username_clone = String::from(&username[..]);
+    let password_clone = String::from(&password[..]);
+    work.run(move || generate_auth(&username_clone, &password_clone, version))
+        .and_then(move |key_auth: (Vec<u8>, String)| -> TFutureResult<()> {
+            let (key, auth) = key_auth;
+            let mut data = HashMap::new();
+            data.insert("auth", String::from(&auth[..]));
+            let turtl2 = turtl1.clone();
+            let ref mut api = turtl1.write().unwrap().api;
+            //api.set_auth(String::from(&auth[..])).unwrap();
+            match api.set_auth(String::from(&auth[..])) {
+                Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
+                _ => (),
+            }
+            api.post("/auth", json::to_val(&()))
+                .map(move |_| {
+                    let ref mut user = turtl2.write().unwrap().user;
+                    user.do_login(key, auth);
+                })
+                .boxed()
+        })
+        .or_else(move |err| {
+            // return with the error value if we hav eanything other than
+            // api::Status::Unauthorized
+            debug!("user::try_auth() -- api error: {}", err);
+            let mut test_err = match err {
+                TError::ApiError(x) => {
+                    match x {
+                        Status::Unauthorized => Ok(()),
+                        _ => Err(()),
+                    }
+                },
+                _ => Err(())
+            };
+            // if we're already at version 0, then JUST FORGET IT
+            if version <= 0 { test_err = Err(()); }
+
+            if test_err.is_err() {
+                return futures::failed(err).boxed();
+            }
+            // try again, lower version num
+            try_auth(turtl2, username, password, version - 1)
+        })
+        .boxed()
+}
+
 impl User {
-    pub fn login(turtl: TurtlWrap, username: String, password: String) -> TFutureResult<()> {
-        let ref work = turtl.read().unwrap().work;
-        let turtlc = turtl.clone();
-        work.run(move || generate_auth(username, password, 1))
-            .and_then(move |auth: String| {
-                println!("- user: auth: {}", auth);
-                let ref work = turtlc.read().unwrap().work;
-                work.run(|| use_code(&String::from("ass"), &String::from("butt")))
-            })
-            .map(|_| println!("- user: used code"))
-            .boxed()
+    pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
+        self.key = Some(key);
+        self.auth = Some(auth);
+        self.trigger("login", &json::to_val(&()));
+    }
+
+    pub fn login(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
+        // -------------------------
+        // TODO: removeme
+        if password == "get a job get a job get a job omgLOOOOLLLolololLOL" {
+            let ref work = turtl.read().unwrap().work;
+            work.run(|| use_code(&String::from("ass"), &String::from("butt")));
+        }
+        // -------------------------
+
+        try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 1)
     }
 }
 
