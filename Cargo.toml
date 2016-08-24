@@ -16,13 +16,12 @@ lazy_static = "0.2.1"
 log = "0.3.6"
 nanomsg = "0.6.0"
 quick-error = "1.1.0"
-rusqlite = "0.7.3"
 rust-crypto = "0.2.36"
-rust-sqlite = "0.3.0"
 rustc-serialize = "0.3.19"
 serde = "0.7.14"
 serde_json = "0.7.4"
 serde_yaml = "0.3.0"
+sqlite = "0.23.0"
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
 #[features]

@@ -18,7 +18,7 @@ extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate crossbeam;
-extern crate sqlite3;
+extern crate sqlite;
 
 #[macro_use]
 mod error;
