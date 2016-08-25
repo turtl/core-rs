@@ -239,22 +239,8 @@ mod tests {
     use std::thread;
     use std::sync::{Arc, Mutex};
 
-    use nanomsg::Socket;
-
-    use ::config;
     use super::*;
-    use ::error::{TResult, TError};
-    use std::io::Read;
-
-    /// receive a message on an open nanomsg socket, saving the message to a
-    /// mutable string (passed in)
-    fn recv(socket: &mut Socket, message: &mut String) -> TResult<()> {
-        let address: String = try!(config::get(&["messaging", "address"]));
-        trace!("messaging: recv: address: {}", address);
-
-        try_t!(socket.read_to_string(message));
-        Ok(())
-    }
+    use ::error::TError;
 
     /// given a thread-safe bool, return a copy of the bool
     fn grab_locked_bool(val: &Arc<Mutex<bool>>) -> bool {
@@ -277,22 +263,22 @@ mod tests {
         let pongref = pong.clone();
         let handle = thread::spawn(move || {
             let mut messenger = Messenger::new();
-            messenger.bind(&String::from("inproc://turtltest"));
+            messenger.bind(&String::from("inproc://turtltest")).unwrap();
             let message = messenger.recv().unwrap();
 
             let res = match message.as_ref() {
                 "ping" => {
                     let mut pong = pongref.lock().unwrap();
                     *pong = true;
-                    messenger.send(String::from("pong"));
+                    messenger.send(String::from("pong")).unwrap();
                     Ok(())
                 },
                 _ => Err(TError::Msg(format!("bad command: {}", message))),
             };
 
             match res {
-                Ok(x) => (),
-                Err(e) => {
+                Ok(_) => (),
+                Err(_) => {
                     let mut panic = panicref.lock().unwrap();
                     *panic = true;
                 }
@@ -300,12 +286,13 @@ mod tests {
         });
 
         let mut messenger = Messenger::new();
-        messenger.connect(&String::from("inproc://turtltest"));
+        messenger.connect(&String::from("inproc://turtltest")).unwrap();
         messenger.send(String::from("ping")).unwrap();
         let response = messenger.recv().unwrap();
         assert_eq!(response, r#"pong"#);
         assert_eq!(grab_locked_bool(&pong), true);
         assert_eq!(grab_locked_bool(&panic), false);
+        handle.join().unwrap();
     }
 }
 
