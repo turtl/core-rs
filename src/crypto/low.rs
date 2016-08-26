@@ -20,7 +20,6 @@ use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
 use ::gcrypt::rand::Random;
 use ::rust_crypto;
-use ::constant_time_eq;
 
 lazy_static! {
     /// Init the gcrypt lib and store our token
@@ -158,9 +157,19 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     Ok(result)
 }
 
-/// Do a constant-time comparison of two byte arrays.
-pub fn const_compare(arr1: &[u8], arr2: &[u8]) -> bool {
-    constant_time_eq::constant_time_eq(arr1, arr2)
+/// Do a secure comparison of two byte arrays.
+///
+/// We do this using the double-hmac method, as opposed to fighting tooth and
+/// nail against compilers of various platforms in search for a constant-time
+/// comparison method.
+///
+/// This takes a bit more legwork, but is able to securely compare two values
+/// without leaking information about either.
+pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
+    let key = try!(rand_bytes(16));
+    let hash1 = try!(hmac(Hasher::SHA256, key.as_slice(), arr1));
+    let hash2 = try!(hmac(Hasher::SHA256, key.as_slice(), arr2));
+    Ok(hash1 == hash2)
 }
 
 /// Generate N number of CS random bytes.
@@ -473,35 +482,6 @@ mod tests {
         assert_eq!(res, "b1a698ee4ea7105e79723dfbab65912dffa01c822038b24fbf413a587f241f10");
     }
 
-    // NOTE: Disabled because the test fails randomly. Luckily we only need this
-    // when using old versions of the crypto format (CBC+HMAC) so for now we can
-    // cross our fingers and hope it works.
-    /*
-    #[test]
-    fn constant_time_compare() {
-        let key1 = from_hex(&String::from("f509a6e0249b014d5a626d819073983cf00e873d1f7cc632ef4687ee839174c1")).unwrap();
-        let key2 = from_hex(&String::from("f509a6e0249b014d5a626d819073983cf00e873d1f7cc632ef4687ee839174c1")).unwrap();
-        let key3 = from_hex(&String::from("e487cbea0d56adc3cd12e89bb17d6a5ef36effde4b778fe07cd70e426c6d714c")).unwrap();
-
-        let iters = 999999;
-        let start1 = PreciseTime::now();
-        for _ in 0..iters {
-            const_compare(key1.as_slice(), key2.as_slice());
-        }
-        let end1 = start1.to(PreciseTime::now());
-        let start2 = PreciseTime::now();
-        for _ in 0..iters {
-            const_compare(key1.as_slice(), key3.as_slice());
-        }
-        let end2 = start2.to(PreciseTime::now());
-        
-
-        let run1 = end1.num_nanoseconds().unwrap();
-        let run2 = end2.num_nanoseconds().unwrap();
-        //assert!((run1 - run2).abs() < 40000000);
-    }
-    */
-
     #[test]
     fn random_bytes_works() {
         let bytes = rand_bytes(4).unwrap();
@@ -663,6 +643,21 @@ mod tests {
                 _ => panic!("Non-authentication error: {}", e),
             }
         };
+    }
+
+    #[test]
+    /// we aren't going to test for contant-time avoidance or anything like that
+    /// but we can at least make sure two equal values return true and two
+    /// different values return false.
+    fn secure_comparison() {
+        let key1 = sha256(String::from("harrr").as_bytes()).unwrap();
+        let key2 = sha256(String::from("harrr").as_bytes()).unwrap();
+        let key3 = sha256(get_string("child labor").as_bytes()).unwrap();
+
+        let comp1 = secure_compare(key1.as_slice(), key2.as_slice()).unwrap();
+        let comp2 = secure_compare(key1.as_slice(), key3.as_slice()).unwrap();
+        assert_eq!(comp1, true);
+        assert_eq!(comp2, false);
     }
 }
 

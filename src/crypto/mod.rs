@@ -20,6 +20,7 @@ pub use ::crypto::low::{
     from_hex,
     to_base64,
     from_base64,
+    secure_compare
 };
 
 /// Stores our current crypto version. This gets encoded into a header in the
@@ -332,8 +333,7 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
 }
 
 /// HMACs a CryptoData and compares the generated hash to the hash stored
-/// in the struct in constant time. Returns true of the data authenticates
-/// properly.
+/// in the struct securely. Returns true of the data authenticates properly.
 ///
 /// NOTE that we are not going to implement this correctly. No. Instead, we're
 /// going to mimick the way the function worked in the turtl js project, which
@@ -359,7 +359,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
     let hmac = try!(low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice()));
-    if !low::const_compare(hmac.as_slice(), data.hmac.as_slice()) {
+    if !(try!(low::secure_compare(hmac.as_slice(), data.hmac.as_slice()))) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }
     Ok(())

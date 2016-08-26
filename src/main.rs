@@ -13,7 +13,6 @@ extern crate lazy_static;
 extern crate rustc_serialize as serialize;
 extern crate gcrypt;
 extern crate crypto as rust_crypto;
-extern crate constant_time_eq;
 extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
