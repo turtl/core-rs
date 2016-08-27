@@ -65,7 +65,7 @@ fn generate_auth(username: &String, password: &String, version: u16) -> TResult<
             let mut user_record = String::from(&pw_hash[..]);
             user_record.push_str(":");
             user_record.push_str(&un_hash[..]);
-            let utf8_byte: u8 = try_t!(u8::from_str_radix(&user_record[18..20], 16));
+            let utf8_byte: u8 = try!(u8::from_str_radix(&user_record[18..20], 16));
             // have to do a stupid conversion here because of stupidity in the
             // original turtl code. luckily there will be a v2 gen_auth...
             let utf8_random: u8 = (((utf8_byte as f64) / 256.0) * 128.0).floor() as u8;
@@ -93,12 +93,12 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
     user.unbind("growl", "user:growl");
     user.set("logged_in", &true).unwrap();
     user.set("changing_password", &false).unwrap();
-    let key = try_t!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
-    let key2 = try_t!(crypto::random_key());
-    let auth = try_t!(crypto::encrypt_v0(&key, &try_t!(crypto::random_iv()), &String::from("message")));
+    let key = try!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
+    let key2 = try!(crypto::random_key());
+    let auth = try!(crypto::encrypt_v0(&key, &try!(crypto::random_iv()), &String::from("message")));
     user.auth = Some(auth);
-    let auth2 = try_t!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try_t!(crypto::CryptoOp::new("aes", "gcm"))));
-    let test = String::from_utf8(try_t!(crypto::decrypt(&key2, &auth2.clone())));
+    let auth2 = try!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try!(crypto::CryptoOp::new("aes", "gcm"))));
+    let test = String::from_utf8(try!(crypto::decrypt(&key2, &auth2.clone())));
     trace!("debug stuff: {:?}", (user.stringify_trusted(), auth2, test));
     Ok(())
 }

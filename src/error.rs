@@ -9,6 +9,7 @@ use ::util::json::JSONError;
 
 quick_error! {
     #[derive(Debug)]
+    /// Turtl's main error object.
     pub enum TError {
         Shutdown {
             description("shutting down")
@@ -54,6 +55,32 @@ quick_error! {
     }
 }
 
+/// converts non-TError errors to TError, via the From trait. This means that
+/// we can't do blanket conversions of errors anymore (like the good ol' days)
+/// but instead must provide a Err -> TError From implementation. This is made
+/// much easier by the from_err! macro below, although hand-written conversions
+/// are welcome as well.
+#[macro_export]
+macro_rules! toterr {
+    ($e:expr) => (
+        {
+            let err: TError = From::from($e);
+            err
+        }
+    )
+}
+
+/// A macro to make it easy to create From impls for TError
+macro_rules! from_err {
+    ($t:ty) => (
+        impl From<$t> for TError {
+            fn from(err: $t) -> TError {
+                TError::Boxed(Box::new(err))
+            }
+        }
+    )
+}
+
 impl From<CryptoError> for TError {
     fn from(err: CryptoError) -> TError {
         TError::CryptoError(err)
@@ -67,23 +94,14 @@ impl From<JSONError> for TError {
         }
     }
 }
+from_err!(::std::io::Error);
+from_err!(::fern::InitError);
+from_err!(::nanomsg::Error);
+from_err!(::std::string::FromUtf8Error);
+from_err!(::sqlite::Error);
+from_err!(::std::num::ParseIntError);
+from_err!(::hyper::Error);
 
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
-
-/// converts non-TError errors to TError. this is a macro because I am sure this
-/// is the "wrong" way to do this and once I know a better way, I can hopefully
-/// fix it later
-#[macro_export]
-macro_rules! toterr {
-    ($e:expr) => (TError::Boxed(Box::new($e)))
-}
-
-/// try!-esque wrapper around toterr
-///
-/// TODO: replace with From::from implementation for all generic errors (ie Msg)
-#[macro_export]
-macro_rules! try_t {
-    ($e:expr) => (try!($e.map_err(|e| toterr!(e))))
-}
 

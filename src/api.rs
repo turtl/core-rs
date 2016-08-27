@@ -57,7 +57,7 @@ impl Api {
         let method2 = method.clone();
         self.thredder.run(move || {
             let client = hyper::Client::new();
-            let body = try_t!(json::stringify(&data));
+            let body = try!(json::stringify(&data));
             let mut headers = Headers::new();
             match auth {
                 Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),

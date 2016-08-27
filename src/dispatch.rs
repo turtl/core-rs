@@ -29,15 +29,15 @@ fn process_res(turtl: TurtlWrap, res: TResult<()>) {
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
-    let data: Value = try_t!(json::parse(msg));
+    let data: Value = try!(json::parse(msg));
 
     // grab the command from the data
-    let cmd: String = try_t!(json::get(&["0"], &data));
+    let cmd: String = try!(json::get(&["0"], &data));
 
     let res = match cmd.as_ref() {
         "user:login" => {
-            let username = try_t!(json::get(&["1", "username"], &data));
-            let password = try_t!(json::get(&["1", "password"], &data));
+            let username = try!(json::get(&["1", "username"], &data));
+            let password = try!(json::get(&["1", "password"], &data));
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
             User::login(turtl.clone(), &username, &password)

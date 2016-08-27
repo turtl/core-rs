@@ -114,15 +114,15 @@ pub trait Protected: Model + fmt::Debug {
                 None => String::from("<no id>"),
             };
             let data = self.trusted_data();
-            let json = try_t!(json::stringify(&data));
+            let json = try!(json::stringify(&data));
 
             let key = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::serialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            body = try_t!(crypto::encrypt(&key, Vec::from(json.as_bytes()), try_t!(CryptoOp::new("aes", "gcm"))));
+            body = try!(crypto::encrypt(&key, Vec::from(json.as_bytes()), try!(CryptoOp::new("aes", "gcm"))));
         }
-        let body_base64 = try_t!(crypto::to_base64(&body));
+        let body_base64 = try!(crypto::to_base64(&body));
         try!(self.set("body", &body_base64));
         Ok(self.untrusted_data())
     }
@@ -137,7 +137,7 @@ pub trait Protected: Model + fmt::Debug {
             None => String::from("<no id>"),
         };
         let body = match self.get::<String>("body") {
-            Some(x) => try_t!(crypto::from_base64(&x)),
+            Some(x) => try!(crypto::from_base64(&x)),
             None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
         };
         let json_bytes;
@@ -146,10 +146,10 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            json_bytes = try_t!(crypto::decrypt(&key, &body));
+            json_bytes = try!(crypto::decrypt(&key, &body));
         }
-        let json_str = try_t!(String::from_utf8(json_bytes));
-        let parsed = try_t!(json::parse(&json_str));
+        let json_str = try!(String::from_utf8(json_bytes));
+        let parsed = try!(json::parse(&json_str));
         try!(self.set_multi(parsed));
         Ok(self.trusted_data())
     }

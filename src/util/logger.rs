@@ -2,7 +2,7 @@ use ::config;
 use ::fern;
 use ::log;
 use ::time;
-use ::error::{TResult, TError};
+use ::error::TResult;
 
 /// a simple wrapper (pretty much direct from documentation) that sets up
 /// logging to STDOUT via fern/log
@@ -27,7 +27,7 @@ pub fn setup_logger() -> TResult<()> {
         output: vec![fern::OutputConfig::stdout()],
         level: log::LogLevelFilter::Trace,
     };
-    try_t!(fern::init_global_logger(logger_config, level));
+    try!(fern::init_global_logger(logger_config, level));
     Ok(())
 }
 

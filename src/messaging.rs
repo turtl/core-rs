@@ -40,7 +40,7 @@ impl Messenger {
     /// Bind to a nanomsg socket
     fn bind(&mut self, address: &String) -> TResult<()> {
         info!("messaging: bind: address: {}", address);
-        self.endpoint = Some(try_t!(self.socket.bind(address)));
+        self.endpoint = Some(try!(self.socket.bind(address)));
         util::sleep(100);
         Ok(())
     }
@@ -49,7 +49,7 @@ impl Messenger {
     /// Connect to a nanomsg socket
     fn connect(&mut self, address: &String) -> TResult<()> {
         info!("messaging: connect: address: {}", address);
-        self.endpoint = Some(try_t!(self.socket.connect(address)));
+        self.endpoint = Some(try!(self.socket.connect(address)));
         util::sleep(100);
         Ok(())
     }
@@ -59,7 +59,7 @@ impl Messenger {
     fn recv(&mut self) -> TResult<String> {
         if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         let mut message = String::new();
-        try_t!(self.socket.read_to_string(&mut message));
+        try!(self.socket.read_to_string(&mut message));
         debug!("messaging: recv");
         Ok(message)
     }
@@ -75,7 +75,7 @@ impl Messenger {
             }
         }));
 
-        let msg = try_t!(String::from_utf8(bin));
+        let msg = try!(String::from_utf8(bin));
         debug!("messaging: recv");   // no byte count, no identifying info
         Ok(msg)
     }
@@ -85,7 +85,7 @@ impl Messenger {
         if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         debug!("messaging: send");
         let msg_bytes = msg.as_bytes();
-        try_t!(self.socket.write_all(msg_bytes));
+        try!(self.socket.write_all(msg_bytes));
         Ok(())
     }
 
