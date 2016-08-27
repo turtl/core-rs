@@ -1,4 +1,9 @@
+use ::std::error::Error;
+use ::std::convert::From;
+
 use ::serde_json;
+use ::serde_json::Error as SerdeJsonError;
+use ::serde_yaml::Error as SerdeYamlError;
 pub use ::serde_json::Value;
 pub use ::serde::de::Deserialize;
 pub use ::serde::ser::Serialize;
@@ -7,9 +12,9 @@ use ::serde_yaml;
 quick_error! {
     #[derive(Debug)]
     pub enum JSONError {
-        Custom(str: String) {
-            description("error")
-            display("json: error: {}", str)
+        Boxed(err: Box<Error + Send + Sync>) {
+            description(err.description())
+            display("json: error: {}", err.description())
         }
         Parse(err: serde_json::Error) {
             cause(err)
@@ -38,6 +43,18 @@ quick_error! {
 
 pub type JResult<T> = Result<T, JSONError>;
 
+impl From<SerdeJsonError> for JSONError {
+    fn from(err: SerdeJsonError) -> JSONError {
+        JSONError::Boxed(Box::new(err))
+    }
+}
+
+impl From<SerdeYamlError> for JSONError {
+    fn from(err: SerdeYamlError) -> JSONError {
+        JSONError::Boxed(Box::new(err))
+    }
+}
+
 /// Parse a JSON string and return a Result<Value>
 pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
@@ -45,7 +62,7 @@ pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
 
 /// Parse a YAML string and return a Value type
 pub fn parse_yaml(string: &String) -> JResult<Value> {
-    let data: Value = try!(serde_yaml::from_str(string).map_err(|e| JSONError::Custom(format!("yaml parse error: {}", e))));
+    let data: Value = try!(serde_yaml::from_str(string));
     Ok(data)
 }
 

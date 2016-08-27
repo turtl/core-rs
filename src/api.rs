@@ -33,7 +33,7 @@ impl Api {
     /// Set the API's authentication
     pub fn set_auth(&mut self, auth: String) -> TResult<()> {
         let auth_str = String::from("user:") + &auth;
-        let base_auth = try_c!(crypto::to_base64(&Vec::from(auth_str.as_bytes())));
+        let base_auth = try!(crypto::to_base64(&Vec::from(auth_str.as_bytes())));
         self.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())
     }

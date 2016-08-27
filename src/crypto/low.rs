@@ -15,6 +15,8 @@
 //! lib, but thanks to various issues with PBKDF2 (which MUST be supported for
 //! backwards compat), it currently uses both gcrypt and rust-crypto.
 
+use ::std::error::Error;
+
 use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
@@ -43,6 +45,10 @@ quick_error! {
     /// Define a type for cryptography errors.
     #[derive(Debug)]
     pub enum CryptoError {
+        Boxed(err: Box<Error + Send + Sync>) {
+            description(err.description())
+            display("crypto: error: {}", err.description())
+        }
         Msg(str: String) {
             description(str)
             display("crypto: error: {}", str)
@@ -58,17 +64,23 @@ quick_error! {
     }
 }
 
+impl From<::gcrypt::Error> for CryptoError {
+    fn from(err: ::gcrypt::Error) -> CryptoError {
+        CryptoError::Boxed(Box::new(err))
+    }
+}
+impl From<::std::string::FromUtf8Error> for CryptoError {
+    fn from(err: ::std::string::FromUtf8Error) -> CryptoError {
+        CryptoError::Boxed(Box::new(err))
+    }
+}
+impl From<::serialize::hex::FromHexError> for CryptoError {
+    fn from(err: ::serialize::hex::FromHexError) -> CryptoError {
+        CryptoError::Boxed(Box::new(err))
+    }
+}
+
 pub type CResult<T> = Result<T, CryptoError>;
-
-/// Convert an error object into a CryptoError (via printing).
-macro_rules! tocterr {
-    ($e:expr) => (CryptoError::Msg(format!("crypto error: {}", $e)))
-}
-
-/// Like try!, but converts errors found into CryptoErrors.
-macro_rules! try_c {
-    ($e:expr) => (try!($e.map_err(|e| tocterr!(e))))
-}
 
 /// Specifies what type of padding we want to use when encrypting data via CBC.
 #[derive(Debug)]
@@ -125,7 +137,7 @@ pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
 
 /// Convert a hex string to a u8 vector.
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
-    Ok(try_c!(data.from_hex()))
+    Ok(try!(data.from_hex()))
 }
 
 /// Convert a u8 vector of binary data inot a base64 string.
@@ -135,10 +147,8 @@ pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
 
 /// Convert a base64 string to a vector of u8 data.
 pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
-    match data.from_base64() {
-        Ok(x) => Ok(x),
-        Err(e) => Err(tocterr!(format!("base64: {}", e))),
-    }
+    data.from_base64()
+        .map_err(|e| CryptoError::Msg(format!("base64: {}", e)))
 }
 
 /// Given a key (password/secret) and a set of data, run an HMAC-SHA256 and
@@ -150,10 +160,10 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
         Hasher::SHA512 => gcrypt::mac::HMAC_SHA512,
     };
     let mut result: Vec<u8> = vec![0; hashtype.mac_len()];
-    let mut maccer = try_c!(gcrypt::mac::Mac::new(*TOKEN, hashtype, GCRYPT_MAC_FLAGS));
-    try_c!(maccer.set_key(key));
-    try_c!(maccer.write(data));
-    try_c!(maccer.read(&mut result[..]));
+    let mut maccer = try!(gcrypt::mac::Mac::new(*TOKEN, hashtype, GCRYPT_MAC_FLAGS));
+    try!(maccer.set_key(key));
+    try!(maccer.write(data));
+    try!(maccer.read(&mut result[..]));
     Ok(result)
 }
 
@@ -209,7 +219,7 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
         Hasher::SHA512 => gcrypt::digest::MD_SHA512,
     };
     let mut result: Vec<u8> = vec![0; keylen];
-    try_c!(gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..]));
+    try!(gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..]));
     Ok(result)
 }
 */
@@ -319,20 +329,20 @@ pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) ->
     let mut data = Vec::from(data);
     pad(&mut data, pad_mode);
     let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try_c!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
-    try_c!(cipher.set_key(key));
-    try_c!(cipher.set_iv(iv));
-    try_c!(cipher.encrypt(&data[..], &mut enc[..]));
+    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
+    try!(cipher.set_key(key));
+    try!(cipher.set_iv(iv));
+    try!(cipher.encrypt(&data[..], &mut enc[..]));
     Ok(enc)
 }
 
 /// Decrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try_c!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
-    try_c!(cipher.set_key(key));
-    try_c!(cipher.set_iv(iv));
-    try_c!(cipher.decrypt(&data[..], &mut dec[..]));
+    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
+    try!(cipher.set_key(key));
+    try!(cipher.set_iv(iv));
+    try!(cipher.decrypt(&data[..], &mut dec[..]));
     unpad(&mut dec);
     Ok(dec)
 }
@@ -341,12 +351,12 @@ pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
 pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
     let mut tag: Vec<u8> = vec![0; GCM_TAG_LENGTH];
     let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try_c!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
-    try_c!(cipher.set_key(key));
-    try_c!(cipher.set_iv(iv));
-    try_c!(cipher.authenticate(auth));
-    try_c!(cipher.encrypt(data, &mut enc[..]));
-    try_c!(cipher.get_tag(&mut tag[..]));
+    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
+    try!(cipher.set_key(key));
+    try!(cipher.set_iv(iv));
+    try!(cipher.authenticate(auth));
+    try!(cipher.encrypt(data, &mut enc[..]));
+    try!(cipher.get_tag(&mut tag[..]));
     enc.append(&mut tag);
     Ok(enc)
 }
@@ -357,11 +367,11 @@ pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResu
     let tag = &data[tag_cutoff..];
     let data = &data[0..tag_cutoff];
     let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try_c!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
-    try_c!(cipher.set_key(key));
-    try_c!(cipher.set_iv(iv));
-    try_c!(cipher.authenticate(auth));
-    try_c!(cipher.decrypt(data, &mut dec[..]));
+    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
+    try!(cipher.set_key(key));
+    try!(cipher.set_iv(iv));
+    try!(cipher.authenticate(auth));
+    try!(cipher.decrypt(data, &mut dec[..]));
     match cipher.check_tag(&tag[..]) {
         Ok(..) => {},
         Err(e) => return Err(CryptoError::Authentication(format!("{}", e))),

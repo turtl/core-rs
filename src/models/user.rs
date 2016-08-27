@@ -29,11 +29,11 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
         0 => {
             let mut salt = String::from(&username[..]);
             salt.push_str(":a_pinch_of_salt");  // and laughter too
-            try_c!(crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400))
+            try!(crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400))
         },
         1 => {
-            let salt = try_c!(crypto::to_hex(&try_c!(crypto::sha256(username.as_bytes()))));
-            try_c!(crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations))
+            let salt = try!(crypto::to_hex(&try!(crypto::sha256(username.as_bytes()))));
+            try!(crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations))
         },
         _ => return Err(TError::NotImplemented),
     };
@@ -48,20 +48,20 @@ fn generate_auth(username: &String, password: &String, version: u16) -> TResult<
             let iv_str = String::from(&username[..]) + "4c281987249be78a";
             let mut iv = Vec::from(iv_str.as_bytes());
             iv.truncate(16);
-            let mut user_record = try_c!(crypto::to_hex(&try_c!(crypto::sha256(&password.as_bytes()))));
+            let mut user_record = try!(crypto::to_hex(&try!(crypto::sha256(&password.as_bytes()))));
             user_record.push_str(":");
             user_record.push_str(&username[..]);
-            let auth = try_c!(crypto::encrypt_v0(&key, &iv, &user_record));
+            let auth = try!(crypto::encrypt_v0(&key, &iv, &user_record));
             (key, auth)
         },
         1 => {
             let key = try!(generate_key(&username, &password, version, 100000));
             let concat = String::from(&password[..]) + &username;
-            let iv_bytes = try_c!(crypto::sha256(concat.as_bytes()));
-            let iv_str = try_c!(crypto::to_hex(&iv_bytes));
+            let iv_bytes = try!(crypto::sha256(concat.as_bytes()));
+            let iv_str = try!(crypto::to_hex(&iv_bytes));
             let iv = Vec::from(&iv_str.as_bytes()[0..16]);
-            let pw_hash = try_c!(crypto::to_hex(&try_c!(crypto::sha256(&password.as_bytes()))));
-            let un_hash = try_c!(crypto::to_hex(&try_c!(crypto::sha256(&username.as_bytes()))));
+            let pw_hash = try!(crypto::to_hex(&try!(crypto::sha256(&password.as_bytes()))));
+            let un_hash = try!(crypto::to_hex(&try!(crypto::sha256(&username.as_bytes()))));
             let mut user_record = String::from(&pw_hash[..]);
             user_record.push_str(":");
             user_record.push_str(&un_hash[..]);
@@ -69,9 +69,9 @@ fn generate_auth(username: &String, password: &String, version: u16) -> TResult<
             // have to do a stupid conversion here because of stupidity in the
             // original turtl code. luckily there will be a v2 gen_auth...
             let utf8_random: u8 = (((utf8_byte as f64) / 256.0) * 128.0).floor() as u8;
-            let op = try_c!(crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random));
-            let auth_bin = try_c!(crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op));
-            let auth = try_c!(crypto::to_base64(&auth_bin));
+            let op = try!(crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random));
+            let auth_bin = try!(crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op));
+            let auth = try!(crypto::to_base64(&auth_bin));
             (key, auth)
 
         },

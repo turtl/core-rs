@@ -1,7 +1,11 @@
+use ::std::error::Error;
+use ::std::convert::From;
+
 use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
 
-use ::crypto;
+use ::crypto::CryptoError;
+use ::util::json::JSONError;
 
 quick_error! {
     #[derive(Debug)]
@@ -9,6 +13,10 @@ quick_error! {
         Shutdown {
             description("shutting down")
             display("shutting down")
+        }
+        Boxed(err: Box<Error + Send + Sync>) {
+            description(err.description())
+            display("error: {}", err.description())
         }
         Msg(str: String) {
             description(str)
@@ -26,7 +34,7 @@ quick_error! {
             description(str)
             display("missing data: {}", str)
         }
-        CryptoError(err: crypto::CryptoError) {
+        CryptoError(err: CryptoError) {
             cause(err)
             description("crypto error")
             display("crypto error: {}", err)
@@ -46,6 +54,20 @@ quick_error! {
     }
 }
 
+impl From<CryptoError> for TError {
+    fn from(err: CryptoError) -> TError {
+        TError::CryptoError(err)
+    }
+}
+impl From<JSONError> for TError {
+    fn from(err: JSONError) -> TError {
+        match err {
+            JSONError::Boxed(x) => TError::Boxed(x),
+            _ => TError::Boxed(Box::new(err)),
+        }
+    }
+}
+
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
 
@@ -54,19 +76,14 @@ pub type TFutureResult<T> = BoxFuture<T, TError>;
 /// fix it later
 #[macro_export]
 macro_rules! toterr {
-    ($e:expr) => (TError::Msg(format!("{}", $e)))
+    ($e:expr) => (TError::Boxed(Box::new($e)))
 }
 
 /// try!-esque wrapper around toterr
+///
+/// TODO: replace with From::from implementation for all generic errors (ie Msg)
 #[macro_export]
 macro_rules! try_t {
     ($e:expr) => (try!($e.map_err(|e| toterr!(e))))
-}
-
-/// Like try_t! but specifically for when we know we're going to get a crypto
-/// error.
-#[macro_export]
-macro_rules! try_c {
-    ($e:expr) => (try!($e.map_err(|e| TError::CryptoError(e))))
 }
 

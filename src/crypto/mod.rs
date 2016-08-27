@@ -370,7 +370,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
 fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
     if key.len() == 32 { return Ok(key.clone()); }
 
-    let keystr = try_c!(String::from_utf8(key.clone()));
+    let keystr = try!(String::from_utf8(key.clone()));
     let mut fixed_key: Vec<u8> = Vec::with_capacity(32);
     for char in keystr.chars() {
         fixed_key.push(char as u8);
@@ -663,7 +663,7 @@ pub fn encrypt_v0(key: &Vec<u8>, iv: &Vec<u8>, plaintext: &String) -> CResult<St
     let enc = try!(low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923));
     let data = CryptoData::new(0, desc, iv.clone(), Vec::new(), enc);
     let serialized = try!(serialize_version_0(&data));
-    Ok(try_c!(String::from_utf8(serialized)))
+    Ok(try!(String::from_utf8(serialized)))
 }
 
 #[cfg(test)]
