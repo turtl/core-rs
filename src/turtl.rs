@@ -3,13 +3,13 @@
 
 use ::std::sync::{Arc, RwLock};
 
+use ::error::{TError, TResult};
 use ::util::event;
-use ::storage::Storage;
+use ::storage::{self, Storage};
 use ::api::Api;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, MsgSender};
-use ::error::{TError, TResult};
 
 /// Defines a container for our app's state
 pub struct Turtl {
@@ -18,7 +18,7 @@ pub struct Turtl {
     pub api: Api,
     pub work: Thredder,
     pub msg: Option<MsgSender>,
-    //pub db: Storage,
+    pub db: Storage,
 }
 
 /// A handy type alias for passing Turtl around
@@ -26,17 +26,26 @@ pub type TurtlWrap = Arc<RwLock<Turtl>>;
 
 impl Turtl {
     /// Create a new Turtl app
-    pub fn new(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> Turtl {
+    pub fn new(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> TResult<Turtl> {
         // TODO: match num processors - 1
         let num_workers = 3;
-        Turtl {
+        let turtl = Turtl {
             events: event::EventEmitter::new(),
             user: User::blank(),
             //storage: Storage::new(db_location),
             api: Api::new(String::new(), tx_main.clone()),
             msg: Some(tx_msg),
             work: Thredder::new("work", tx_main.clone(), num_workers),
-        }
+            db: try!(Storage::new(tx_main.clone(), db_location)),
+        };
+        Ok(turtl)
+    }
+
+    /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
+    /// shareable across threads.
+    pub fn new_wrap(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> TResult<TurtlWrap> {
+        let turtl = try!(Turtl::new(tx_main, tx_msg, db_location));
+        Ok(Arc::new(RwLock::new(turtl)))
     }
 
     pub fn with_remote_sender<F>(&self, cb: F) -> TResult<()>
@@ -62,6 +71,7 @@ impl Turtl {
     }
 
     pub fn shutdown(&mut self) {
+        storage::stop(&self.db);
         match self.with_remote_sender(|messenger| messenger.shutdown()) {
             Err(e) => error!("turtl::shutdown() -- error shutting down messenger thread: {:?}", e),
             _ => (),

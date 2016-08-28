@@ -3,9 +3,9 @@ use ::futures::Future;
 use ::error::{TResult, TError};
 use ::util::{self, json};
 use ::util::json::Value;
+use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
 use ::models::user::User;
-use ::stop;
 
 fn process_res(turtl: TurtlWrap, res: TResult<()>) {
     match res {
@@ -19,7 +19,8 @@ fn process_res(turtl: TurtlWrap, res: TResult<()>) {
                     Err(..) => (),
                 }
                 util::sleep(10);
-                stop();
+                let ref mut events = turtl.write().unwrap().events;
+                events.trigger("app:shutdown", &json::to_val(&()));
             }
             _ => error!("dispatch: error processing message: {}", e),
         },

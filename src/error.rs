@@ -98,7 +98,7 @@ from_err!(::std::io::Error);
 from_err!(::fern::InitError);
 from_err!(::nanomsg::Error);
 from_err!(::std::string::FromUtf8Error);
-from_err!(::sqlite::Error);
+from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
 

@@ -17,7 +17,7 @@ extern crate hyper;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate crossbeam;
-extern crate sqlite;
+extern crate rusqlite;
 
 #[macro_use]
 mod error;
@@ -33,11 +33,15 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
+use ::futures::Future;
 
 use ::error::{TError, TResult};
+use ::util::event::Emitter;
+use ::util::stopper::Stopper;
+use ::util::thredder::Pipeline;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -48,28 +52,19 @@ pub fn init() -> TResult<()> {
 }
 
 lazy_static!{
-    static ref RUN: RwLock<bool> = RwLock::new(false);
+    static ref RUN: Stopper = Stopper::new();
 }
 
-/// Determines if the main thread should be running or not.
-fn running() -> bool {
-    let guard = (*RUN).read();
-    match guard {
-        Ok(x) => *x,
-        Err(_) => false,
-    }
-}
-
-/// Sets the running state of the main thread
-fn set_running(val: bool) {
-    let mut guard = (*RUN).write().unwrap();
-    *guard = val;
+/// Stop all threads and close down Turtl
+pub fn stop(tx: Pipeline) {
+    (*RUN).set(false);
+    tx.push(Box::new(move |_| {}));
 }
 
 /// Start our app...spawns all our worker/helper threads, including our comm
 /// system that listens for external messages.
 pub fn start(db_location: String) -> thread::JoinHandle<()> {
-    set_running(true);
+    (*RUN).set(true);
     thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let queue_main = Arc::new(MsQueue::new());
 
@@ -77,30 +72,63 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
         let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = Arc::new(RwLock::new(turtl::Turtl::new(queue_main.clone(), tx_msg, &db_location)));
+        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &db_location) {
+            Ok(x) => x,
+            Err(err) => {
+                error!("main::start() -- error creating Turtl object: {}", err);
+                return;
+            }
+        };
+
+        // bind turtl.events "app:shutdown" to close everything
+        {
+            let ref mut events = turtl.write().unwrap().events;
+            let tx_main_shutdown = queue_main.clone();
+            events.bind("app:shutdown", move |_| {
+                stop(tx_main_shutdown.clone());
+            }, "app:shutdown");
+        }
 
         // run any post-init setup turtl needs
         turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
 
+        turtl.read().unwrap().db.query(|conn| -> TResult<String> {
+            try!(conn.execute("CREATE TABLE dragons (id integer primary key, name varchar(255))", &[]));
+            try!(conn.execute("INSERT INTO dragons (name) VALUES ($1)", &[&String::from("Kofi")]));
+            let mut res = try!(conn.prepare("SELECT id, name FROM dragons"));
+            let names = try!(res.query_map(&[], |row| {
+                let id: i64 = row.get(0);
+                let name: String = row.get(1);
+                println!("- name1: {}, {}", id, name);
+                name
+            }));
+            for name in names {
+                println!("- name2: {}", name.unwrap());
+            }
+            Ok(String::from("done"))
+        }).and_then(|x| {
+            println!("storage: x: {}", x);
+            ::futures::finished(())
+        }).or_else(|e| {
+            error!("storage: {}", e);
+            ::futures::finished::<(), ()>(())
+        }).forget();
+
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.
         // this creates an event loop of sorts, without all the grossness.
-        while running() {
+        while (*RUN).running() {
             debug!("turtl: main thread message loop");
             let handler = queue_main.pop();
             handler.call_box(turtl.clone());
         }
+        info!("main::start() -- shutting down");
         turtl.write().unwrap().shutdown();
         match handle.join() {
             Ok(..) => {},
             Err(e) => error!("main: problem joining message thread: {:?}", e),
         }
     }).unwrap()
-}
-
-/// Stop all threads and close down Turtl
-pub fn stop() {
-    set_running(false);
 }
 
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

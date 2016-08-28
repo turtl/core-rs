@@ -60,7 +60,7 @@ impl Messenger {
         if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         let mut message = String::new();
         try!(self.socket.read_to_string(&mut message));
-        debug!("messaging: recv");
+        debug!("messaging: recv: {}", message.len());
         Ok(message)
     }
 
@@ -76,14 +76,14 @@ impl Messenger {
         }));
 
         let msg = try!(String::from_utf8(bin));
-        debug!("messaging: recv");   // no byte count, no identifying info
+        debug!("messaging: recv: {}", msg.len());
         Ok(msg)
     }
 
     /// Send a message out on the nanomsg socket
     pub fn send(&mut self, msg: String) -> TResult<()> {
         if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
-        debug!("messaging: send");
+        debug!("messaging: send: {}", msg.len());
         let msg_bytes = msg.as_bytes();
         try!(self.socket.write_all(msg_bytes));
         Ok(())
@@ -165,10 +165,11 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
         // a simple internal function called when we have a problem and don't
         // want to panic. this stops the messenger and also kills the main
         // thread
-        fn terminate(mut messenger: Messenger) {
+        let term_tx_main = tx_main.clone();
+        let terminate = move |mut messenger: Messenger| {
             messenger.shutdown();
-            stop();
-        }
+            stop(term_tx_main.clone());
+        };
 
         // use these to adjust our active/passive poll delay
         let delay_min: u64 = 1;
@@ -230,6 +231,7 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
             counter += 1;
             if counter > 20 { delay = delay_max; }
         }
+        info!("messaging::start() -- shutting down");
     });
     (queue, handle)
 }
