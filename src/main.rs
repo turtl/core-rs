@@ -94,7 +94,7 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
         // run any post-init setup turtl needs
         turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
 
-        turtl.read().unwrap().db.query(|conn| -> TResult<String> {
+        turtl.read().unwrap().db.run(|conn| -> TResult<String> {
             try!(conn.execute("CREATE TABLE dragons (id integer primary key, name varchar(255))", &[]));
             try!(conn.execute("INSERT INTO dragons (name) VALUES ($1)", &[&String::from("Kofi")]));
             let mut res = try!(conn.prepare("SELECT id, name FROM dragons"));

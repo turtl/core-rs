@@ -27,7 +27,7 @@ lazy_static!{
 /// Stop the storage thread loop
 pub fn stop(storage: &Storage) {
     (*RUN).set(false);
-    storage.query(|_| -> TResult<()> {
+    storage.run(|_| -> TResult<()> {
         Ok(())
     });
 }
@@ -71,7 +71,7 @@ impl Storage {
     }
 
     /// Run a query
-    pub fn query<F, T>(&self, run: F) -> TFutureResult<T>
+    pub fn run<F, T>(&self, run: F) -> TFutureResult<T>
         where T: OpConverter + Send + 'static,
               F: FnOnce(Arc<Connection>) -> TResult<T> + Sync + Send + 'static
     {
