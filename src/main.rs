@@ -1,23 +1,25 @@
+extern crate clouseau;
+extern crate crossbeam;
+extern crate crypto as rust_crypto;
 extern crate fern;
-extern crate time;
+extern crate futures;
+extern crate futures_cpupool;
+extern crate gcrypt;
+extern crate harrrrsqlite;
+extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate nanomsg;
 #[macro_use]
 extern crate quick_error;
+extern crate rusqlite;
+extern crate rustc_serialize as serialize;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
-extern crate nanomsg;
-#[macro_use]
-extern crate lazy_static;
-extern crate rustc_serialize as serialize;
-extern crate gcrypt;
-extern crate crypto as rust_crypto;
-extern crate hyper;
-extern crate futures;
-extern crate futures_cpupool;
-extern crate crossbeam;
-extern crate rusqlite;
+extern crate time;
 
 #[macro_use]
 mod error;

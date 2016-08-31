@@ -6,6 +6,7 @@ use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
 use ::rusqlite::Connection;
+use ::harrrrsqlite::Adapter;
 use ::futures::{self, Future, Canceled};
 
 use ::util::opdata::{OpData, OpConverter};

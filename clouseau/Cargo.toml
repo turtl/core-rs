@@ -1,12 +1,11 @@
 [package]
-name = "herrderr"
+name = "clouseau"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
-regex = "0.1.73"
-lazy_static = "0.2.1"
 bloomfilter = "0.0.10"
+lazy_static = "0.2.1"
+regex = "0.1.73"
+stem = { git = "https://github.com/mrordinaire/rust-stem" }
 
-[dependencies.stem]
-git = "https://github.com/mrordinaire/rust-stem"
