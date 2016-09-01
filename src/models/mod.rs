@@ -4,18 +4,16 @@
 #[macro_use]
 pub mod protected;
 pub mod user;
-pub mod file;
-pub mod note;
 
 use ::error::{TError, TResult};
 use ::util::json;
 use ::util::event::Emitter;
 
 pub trait Model: Emitter {
-    /// Grab *all* data for this model (safe or not)
+    /// Grab *all* data for this model
     fn data(&self) -> &json::Value;
 
-    /// Grab *all* data for this model (safe or not) as mutable
+    /// Grab *all* data for this model as mutable
     fn data_mut(&mut self) -> &mut json::Value;
 
     /// Clear out the data in this Model

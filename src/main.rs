@@ -5,7 +5,6 @@ extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate gcrypt;
-extern crate harrrrsqlite;
 extern crate hyper;
 #[macro_use]
 extern crate lazy_static;

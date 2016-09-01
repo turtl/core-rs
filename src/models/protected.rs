@@ -57,6 +57,9 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab the private fields for this model
     fn private_fields(&self) -> Vec<&str>;
 
+    /// Grab the name of this model's table
+    fn table(&self) -> String;
+
     fn get_fields(&self, fields: &Vec<&str>) -> json::Value {
         let mut map: BTreeMap<String, json::Value> = BTreeMap::new();
         let data = self.data();
@@ -301,6 +304,10 @@ macro_rules! protected {
                 vec![
                     $( stringify!($priv_field), )*
                 ]
+            }
+
+            fn table(&self) -> String {
+                String::from(stringify!($name)).to_lowercase()
             }
         }
     }

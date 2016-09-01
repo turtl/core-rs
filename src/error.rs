@@ -101,7 +101,6 @@ from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
-from_err!(::harrrrsqlite::HarrError);
 
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
