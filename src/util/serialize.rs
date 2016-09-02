@@ -1,5 +1,4 @@
-/*
-//! This module provides helpers/macros for serializing (mainyl for structs).
+//! This module provides helpers/macros for serializing (mainly for structs).
 //! Note this is all more or less written as a replacement for the derive()
 //! attributes that no longer work in serde:
 //!
@@ -203,14 +202,14 @@ macro_rules! serializable {
             fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
                 where S: ::serde::ser::Serializer
             {
-                serializer.serialize_struct(stringify!($name), ::util::serialization::TurtlMapVisitor {
+                serializer.serialize_struct(stringify!($name), ::util::serialize::TurtlMapVisitor {
                     value: self,
                     state: 0
                 })
             }
         }
 
-        impl<'a> ::serde::ser::MapVisitor for ::util::serialization::TurtlMapVisitor<'a, $name> {
+        impl<'a> ::serde::ser::MapVisitor for ::util::serialize::TurtlMapVisitor<'a, $name> {
             fn visit<S>(&mut self, serializer: &mut S) -> Result<Option<()>, S::Error>
                 where S: ::serde::ser::Serializer
             {
@@ -225,11 +224,11 @@ macro_rules! serializable {
             {
                 static FIELDS: &'static [&'static str] = &[ $( stringify!($field) ),* ];
                 let val: Option<&$name> = None;
-                deserializer.deserialize_struct(stringify!($name), FIELDS, ::util::serialization::TurtlVisitor { value: val })
+                deserializer.deserialize_struct(stringify!($name), FIELDS, ::util::serialize::TurtlVisitor { value: val })
             }
         }
 
-        impl<'a> ::serde::de::Visitor for ::util::serialization::TurtlVisitor<'a, $name> {
+        impl<'a> ::serde::de::Visitor for ::util::serialize::TurtlVisitor<'a, $name> {
             type Value = $name;
 
             fn visit_map<V>(&mut self, mut visitor: V) -> Result<$name, V::Error>
@@ -248,7 +247,7 @@ macro_rules! serializable {
                     //
                     // macro_rules! shit {
                     //     ($name:ident) => {
-                    //         enum FieldsFor$shit {}
+                    //         enum FieldsFor${name} {}
                     //         ...
                     //     }
                     // }
@@ -370,5 +369,4 @@ mod tests {
         assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","type":"sneak","location":"here"},{"name":"sandra","type":"sneak","location":"the bed"}]}"#);
     }
 }
-*/
 
