@@ -1,3 +1,8 @@
+//! OpData wraps some standard data formats we like to pass around to make it
+//! easier for our async systems to convert from/to.
+//!
+//! TODO: rebuild using From
+
 use ::util::json::Value;
 use ::error::{TResult, TError};
 
