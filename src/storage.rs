@@ -3,17 +3,18 @@
 
 use ::std::thread;
 use ::std::sync::Arc;
+use ::libc::c_int;
 
 use ::crossbeam::sync::MsQueue;
 use ::futures::{self, Future, Canceled};
 use ::rusqlite::Connection;
-use ::rusqlite::types::ToSql;
+use ::rusqlite::types::{ToSql, sqlite3_stmt};
 
 use ::util::opdata::{OpData, OpConverter};
 use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::util::stopper::Stopper;
-use ::util::json::{JSONError, Value};
+use ::util::json::{self, JSONError, Value};
 use ::models::protected::Protected;
 use ::turtl::TurtlWrap;
 
@@ -66,6 +67,52 @@ pub struct Storage {
     tx_main: Pipeline,
 }
 
+/// This enum somewhat matches `json::Value` but we only create the fields we
+/// need to map to the ToSql trait.
+enum SqVal {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String)
+}
+
+// Create a conversion from Value -> SqVal
+impl From<Value> for SqVal {
+    fn from(val: Value) -> SqVal {
+        match val {
+            Value::Null => SqVal::Null,
+            Value::Bool(x) => SqVal::Bool(x),
+            Value::I64(x) => SqVal::Int(x),
+            Value::F64(x) => SqVal::Float(x),
+            Value::U64(x) => SqVal::Int(x as i64),
+            Value::String(x) => SqVal::String(x),
+            Value::Array(_) | Value::Object(_) => {
+                SqVal::String(match json::stringify(&val) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("Value -> ToSql::bind_parameter() -- error stringifying: {}", e);
+                        String::from("<error stringifying>")
+                    },
+                })
+            },
+        }
+    }
+}
+
+// ... and implement ToSql for SqVal
+impl ToSql for SqVal {
+    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
+        match *self {
+            SqVal::Null => (::rusqlite::types::Null).bind_parameter(stmt, col),
+            SqVal::Bool(ref x) => x.bind_parameter(stmt, col),
+            SqVal::Int(ref x) => x.bind_parameter(stmt, col),
+            SqVal::Float(ref x) => x.bind_parameter(stmt, col),
+            SqVal::String(ref x) => x.bind_parameter(stmt, col),
+        }
+    }
+}
+
 impl Storage {
     /// Make a Storage lol
     pub fn new(tx_main: Pipeline, location: &String) -> TResult<Storage> {
@@ -113,21 +160,22 @@ impl Storage {
             Some(id) => {
                 let mut qry = format!("UPDATE {} SET ", model.table());
                 let mut i = 1;
-                /*
-                let mut vals = Vec::with_capacity(field_names.len() + 1);
-                for field in &field_names {
-                    let val = match json::walk(&[field], model_data) {
+                let mut vals: Vec<SqVal> = Vec::with_capacity(field_names.len() + 1);
+                for field in field_names {
+                    let null = &Value::Null;
+                    let jval: &Value = match json::walk(&[field], &model_data) {
                         Ok(x) => x,
-                        Err(JSONError::NotFound(_)) => Value::Null,
+                        Err(JSONError::NotFound(_)) => null,
                         Err(x) => return futures::done(Err(toterr!(x))).boxed(),
                     };
+                    // clone the &Value to get a Value (ugh, is there a better
+                    // way?)
+                    vals.push(From::from(json::to_val(jval)));
                     qry = qry + &format!("{} = ${} ", field, i);
-                    vals.push(model.get(field));
                     i += 1;
                 }
                 qry = qry + &format!("WHERE id = ${}", i);
-                */
-
+                vals.push(SqVal::String(id));
                 qry
             },
             None => {
