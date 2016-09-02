@@ -8,7 +8,6 @@ extern crate gcrypt;
 extern crate hyper;
 #[macro_use]
 extern crate lazy_static;
-extern crate libc;
 #[macro_use]
 extern crate log;
 extern crate nanomsg;
