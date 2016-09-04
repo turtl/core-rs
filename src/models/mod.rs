@@ -88,10 +88,18 @@ pub trait Model2: Emitter + Serialize + Deserialize {
         where ModelDataRef<'a>: From<Option<&'a T>>,
               Option<&'a T>: From<ModelDataRef<'a>>;
 
-    /// Set a value into a field in this modle by field name
-    fn set<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
+    /// Set an Option value into a field in this model by field name
+    fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
         where ModelData: From<Option<T>>,
               Option<T>: From<ModelData> + ::util::json::Serialize;
+
+    /// Set a value into a field in this model by field name
+    fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
+        where ModelData: From<Option<T>>,
+              Option<T>: From<ModelData> + ::util::json::Serialize
+    {
+        self.set_raw(field, Some(val))
+    }
 
     /// Get this model's ID
     fn id<'a, T>(&'a self) -> Option<&'a T>
@@ -165,7 +173,7 @@ macro_rules! model {
                 None
             }
 
-            fn set<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
+            fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
                 where ModelData: From<Option<T>>,
                       Option<T>: From<ModelData> + ::util::json::Serialize
             {
@@ -337,15 +345,15 @@ mod tests {
         assert_eq!(rabbit.get::<String>("name"), None);
         assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him"), None);
 
-        rabbit.set("name", Some(String::from("Shredder"))).unwrap();
-        rabbit.set("chews_on_things_that_dont_belong_to_him", Some(true)).unwrap();
+        rabbit.set("name", String::from("Shredder")).unwrap();
+        rabbit.set_raw("chews_on_things_that_dont_belong_to_him", Some(true)).unwrap();
 
         assert_eq!(rabbit.name, Some(String::from("Shredder")));
         assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, Some(true));
         assert_eq!(rabbit.get::<String>("name"), Some(&String::from("Shredder")));
         assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him"), Some(&true));
 
-        match rabbit.set("rhymes_with_heinous", Some(69i64)) {
+        match rabbit.set("rhymes_with_heinous", 69i64) {
             Ok(_) => panic!("whoa, whoa, whoa. set a non-existent field"),
             Err(_) => {},
         }
@@ -356,7 +364,7 @@ mod tests {
     #[test]
     fn get_id() {
         let mut rabbit = Rabbit::new();
-        rabbit.set("id", Some(String::from("696969"))).unwrap();
+        rabbit.set("id", String::from("696969")).unwrap();
         assert_eq!(rabbit.id::<String>().unwrap(), "696969");
     }
 
