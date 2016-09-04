@@ -9,7 +9,7 @@ use ::serde::ser::Serialize;
 use ::serde::de::Deserialize;
 
 use ::error::{TError, TResult};
-use ::util::json;
+use ::util::json::{self, Value};
 use ::util::event::Emitter;
 
 /// A macro to make it easy to create From impls for ModelData
@@ -67,6 +67,19 @@ macro_rules! make_macro_data {
     }
 }
 
+impl From<Value> for ModelData {
+    fn from(val: Value) -> ModelData {
+        match val {
+            Value::Null => ModelData::Bool(None),
+            Value::Bool(x) => ModelData::Bool(Some(x)),
+            Value::I64(x) => ModelData::I64(Some(x)),
+            Value::U64(x) => ModelData::U64(Some(x)),
+            Value::F64(x) => ModelData::F64(Some(x)),
+            Value::String(x) => ModelData::String(Some(x)),
+            _ => ModelData::Bool(None),
+        }
+    }
+}
 
 make_macro_data! {
     Bool(bool),
@@ -81,7 +94,7 @@ make_macro_data! {
 /// their changes via eventing.
 pub trait Model2: Emitter + Serialize + Deserialize {
     /// Get the fields in this model
-    fn fields<'a>(&'a self) -> Vec<&'a str>;
+    fn fields(&self) -> Vec<&'static str>;
 
     /// Get a field's value out of this model by field name
     fn get<'a, T>(&'a self, field: &str) -> Option<&'a T>
@@ -108,6 +121,12 @@ pub trait Model2: Emitter + Serialize + Deserialize {
     {
         self.get("id")
     }
+
+    /// Clear out this model's data
+    fn clear(&mut self) -> TResult<()>;
+
+    /// Reset a model with a JSON Value *object*
+    fn reset(&mut self, data: Value) -> TResult<()>;
 }
 
 macro_rules! model {
@@ -145,7 +164,7 @@ macro_rules! model {
         }
 
         impl Model2 for $name {
-            fn fields<'a>(&'a self) -> Vec<&'a str> {
+            fn fields(&self) -> Vec<&'static str> {
                 vec![ $( stringify!($field) ),* ]
             }
 
@@ -191,6 +210,32 @@ macro_rules! model {
                     }
                 )*
                 Err(TError::MissingField(format!("Model::get() -- missing field `{}`", field)))
+            }
+
+            fn clear(&mut self) -> TResult<()> {
+                $(
+                    try!(self.set_raw::<$field_type>(stringify!($field), None));
+                )*
+                self.trigger("clear", &::util::json::Value::Null);
+                Ok(())
+            }
+
+            fn reset(&mut self, data: Value) -> TResult<()> {
+                let mut hash = match data {
+                    ::util::json::Value::Object(x) => x,
+                    _ => return Err(TError::BadValue(format!("Model::reset() -- data given was not a JSON object"))),
+                };
+
+                $({
+                    let field = String::from(stringify!($field));
+                    if hash.contains_key(&field) {
+                        let modeldata: ModelData = From::from(hash.remove(&field).unwrap());
+                        let val: Option<$field_type> = From::from(modeldata);
+                        try!(self.set_raw(stringify!($field), val));
+                    }
+                })*
+                self.trigger("reset", &::util::json::Value::Null);
+                Ok(())
             }
         }
     }
@@ -369,6 +414,25 @@ mod tests {
     }
 
     #[test]
+    fn reset_clear() {
+        let mut rabbit = Rabbit::new();
+
+        rabbit.set("name", String::from("hoppy")).unwrap();
+        rabbit.set("city", String::from("santa cruz")).unwrap();
+
+        rabbit.clear().unwrap();
+
+        assert_eq!(rabbit.name, None);
+        assert_eq!(rabbit.city, None);
+
+        let json: Value = json::parse(&String::from(r#"{"has_job":false,"name":"slappy","city":"duluth"}"#)).unwrap();
+        rabbit.reset(json).unwrap();
+
+        assert_eq!(rabbit.name, Some(String::from("slappy")));
+        assert_eq!(rabbit.city, Some(String::from("duluth")));
+    }
+
+    #[test]
     fn bind_trigger() {
         let data = Arc::new(RwLock::new(vec![0]));
         let rdata = data.clone();
@@ -400,7 +464,7 @@ mod tests {
 
     #[test]
     fn built_in_events() {
-        let data = Arc::new(RwLock::new(vec![0, 0]));
+        let data = Arc::new(RwLock::new(vec![0, 0, 0, 0]));
         let rdata = data.clone();
         {
             let data = data.clone();
@@ -414,24 +478,52 @@ mod tests {
             rabbit.bind("set:city", move |_| {
                 data2.write().unwrap()[1] += 1;
             }, "ciyt set");
+            let data3 = data.clone();
+            rabbit.bind("clear", move |_| {
+                data3.write().unwrap()[2] += 1;
+            }, "ciyt set");
+            let data4 = data.clone();
+            rabbit.bind("reset", move |_| {
+                data4.write().unwrap()[3] += 1;
+            }, "ciyt set");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             assert_eq!(rdata.read().unwrap()[1], 0);
+            assert_eq!(rdata.read().unwrap()[2], 0);
+            assert_eq!(rdata.read().unwrap()[3], 0);
             rabbit.set("name", String::from("bernard")).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 1);
             assert_eq!(rdata.read().unwrap()[1], 0);
+            assert_eq!(rdata.read().unwrap()[2], 0);
+            assert_eq!(rdata.read().unwrap()[3], 0);
             rabbit.set("name", String::from("gertrude")).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 2);
             assert_eq!(rdata.read().unwrap()[1], 0);
+            assert_eq!(rdata.read().unwrap()[2], 0);
+            assert_eq!(rdata.read().unwrap()[3], 0);
             rabbit.set("city", String::from("san franciscy")).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 2);
             assert_eq!(rdata.read().unwrap()[1], 1);
+            assert_eq!(rdata.read().unwrap()[2], 0);
+            assert_eq!(rdata.read().unwrap()[3], 0);
             rabbit.set("city", String::from("santa cruz")).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 2);
             assert_eq!(rdata.read().unwrap()[1], 2);
+            assert_eq!(rdata.read().unwrap()[2], 0);
+            assert_eq!(rdata.read().unwrap()[3], 0);
 
-            panic!("reset/clear");
+            rabbit.clear().unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 3);
+            assert_eq!(rdata.read().unwrap()[1], 3);
+            assert_eq!(rdata.read().unwrap()[2], 1);
+            assert_eq!(rdata.read().unwrap()[3], 0);
 
+            let json: Value = json::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
+            rabbit.reset(json).unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 4);
+            assert_eq!(rdata.read().unwrap()[1], 3);
+            assert_eq!(rdata.read().unwrap()[2], 1);
+            assert_eq!(rdata.read().unwrap()[3], 1);
         }
     }
 
