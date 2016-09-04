@@ -127,6 +127,11 @@ pub trait Model2: Emitter + Serialize + Deserialize {
 
     /// Reset a model with a JSON Value *object*
     fn reset(&mut self, data: Value) -> TResult<()>;
+
+    /// Turn this model into a JSON string
+    fn stringify(&self) -> TResult<String> {
+        json::stringify(self).map_err(|e| toterr!(e))
+    }
 }
 
 macro_rules! model {
@@ -181,7 +186,7 @@ macro_rules! model {
                     return From::from(val);
                 }
                 $(
-                    if field == stringify!($field) {
+                    if field == fix_type!(stringify!($field)) {
                         val = From::from(match self.$field {
                             Some(ref x) => Some(x),
                             None => None,
@@ -203,7 +208,7 @@ macro_rules! model {
                     return Ok(())
                 }
                 $(
-                    if field == stringify!($field) {
+                    if field == fix_type!(stringify!($field)) {
                         self.$field = From::from(data);
                         self.trigger(concat!("set:", stringify!($field)), &::util::json::Value::Null);
                         return Ok(())
@@ -214,7 +219,7 @@ macro_rules! model {
 
             fn clear(&mut self) -> TResult<()> {
                 $(
-                    try!(self.set_raw::<$field_type>(stringify!($field), None));
+                    try!(self.set_raw::<$field_type>(fix_type!(stringify!($field)), None));
                 )*
                 self.trigger("clear", &::util::json::Value::Null);
                 Ok(())
@@ -231,7 +236,7 @@ macro_rules! model {
                     if hash.contains_key(&field) {
                         let modeldata: ModelData = From::from(hash.remove(&field).unwrap());
                         let val: Option<$field_type> = From::from(modeldata);
-                        try!(self.set_raw(stringify!($field), val));
+                        try!(self.set_raw(fix_type!(stringify!($field)), val));
                     }
                 })*
                 self.trigger("reset", &::util::json::Value::Null);
@@ -377,6 +382,7 @@ mod tests {
         pub struct Rabbit {
             ()
             name: String,
+            type_: String,
             city: String,
             chews_on_things_that_dont_belong_to_him: bool,
         }
@@ -481,11 +487,11 @@ mod tests {
             let data3 = data.clone();
             rabbit.bind("clear", move |_| {
                 data3.write().unwrap()[2] += 1;
-            }, "ciyt set");
+            }, "clearrr");
             let data4 = data.clone();
             rabbit.bind("reset", move |_| {
                 data4.write().unwrap()[3] += 1;
-            }, "ciyt set");
+            }, "resetttttlol");
 
             assert_eq!(rdata.read().unwrap()[0], 0);
             assert_eq!(rdata.read().unwrap()[1], 0);
@@ -527,6 +533,17 @@ mod tests {
         }
     }
 
+    #[test]
+    fn stringify() {
+        let mut rabbit = Rabbit::new();
+        assert_eq!(rabbit.stringify().unwrap(), "{\"id\":null,\"name\":null,\"type\":null,\"city\":null,\"chews_on_things_that_dont_belong_to_him\":null}");
+
+        rabbit.set("id", String::from("12345")).unwrap();
+        rabbit.type_ = Some(String::from("hopper"));
+        rabbit.city = Some(String::from("sc"));
+
+        assert_eq!(rabbit.stringify().unwrap(), "{\"id\":\"12345\",\"name\":null,\"type\":\"hopper\",\"city\":\"sc\",\"chews_on_things_that_dont_belong_to_him\":null}");
+    }
 
 
     // ----------- model v1 -----------------
