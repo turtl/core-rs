@@ -368,7 +368,6 @@ mod tests {
         assert_eq!(rabbit.id::<String>().unwrap(), "696969");
     }
 
-    /*
     #[test]
     fn bind_trigger() {
         let data = Arc::new(RwLock::new(vec![0]));
@@ -435,8 +434,6 @@ mod tests {
 
         }
     }
-    */
-
 
 
 
