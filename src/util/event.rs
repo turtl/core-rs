@@ -29,10 +29,13 @@ pub struct Callback {
     name: String,
 }
 
+/// An alias to make returning the bindings object easier
+pub type Bindings = HashMap<String, Vec<Callback>>;
+
 /// The Emitter class holds a set of event bindings. It implements the `Emitter`
 /// trait and can be used as a standalone event emitter object.
 pub struct EventEmitter {
-    _bindings: HashMap<String, Vec<Callback>>,
+    _bindings: Bindings,
 }
 
 /// Defines an interface for an event emitter, including binding/triggering
@@ -40,7 +43,7 @@ pub struct EventEmitter {
 /// to return a mutable reference to a HashMap of bindings.
 pub trait Emitter {
     /// Grab a mutable ref to this emitter's bindings
-    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback>>;
+    fn bindings(&mut self) -> &mut Bindings;
 
     /// Binds a callback to an event name.
     fn do_bind(&mut self, name: &str, cb: Callback) {
@@ -137,8 +140,14 @@ impl EventEmitter {
 }
 
 impl Emitter for EventEmitter {
-    fn bindings(&mut self) -> &mut HashMap<String, Vec<Callback>> {
+    fn bindings(&mut self) -> &mut Bindings {
         &mut self._bindings
+    }
+}
+
+impl Default for EventEmitter {
+    fn default() -> EventEmitter {
+        EventEmitter::new()
     }
 }
 
