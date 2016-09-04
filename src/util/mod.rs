@@ -8,6 +8,7 @@ pub mod json;
 pub mod event;
 pub mod thredder;
 pub mod stopper;
+#[macro_use]
 pub mod serialize;
 
 pub fn sleep(millis: u64) {
