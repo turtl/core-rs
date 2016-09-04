@@ -5,9 +5,180 @@
 pub mod protected;
 pub mod user;
 
+use ::serde::ser::Serialize;
+use ::serde::de::Deserialize;
+
 use ::error::{TError, TResult};
 use ::util::json;
 use ::util::event::Emitter;
+
+/// A macro that makes it easier to define a getter/setter intermediary datatype
+/// (ModelData[Ref]) for our Model trait
+macro_rules! make_macro_data {
+    (
+        $( $name:ident($datatype:ty), )*
+    ) => {
+        pub enum ModelData {
+            $( $name($datatype), )*
+        }
+
+        pub enum ModelDataRef<'a> {
+            $( $name(&'a $datatype), )*
+        }
+    }
+}
+
+make_macro_data! {
+    Bool(bool),
+    I64(i64),
+    U64(u64),
+    F64(f64),
+    String(String),
+    Bin(Vec<u8>),
+}
+
+/// A macro to make it easy to create From impls for ModelData
+macro_rules! make_model_from {
+    ($field:ident, $t:ty) => (
+        impl<'a> From<&'a $t> for ModelDataRef<'a> {
+            fn from(val: &'a $t) -> ModelDataRef<'a> {
+                ModelDataRef::$field(val)
+            }
+        }
+
+        impl<'a> From<ModelDataRef<'a>> for TResult<&'a $t> {
+            fn from(val: ModelDataRef<'a>) -> TResult<&'a $t> {
+                match val {
+                    ModelDataRef::$field(x) => Ok(x),
+                    _ => Err(TError::BadValue(format!("ModelDataRef::from({}) -- error converting to raw type", stringify!($t)))),
+                }
+            }
+        }
+
+        impl From<$t> for ModelData {
+            fn from(val: $t) -> ModelData {
+                ModelData::$field(val)
+            }
+        }
+
+        impl From<ModelData> for $t {
+            fn from(val: ModelData) -> $t {
+                match val {
+                    ModelData::$field(x) => x,
+                    // should NEVER get here, right?
+                    _ => panic!("ModelData failure"),
+                }
+            }
+        }
+    )
+}
+
+make_model_from!(Bool, bool);
+make_model_from!(I64, i64);
+make_model_from!(U64, u64);
+make_model_from!(F64, f64);
+make_model_from!(String, String);
+make_model_from!(Bin, Vec<u8>);
+
+/// The model trait defines an interface for (de)serializable objects that track
+/// their changes via eventing.
+pub trait Model2: Emitter + Serialize + Deserialize {
+    /// Get a field's value out of this model by field name
+    fn get<'a, T>(&'a self, field: &str) -> TResult<&'a T>
+        where ModelDataRef<'a>: From<&'a T>,
+              TResult<&'a T>: From<ModelDataRef<'a>>;
+
+    /// Set a value into a field in this modle by field name
+    fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
+        where ModelData: From<T>,
+              T: From<ModelData> + ::util::json::Serialize;
+
+    /// Get this model's ID
+    fn id<'a, T>(&'a self) -> TResult<&'a T>
+        where ModelDataRef<'a>: From<&'a T>,
+              TResult<&'a T>: From<ModelDataRef<'a>>
+    {
+        self.get("id")
+    }
+}
+
+macro_rules! model {
+    (
+        $(#[$struct_meta:meta])*
+        pub struct $name:ident {
+            ($( $unserialized:ident: $unserialized_type:ty ),*)
+            $( $field:ident: $field_type:ty, )*
+        }
+    ) => {
+        serializable! {
+            $(#[$struct_meta])*
+            pub struct $name {
+                ( $( $unserialized: $unserialized_type, )*
+                  _emitter: ::util::event::EventEmitter )
+                id: String,
+                $( $field: $field_type, )*
+            }
+        }
+
+        impl $name {
+            fn new() -> $name {
+                $name {
+                    id: Default::default(),
+                    $(
+                        $field: Default::default(),
+                    )*
+                    _emitter: ::util::event::EventEmitter::new(),
+                }
+            }
+        }
+
+        impl Emitter for $name {
+            fn bindings(&mut self) -> &mut ::util::event::Bindings {
+                self._emitter.bindings()
+            }
+        }
+
+        impl Model2 for $name {
+            fn get<'a, T>(&'a self, field: &str) -> TResult<&'a T>
+                where ModelDataRef<'a>: From<&'a T>,
+                      TResult<&'a T>: From<ModelDataRef<'a>>
+            {
+                let val: ModelDataRef;
+                if field == "id" {
+                    val = From::from(&self.id);
+                    return From::from(val);
+                }
+                $(
+                    if field == stringify!($field) {
+                        val = From::from(&self.$field);
+                        return From::from(val);
+                    }
+                )*
+                Err(TError::MissingField(format!("Model::get() -- missing field `{}`", field)))
+            }
+
+            fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
+                where ModelData: From<T>,
+                      T: From<ModelData> + ::util::json::Serialize
+            {
+                let data: ModelData = From::from(val);
+                if field == "id" {
+                    self.id = From::from(data);
+                    self.trigger("set:id", &::util::json::Value::Null);
+                    return Ok(())
+                }
+                $(
+                    if field == stringify!($field) {
+                        self.$field = From::from(data);
+                        self.trigger(concat!("set:", stringify!($field)), &::util::json::Value::Null);
+                        return Ok(())
+                    }
+                )*
+                Err(TError::MissingField(format!("Model::get() -- missing field `{}`", field)))
+            }
+        }
+    }
+}
 
 pub trait Model: Emitter {
     /// Grab *all* data for this model
@@ -137,31 +308,108 @@ mod tests {
     use super::*;
     use ::util::json::{self, Value};
     use ::std::collections::HashMap;
-    use ::error::{TError};
+    use ::error::{TResult, TError};
     use ::util::event::{self, Emitter};
     use std::sync::{Arc, RwLock};
 
-    struct Rabbit {
+    model! {
+        pub struct Rabbit {
+            ()
+            name: String,
+            city: String,
+            chews_on_things_that_dont_belong_to_him: bool,
+        }
+    }
+
+    #[test]
+    fn getter_setter() {
+        let mut rabbit = Rabbit::new();
+        assert_eq!(rabbit.name, "");
+        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, false);
+        assert_eq!(rabbit.get::<String>("name").unwrap(), "");
+        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him").unwrap(), &false);
+
+        rabbit.set("name", String::from("Shredder")).unwrap();
+        rabbit.set("chews_on_things_that_dont_belong_to_him", true).unwrap();
+
+        assert_eq!(rabbit.name, "Shredder");
+        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, true);
+        assert_eq!(rabbit.get::<String>("name").unwrap(), "Shredder");
+        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him").unwrap(), &true);
+
+        match rabbit.set("rhymes_with_heinous", 69i64) {
+            Ok(_) => panic!("whoa, whoa, whoa. set a non-existent field"),
+            Err(_) => {},
+        }
+    }
+
+    #[test]
+    fn get_id() {
+        let mut rabbit = Rabbit::new();
+        rabbit.set("id", String::from("696969")).unwrap();
+        assert_eq!(rabbit.id::<String>().unwrap(), "696969");
+    }
+
+    #[test]
+    fn bind_trigger() {
+        let data = Arc::new(RwLock::new(vec![0]));
+        let rdata = data.clone();
+        {
+            let data = data.clone();
+            let cb = move |_: &Value| {
+                data.write().unwrap()[0] += 1;
+            };
+            let mut rabbit = Bunny::new();
+            rabbit.bind("hop", cb, "rabbit:hop");
+
+            let jval = json::obj();
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            rabbit.trigger("hellp", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 1);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+
+            rabbit.unbind("hop", "rabbit:hop");
+
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+            rabbit.trigger("hop", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 2);
+        }
+    }
+
+    #[test]
+    fn built_in_events() {
+        panic!("build some event tests!");
+    }
+
+    // ----------- model v1 -----------------
+
+
+
+    struct Bunny {
         _data: Value,
         emitter: ::util::event::EventEmitter,
     }
 
-    impl Rabbit {
-        fn new() -> Rabbit {
-            Rabbit {
+    impl Bunny {
+        fn new() -> Bunny {
+            Bunny {
                 _data: json::obj(),
                 emitter: event::EventEmitter::new(),
             }
         }
     }
 
-    impl Emitter for Rabbit {
-        fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback>> {
+    impl Emitter for Bunny {
+        fn bindings(&mut self) -> &mut ::util::event::Bindings {
             self.emitter.bindings()
         }
     }
 
-    impl Model for Rabbit {
+    impl Model for Bunny {
         fn data(&self) -> &Value {
             &self._data
         }
@@ -186,8 +434,8 @@ mod tests {
     }
 
     #[test]
-    fn get_set() {
-        let mut rabbit = Rabbit::new();
+    fn _get_set() {
+        let mut rabbit = Bunny::new();
         assert_eq!(rabbit.get::<Option<String>>("name"), None);
         rabbit.set("name", &String::from("Moussier")).unwrap();
         rabbit.set("phrase", &String::from("Startups HATE him!!!!1")).unwrap();
@@ -202,15 +450,15 @@ mod tests {
     }
 
     #[test]
-    fn ids() {
-        let mut rabbit = Rabbit::new();
+    fn _ids() {
+        let mut rabbit = Bunny::new();
         rabbit.set("id", &String::from("696969")).unwrap();
         assert_eq!(rabbit.id::<String>().unwrap(), "696969");
     }
 
     #[test]
-    fn clears() {
-        let mut rabbit = Rabbit::new();
+    fn _clears() {
+        let mut rabbit = Bunny::new();
         rabbit.set("id", &String::from("omglol")).unwrap();
         rabbit.set("name", &String::from("hoppy")).unwrap();
         assert_eq!(rabbit.id::<String>().unwrap(), "omglol");
@@ -221,9 +469,9 @@ mod tests {
     }
 
     #[test]
-    fn resets() {
-        let mut rabbit1 = Rabbit::new();
-        let mut rabbit2 = Rabbit::new();
+    fn _resets() {
+        let mut rabbit1 = Bunny::new();
+        let mut rabbit2 = Bunny::new();
         rabbit1.set("id", &String::from("omglol")).unwrap();
         rabbit1.set("name", &String::from("hoppy")).unwrap();
         rabbit2.reset(rabbit1.data().clone()).unwrap();
@@ -232,8 +480,8 @@ mod tests {
     }
 
     #[test]
-    fn set_multi() {
-        let mut rabbit = Rabbit::new();
+    fn _set_multi() {
+        let mut rabbit = Bunny::new();
         rabbit.set("name", &String::from("flirty")).unwrap();
         assert_eq!(rabbit.get::<String>("name").unwrap(), "flirty");
         assert_eq!(rabbit.get::<i64>("age"), None);
@@ -244,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn bind_trigger() {
+    fn _bind_trigger() {
         let data = Arc::new(RwLock::new(vec![0]));
         let rdata = data.clone();
         {
@@ -252,7 +500,7 @@ mod tests {
             let cb = move |_: &Value| {
                 data.write().unwrap()[0] += 1;
             };
-            let mut rabbit = Rabbit::new();
+            let mut rabbit = Bunny::new();
             rabbit.bind("hop", cb, "rabbit:hop");
 
             let jval = json::obj();
@@ -274,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn built_in_events() {
+    fn _built_in_events() {
         let map: HashMap<String, i64> = HashMap::new();
         let data = Arc::new(RwLock::new(map));
         let rdata = data.clone();
@@ -282,7 +530,7 @@ mod tests {
             let data1 = data.clone();
             let data2 = data.clone();
 
-            let mut rabbit = Rabbit::new();
+            let mut rabbit = Bunny::new();
             rabbit.bind("set:name", move |val: &Value| {
                 let string = match *val {
                     json::Value::String(ref x) => x.clone(),
