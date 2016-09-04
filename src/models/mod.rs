@@ -12,6 +12,41 @@ use ::error::{TError, TResult};
 use ::util::json;
 use ::util::event::Emitter;
 
+/// A macro to make it easy to create From impls for ModelData
+macro_rules! make_model_from {
+    ($field:ident, $t:ty) => (
+        impl<'a> From<Option<&'a $t>> for ModelDataRef<'a> {
+            fn from(val: Option<&'a $t>) -> ModelDataRef<'a> {
+                ModelDataRef::$field(val)
+            }
+        }
+
+        impl<'a> From<ModelDataRef<'a>> for Option<&'a $t> {
+            fn from(val: ModelDataRef<'a>) -> Option<&'a $t> {
+                match val {
+                    ModelDataRef::$field(x) => x,
+                    _ => None,
+                }
+            }
+        }
+
+        impl From<Option<$t>> for ModelData {
+            fn from(val: Option<$t>) -> ModelData {
+                ModelData::$field(val)
+            }
+        }
+
+        impl From<ModelData> for Option<$t> {
+            fn from(val: ModelData) -> Option<$t> {
+                match val {
+                    ModelData::$field(x) => x,
+                    _ => None,
+                }
+            }
+        }
+    )
+}
+
 /// A macro that makes it easier to define a getter/setter intermediary datatype
 /// (ModelData[Ref]) for our Model trait
 macro_rules! make_macro_data {
@@ -19,14 +54,19 @@ macro_rules! make_macro_data {
         $( $name:ident($datatype:ty), )*
     ) => {
         pub enum ModelData {
-            $( $name($datatype), )*
+            $( $name(Option<$datatype>), )*
         }
 
         pub enum ModelDataRef<'a> {
-            $( $name(&'a $datatype), )*
+            $( $name(Option<&'a $datatype>), )*
         }
+
+        $(
+            make_model_from!($name, $datatype);
+        )*
     }
 }
+
 
 make_macro_data! {
     Bool(bool),
@@ -37,66 +77,26 @@ make_macro_data! {
     Bin(Vec<u8>),
 }
 
-/// A macro to make it easy to create From impls for ModelData
-macro_rules! make_model_from {
-    ($field:ident, $t:ty) => (
-        impl<'a> From<&'a $t> for ModelDataRef<'a> {
-            fn from(val: &'a $t) -> ModelDataRef<'a> {
-                ModelDataRef::$field(val)
-            }
-        }
-
-        impl<'a> From<ModelDataRef<'a>> for TResult<&'a $t> {
-            fn from(val: ModelDataRef<'a>) -> TResult<&'a $t> {
-                match val {
-                    ModelDataRef::$field(x) => Ok(x),
-                    _ => Err(TError::BadValue(format!("ModelDataRef::from({}) -- error converting to raw type", stringify!($t)))),
-                }
-            }
-        }
-
-        impl From<$t> for ModelData {
-            fn from(val: $t) -> ModelData {
-                ModelData::$field(val)
-            }
-        }
-
-        impl From<ModelData> for $t {
-            fn from(val: ModelData) -> $t {
-                match val {
-                    ModelData::$field(x) => x,
-                    // should NEVER get here, right?
-                    _ => panic!("ModelData failure"),
-                }
-            }
-        }
-    )
-}
-
-make_model_from!(Bool, bool);
-make_model_from!(I64, i64);
-make_model_from!(U64, u64);
-make_model_from!(F64, f64);
-make_model_from!(String, String);
-make_model_from!(Bin, Vec<u8>);
-
 /// The model trait defines an interface for (de)serializable objects that track
 /// their changes via eventing.
 pub trait Model2: Emitter + Serialize + Deserialize {
+    /// Get the fields in this model
+    fn fields<'a>(&'a self) -> Vec<&'a str>;
+
     /// Get a field's value out of this model by field name
-    fn get<'a, T>(&'a self, field: &str) -> TResult<&'a T>
-        where ModelDataRef<'a>: From<&'a T>,
-              TResult<&'a T>: From<ModelDataRef<'a>>;
+    fn get<'a, T>(&'a self, field: &str) -> Option<&'a T>
+        where ModelDataRef<'a>: From<Option<&'a T>>,
+              Option<&'a T>: From<ModelDataRef<'a>>;
 
     /// Set a value into a field in this modle by field name
-    fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
-        where ModelData: From<T>,
-              T: From<ModelData> + ::util::json::Serialize;
+    fn set<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
+        where ModelData: From<Option<T>>,
+              Option<T>: From<ModelData> + ::util::json::Serialize;
 
     /// Get this model's ID
-    fn id<'a, T>(&'a self) -> TResult<&'a T>
-        where ModelDataRef<'a>: From<&'a T>,
-              TResult<&'a T>: From<ModelDataRef<'a>>
+    fn id<'a, T>(&'a self) -> Option<&'a T>
+        where ModelDataRef<'a>: From<Option<&'a T>>,
+              Option<&'a T>: From<ModelDataRef<'a>>
     {
         self.get("id")
     }
@@ -115,18 +115,16 @@ macro_rules! model {
             pub struct $name {
                 ( $( $unserialized: $unserialized_type, )*
                   _emitter: ::util::event::EventEmitter )
-                id: String,
-                $( $field: $field_type, )*
+                id: Option<String>,
+                $( $field: Option<$field_type>, )*
             }
         }
 
         impl $name {
             fn new() -> $name {
                 $name {
-                    id: Default::default(),
-                    $(
-                        $field: Default::default(),
-                    )*
+                    id: None,
+                    $( $field: None, )*
                     _emitter: ::util::event::EventEmitter::new(),
                 }
             }
@@ -139,27 +137,37 @@ macro_rules! model {
         }
 
         impl Model2 for $name {
-            fn get<'a, T>(&'a self, field: &str) -> TResult<&'a T>
-                where ModelDataRef<'a>: From<&'a T>,
-                      TResult<&'a T>: From<ModelDataRef<'a>>
+            fn fields<'a>(&'a self) -> Vec<&'a str> {
+                vec![ $( stringify!($field) ),* ]
+            }
+
+            fn get<'a, T>(&'a self, field: &str) -> Option<&'a T>
+                where ModelDataRef<'a>: From<Option<&'a T>>,
+                      Option<&'a T>: From<ModelDataRef<'a>>
             {
                 let val: ModelDataRef;
                 if field == "id" {
-                    val = From::from(&self.id);
+                    val = From::from(match self.id {
+                        Some(ref x) => Some(x),
+                        None => None,
+                    });
                     return From::from(val);
                 }
                 $(
                     if field == stringify!($field) {
-                        val = From::from(&self.$field);
+                        val = From::from(match self.$field {
+                            Some(ref x) => Some(x),
+                            None => None,
+                        });
                         return From::from(val);
                     }
                 )*
-                Err(TError::MissingField(format!("Model::get() -- missing field `{}`", field)))
+                None
             }
 
-            fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
-                where ModelData: From<T>,
-                      T: From<ModelData> + ::util::json::Serialize
+            fn set<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
+                where ModelData: From<Option<T>>,
+                      Option<T>: From<ModelData> + ::util::json::Serialize
             {
                 let data: ModelData = From::from(val);
                 if field == "id" {
@@ -324,32 +332,35 @@ mod tests {
     #[test]
     fn getter_setter() {
         let mut rabbit = Rabbit::new();
-        assert_eq!(rabbit.name, "");
-        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, false);
-        assert_eq!(rabbit.get::<String>("name").unwrap(), "");
-        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him").unwrap(), &false);
+        assert_eq!(rabbit.name, None);
+        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, None);
+        assert_eq!(rabbit.get::<String>("name"), None);
+        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him"), None);
 
-        rabbit.set("name", String::from("Shredder")).unwrap();
-        rabbit.set("chews_on_things_that_dont_belong_to_him", true).unwrap();
+        rabbit.set("name", Some(String::from("Shredder"))).unwrap();
+        rabbit.set("chews_on_things_that_dont_belong_to_him", Some(true)).unwrap();
 
-        assert_eq!(rabbit.name, "Shredder");
-        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, true);
-        assert_eq!(rabbit.get::<String>("name").unwrap(), "Shredder");
-        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him").unwrap(), &true);
+        assert_eq!(rabbit.name, Some(String::from("Shredder")));
+        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, Some(true));
+        assert_eq!(rabbit.get::<String>("name"), Some(&String::from("Shredder")));
+        assert_eq!(rabbit.get::<bool>("chews_on_things_that_dont_belong_to_him"), Some(&true));
 
-        match rabbit.set("rhymes_with_heinous", 69i64) {
+        match rabbit.set("rhymes_with_heinous", Some(69i64)) {
             Ok(_) => panic!("whoa, whoa, whoa. set a non-existent field"),
             Err(_) => {},
         }
+
+        assert_eq!(rabbit.get::<f64>("get_a_job"), None);
     }
 
     #[test]
     fn get_id() {
         let mut rabbit = Rabbit::new();
-        rabbit.set("id", String::from("696969")).unwrap();
+        rabbit.set("id", Some(String::from("696969"))).unwrap();
         assert_eq!(rabbit.id::<String>().unwrap(), "696969");
     }
 
+    /*
     #[test]
     fn bind_trigger() {
         let data = Arc::new(RwLock::new(vec![0]));
@@ -359,7 +370,7 @@ mod tests {
             let cb = move |_: &Value| {
                 data.write().unwrap()[0] += 1;
             };
-            let mut rabbit = Bunny::new();
+            let mut rabbit = Rabbit::new();
             rabbit.bind("hop", cb, "rabbit:hop");
 
             let jval = json::obj();
@@ -382,8 +393,44 @@ mod tests {
 
     #[test]
     fn built_in_events() {
-        panic!("build some event tests!");
+        let data = Arc::new(RwLock::new(vec![0, 0]));
+        let rdata = data.clone();
+        {
+            let data = data.clone();
+            let mut rabbit = Rabbit::new();
+
+            let data1 = data.clone();
+            rabbit.bind("set:name", move |_| {
+                data1.write().unwrap()[0] += 1;
+            }, "naem set");
+            let data2 = data.clone();
+            rabbit.bind("set:city", move |_| {
+                data2.write().unwrap()[1] += 1;
+            }, "ciyt set");
+
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(rdata.read().unwrap()[1], 0);
+            rabbit.set("name", String::from("bernard")).unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(rdata.read().unwrap()[1], 0);
+            rabbit.set("name", String::from("gertrude")).unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(rdata.read().unwrap()[1], 0);
+            rabbit.set("city", String::from("san franciscy")).unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(rdata.read().unwrap()[1], 1);
+            rabbit.set("city", String::from("santa cruz")).unwrap();
+            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(rdata.read().unwrap()[1], 2);
+
+            panic!("reset/clear");
+
+        }
     }
+    */
+
+
+
 
     // ----------- model v1 -----------------
 
