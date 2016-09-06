@@ -21,9 +21,6 @@ protected!{
     }
 }
 
-impl User {
-}
-
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Vec<u8>> {
     let key: Vec<u8> = match version {
@@ -104,6 +101,9 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
     Ok(())
 }
 
+/// A function that tries authenticating a username/password against various
+/// versions, starting from latest to earliest until it runs out of versions or
+/// we get a match.
 fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) -> TFutureResult<()> {
     debug!("user::try_auth() -- trying auth version {}", &version);
     let turtl1 = turtl.clone();

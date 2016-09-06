@@ -44,7 +44,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             User::login(turtl.clone(), &username, &password)
                 .map(move |_| {
                     let turtl_inner = turtl1.read().unwrap();
-                    match turtl_inner.remote_send(String::from(r#"{"e":"login"}"#)) {
+                    match turtl_inner.remote_send(String::from(r#"{"e":"login-success"}"#)) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }

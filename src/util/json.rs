@@ -208,11 +208,6 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
     }
 }
 
-/// Returns a blank Value hash/object type
-pub fn obj() -> Value {
-    Value::Object(::std::collections::BTreeMap::new())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

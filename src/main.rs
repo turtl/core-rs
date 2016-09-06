@@ -91,7 +91,7 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
         }
 
         // run any post-init setup turtl needs
-        turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtl.it/v2"));
+        turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtlapp.com/v2"));
 
         turtl.read().unwrap().db.run(|conn| -> TResult<String> {
             try!(conn.execute("CREATE TABLE dragons (id integer primary key, name varchar(255))", &[]));
