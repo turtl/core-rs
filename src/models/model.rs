@@ -1,5 +1,3 @@
-use ::std::collections::HashMap;
-
 use ::serde::ser::Serialize;
 use ::serde::de::Deserialize;
 
@@ -83,31 +81,29 @@ macro_rules! make_macro_data {
 
 impl From<Value> for ModelData {
     fn from(val: Value) -> ModelData {
+        let blankval = ModelData::Bool(None);
         match val {
-            Value::Null => ModelData::Bool(None),
+            Value::Null => blankval,
             Value::Bool(x) => ModelData::Bool(Some(x)),
             Value::I64(x) => ModelData::I64(Some(x)),
             Value::U64(x) => ModelData::U64(Some(x)),
             Value::F64(x) => ModelData::F64(Some(x)),
             Value::String(x) => ModelData::String(Some(x)),
-            /*
-            Value::Object(mut x) => {
-                let keys = x.keys();
-                let mut map: HashMap<String, ModelData> = HashMap::new();
-                for key in x.keys() {
-                    map.insert(String::from(&key[..]), From::from(x.remove(key)));
-                }
-                ModelData::Object(map)
+            Value::Array(_) => {
+                // this one's weird. we're going to just assume that our array
+                // is a Vec<String>. we *could* do Vec<u8> except we're never
+                // going to pass binary data via a JSON array (we use base64) so
+                // the only other Vec type we have is Vec<String> (like tags).
+                let arr: Vec<String> = match json::from_val(val) {
+                    Ok(x) => x,
+                    Err(_) => {
+                        warn!("ModelData::from(Value) -- problem decoding Array type (couldn't find matching type)");
+                        return blankval;
+                    },
+                };
+                ModelData::List(Some(arr))
             },
-            Value::Array(x) => {
-                let mut array: Vec<ModelData> = Vec::with_capacity(x.len());
-                for val in x {
-                    array.push(From::from(val));
-                }
-                ModelData::Array(array)
-            },
-            */
-            _ => ModelData::Bool(None),
+            _ => blankval,
         }
     }
 }
@@ -120,8 +116,6 @@ make_macro_data! {
     String(String),
     Bin(Vec<u8>),
     List(Vec<String>),
-    //Object(HashMap<String, ModelData>),
-    //Array(Vec<ModelData>),
 }
 
 /// The model trait defines an interface for (de)serializable objects that track
@@ -192,6 +186,7 @@ macro_rules! model {
             $( $field:ident: $field_type:ty, )*
         }
     ) => {
+        #[allow(dead_code)]
         use ::util::event::Emitter as PEmitter;
 
         serializable! {
@@ -320,6 +315,12 @@ macro_rules! model {
                 Ok(())
             }
         }
+
+        impl ::std::default::Default for $name {
+            fn default() -> Self {
+                $name::new()
+            }
+        }
     }
 }
 
@@ -327,9 +328,6 @@ macro_rules! model {
 mod tests {
     use super::*;
     use ::util::json::{self, Value};
-    use ::std::collections::HashMap;
-    use ::error::{TResult, TError};
-    use ::util::event::{self, Emitter};
     use std::sync::{Arc, RwLock};
 
     model! {
@@ -483,14 +481,14 @@ mod tests {
             assert_eq!(rdata.read().unwrap()[0], 4);
             assert_eq!(rdata.read().unwrap()[1], 3);
             assert_eq!(rdata.read().unwrap()[2], 1);
-            assert_eq!(rdata.read().unwrap()[3], 1);
+            assert_eq!(rdata.read().unwrap()[3], 0);
 
             let json: Value = json::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
             rabbit.reset(json).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 6);
             assert_eq!(rdata.read().unwrap()[1], 4);
             assert_eq!(rdata.read().unwrap()[2], 2);
-            assert_eq!(rdata.read().unwrap()[3], 2);
+            assert_eq!(rdata.read().unwrap()[3], 1);
         }
     }
 

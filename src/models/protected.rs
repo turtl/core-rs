@@ -339,9 +339,7 @@ mod tests {
     #[test]
     fn encrypts_decrypts() {
         let json = String::from(r#"{"size":69,"name":"barky","type":"canadian","tags":["flappy","noisy"]}"#);
-        let value = json::parse(&json).unwrap();
-        let mut dog = Dog::new();
-        dog.reset(value).unwrap();
+        let mut dog: Dog = json::parse(&json).unwrap();
         let key = crypto::random_key().unwrap();
         dog.key = Some(key.clone());
         let serialized = dog.serialize().unwrap();

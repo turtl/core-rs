@@ -76,6 +76,11 @@ pub fn to_val<T: Serialize>(obj: &T) -> Value {
     serde_json::to_value(obj)
 }
 
+/// Turn a JSON Value into a object that implements Deserialize
+pub fn from_val<T: Deserialize>(val: Value) -> JResult<T> {
+    serde_json::from_value(val).map_err(|e| JSONError::Stringify(e))
+}
+
 /// Walk a JSON structure, given a key path. Traverses both objects and arrays,
 /// returning a reference to the found value, if any.
 ///
@@ -113,6 +118,7 @@ pub fn walk<'a>(keys: &[&str], data: &'a Value) -> JResult<&'a Value> {
     }
 }
 
+#[allow(dead_code)]
 /// Walk a JSON structure, given a key path. Traverses both objects and arrays,
 /// returning a reference to the found value, if any. This function takes and
 /// returns a mutable reference to the Value.
@@ -174,6 +180,7 @@ pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
     }
 }
 
+#[allow(dead_code)]
 /// Set a field into a mutable JSON Value
 pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResult<()> {
     if keys.len() == 0 {
