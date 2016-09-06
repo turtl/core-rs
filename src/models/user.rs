@@ -3,6 +3,7 @@ use ::std::collections::HashMap;
 use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
 use ::api::Status;
+use ::models::model::Model;
 use ::models::protected::Protected;
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
@@ -11,7 +12,7 @@ use ::util::json;
 protected!{
     pub struct User {
         ( storage: i64 ),
-        ( settings: ::util::json::Value ),
+        ( settings: String ),
         (
             auth: Option<String>
             //logged_in: bool,
@@ -83,7 +84,7 @@ fn generate_auth(username: &String, password: &String, version: u16) -> TResult<
 /// A worthless function that doesn't do much of anything except keeps the
 /// compiler from bitching about all my unused crypto code.
 fn use_code(username: &String, password: &String) -> TResult<()> {
-    let mut user = User::blank();
+    let mut user = User::new();
     user.bind("growl", |_| {
         println!("user growl...");
     }, "user:growl");
@@ -91,15 +92,15 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
         println!("user growl...");
     }, "user:growl");
     user.unbind("growl", "user:growl");
-    user.set("logged_in", &true).unwrap();
-    user.set("changing_password", &false).unwrap();
+    user.set("logged_in", true).unwrap();
+    user.set("changing_password", false).unwrap();
     let key = try!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
     let key2 = try!(crypto::random_key());
     let auth = try!(crypto::encrypt_v0(&key, &try!(crypto::random_iv()), &String::from("message")));
     user.auth = Some(auth);
     let auth2 = try!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try!(crypto::CryptoOp::new("aes", "gcm"))));
     let test = String::from_utf8(try!(crypto::decrypt(&key2, &auth2.clone())));
-    trace!("debug stuff: {:?}", (user.stringify_trusted(), auth2, test));
+    trace!("debug stuff: {:?}", (auth2, test));
     Ok(())
 }
 
@@ -117,7 +118,6 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             data.insert("auth", String::from(&auth[..]));
             let turtl2 = turtl1.clone();
             let ref mut api = turtl1.write().unwrap().api;
-            //api.set_auth(String::from(&auth[..])).unwrap();
             match api.set_auth(String::from(&auth[..])) {
                 Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
                 _ => (),

@@ -33,7 +33,7 @@ use std::collections::BTreeMap;
 use ::std::fmt;
 
 use ::error::{TResult, TError};
-use ::models::Model;
+use ::models::model::Model;
 use ::util::json::{self};
 use ::crypto::{self, CryptoOp};
 
@@ -60,9 +60,15 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab the name of this model's table
     fn table(&self) -> String;
 
+    /// Grab a JSON Value representation of ALL this model's data
+    fn data(&self) -> json::Value {
+        json::to_val(self)
+    }
+
+    /// Get a set of fields and return them as a JSON Value
     fn get_fields(&self, fields: &Vec<&str>) -> json::Value {
         let mut map: BTreeMap<String, json::Value> = BTreeMap::new();
-        let data = self.data();
+        let data = json::to_val(self);
         for field in fields {
             let val = json::walk(&[field], &data);
             match val {
@@ -112,9 +118,10 @@ pub trait Protected: Model + fmt::Debug {
     fn serialize(&mut self) -> TResult<json::Value> {
         let body;
         {
+            let fakeid = String::from("<no id>");
             let id = match self.id() {
                 Some(x) => x,
-                None => String::from("<no id>"),
+                None => &fakeid,
             };
             let data = self.trusted_data();
             let json = try!(json::stringify(&data));
@@ -126,7 +133,7 @@ pub trait Protected: Model + fmt::Debug {
             body = try!(crypto::encrypt(&key, Vec::from(json.as_bytes()), try!(CryptoOp::new("aes", "gcm"))));
         }
         let body_base64 = try!(crypto::to_base64(&body));
-        try!(self.set("body", &body_base64));
+        try!(self.set("body", body_base64));
         Ok(self.untrusted_data())
     }
 
@@ -135,16 +142,17 @@ pub trait Protected: Model + fmt::Debug {
     ///
     /// It returns the Value of all public fields.
     fn deserialize(&mut self) -> TResult<json::Value> {
-        let id = match self.id() {
-            Some(x) => x,
-            None => String::from("<no id>"),
-        };
-        let body = match self.get::<String>("body") {
-            Some(x) => try!(crypto::from_base64(&x)),
-            None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
-        };
+        let fakeid = String::from("<no id>");
         let json_bytes;
         {
+            let id = match self.id() {
+                Some(x) => x,
+                None => &fakeid,
+            };
+            let body = match self.get::<String>("body") {
+                Some(x) => try!(crypto::from_base64(&x)),
+                None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
+            };
             let key = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
@@ -192,21 +200,19 @@ macro_rules! protected {
         }
     ) => {
         // define the struct
-        $(#[$struct_meta])*
-        pub struct $name {
-            /// Holds our cryptographic key for this model
-            key: Option<Vec<u8>>,
+        model! {
+            $(#[$struct_meta])*
+            pub struct $name {
+                (
+                    $( $extra_field: $extra_type, )*
+                    key: Option<Vec<u8>>,
+                    model_type: String
+                )
 
-            /// Defines what type of model we have (note, board, etc)
-            model_type: String,
-
-            /// Holds our model's actual data
-            _data: ::util::json::Value,
-
-            /// Our event emitter!
-            emitter: ::util::event::EventEmitter,
-
-            $( $extra_field: $extra_type, )*
+                $( $pub_field: $pub_type, )*
+                $( $priv_field: $priv_type, )*
+                body: String, 
+            }
         }
 
         // run our implementations
@@ -221,60 +227,13 @@ macro_rules! protected {
               ( $( $extra_field:ident ),* )]
 
     ) => {
-        // import our Model trait without polluting our namespace
-        use ::models::Model as PModel;
-        use ::util::event::Emitter as PEmitter;
-
-        impl $name {
-            /// Create an instance of this model, with all values set to None
-            #[allow(dead_code)]
-            pub fn blank() -> $name {
-                $name {
-                    key: None,
-                    model_type: String::from(stringify!($name)),
-                    _data: ::util::json::obj(),
-                    emitter: ::util::event::EventEmitter::new(),
-                    $(
-                        $extra_field: Default::default()
-                    ),*
-                }
-            }
-
-            /// Create an instance of this model, given a block of a JSON Value
-            #[allow(dead_code)]
-            pub fn new(data: ::util::json::Value) -> ::error::TResult<$name> {
-                match &data {
-                    &::util::json::Value::Object(..) => {},
-                    _ => return Err(::error::TError::BadValue(format!("Protected::new(): `data` is not a JSON object"))),
-                }
-                let mut instance = $name::blank();
-                instance._data = data;
-                Ok(instance)
-            }
-        }
-
-        impl PEmitter for $name {
-            fn bindings(&mut self) -> &mut ::std::collections::HashMap<String, Vec<::util::event::Callback>> {
-                self.emitter.bindings()
-            }
-        }
-
-        impl PModel for $name {
-            fn data(&self) -> &::util::json::Value {
-                &self._data
-            }
-
-            fn data_mut(&mut self) -> &mut ::util::json::Value {
-                &mut self._data
-            }
-        }
-
         // make sure printing out a model doesn't leak data
         impl ::std::fmt::Debug for $name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                let fakeid = String::from("<no id>");
                 let id = match self.id() {
                     Some(x) => x,
-                    None => String::from("<no id>"),
+                    None => &fakeid,
                 };
                 write!(f, "{}: ({})", self.model_type(), id)
             }
@@ -296,13 +255,13 @@ macro_rules! protected {
                 vec![
                     "id",
                     "body",
-                    $( stringify!($pub_field), )*
+                    $( fix_type!(stringify!($pub_field)), )*
                 ]
             }
 
             fn private_fields(&self) -> Vec<&str> {
                 vec![
-                    $( stringify!($priv_field), )*
+                    $( fix_type!(stringify!($priv_field)), )*
                 ]
             }
 
@@ -325,12 +284,13 @@ mod tests {
     use super::*;
     use ::util::json;
     use ::crypto;
+    use ::models::model::Model;
 
     protected!{
         pub struct Dog {
             ( size: u64 ),
             ( name: String,
-              type: String,
+              type_: String,
               tags: Vec<String> ),
             ( active: bool )
         }
@@ -338,54 +298,50 @@ mod tests {
 
     #[test]
     fn returns_correct_public_fields() {
-        let dog = Dog::blank();
+        let dog = Dog::new();
         assert_eq!(dog.public_fields(), ["id", "body", "size"]);
     }
 
     #[test]
     fn returns_correct_private_fields() {
-        let dog = Dog::blank();
+        let dog = Dog::new();
         assert_eq!(dog.private_fields(), ["name", "type", "tags"]);
     }
 
     #[test]
     fn handles_untrusted_data() {
-        let mut dog = Dog::blank();
+        let mut dog = Dog::new();
         dog.active = true;
-        dog.set("id", &String::from("123")).unwrap();
-        dog.set("size", &42).unwrap();
-        dog.set("name", &String::from("barky")).unwrap();
-        assert_eq!(json::stringify(&dog.untrusted_data()).unwrap(), r#"{"id":"123","size":42}"#);
-        assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"id":"123","size":42}"#);
+        dog.set("id", String::from("123")).unwrap();
+        dog.set("size", 42u64).unwrap();
+        dog.set("name", String::from("barky")).unwrap();
+        assert_eq!(json::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
 
     #[test]
     fn can_serialize_json() {
-        let mut dog = Dog::blank();
-        dog.set("size", &32).unwrap();
-        dog.set("name", &String::from("timmy")).unwrap();
-        dog.set("type", &String::from("tiny")).unwrap();
-        dog.set("tags", &vec![String::from("canine"), String::from("3-legged")]).unwrap();
+        let mut dog = Dog::new();
+        dog.set("size", 32u64).unwrap();
+        dog.set("name", String::from("timmy")).unwrap();
+        dog.set("type", String::from("tiny")).unwrap();
+        dog.set("tags", vec![String::from("canine"), String::from("3-legged")]).unwrap();
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
-            let mut val: &mut json::Value = dog.get_mut("tags").unwrap();
-            match val {
-                &mut json::Value::Array(ref mut tags) => {
-                    tags.push(json::to_val(&String::from("fast")));
-                },
-                _ => panic!("bad value"),
-            };
+            let mut tags: &mut Vec<String> = dog.get_mut("tags").unwrap();
+            tags.push(String::from("fast"));
         }
-        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 
     #[test]
     fn encrypts_decrypts() {
         let json = String::from(r#"{"size":69,"name":"barky","type":"canadian","tags":["flappy","noisy"]}"#);
         let value = json::parse(&json).unwrap();
-        let mut dog = Dog::new(value).unwrap();
+        let mut dog = Dog::new();
+        dog.reset(value).unwrap();
         let key = crypto::random_key().unwrap();
         dog.key = Some(key.clone());
         let serialized = dog.serialize().unwrap();
@@ -398,13 +354,13 @@ mod tests {
                 _ => panic!("error while testing data returned from Protected::serialize() - {}", e),
             }
         }
-        assert_eq!(body, dog.get::<String>("body").unwrap());
+        assert_eq!(&body, dog.get::<String>("body").unwrap());
 
-        let mut dog2 = Dog::new(dog.untrusted_data().clone()).unwrap();
+        let mut dog2 = Dog::new();
         dog2.set_multi(dog.untrusted_data()).unwrap();
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
         dog2.key = Some(key.clone());
-        assert_eq!(dog2.get::<i64>("size").unwrap(), 69);
+        assert_eq!(dog2.get::<u64>("size").unwrap(), &69);
         assert_eq!(dog2.get::<String>("name"), None);
         assert_eq!(dog2.get::<String>("type"), None);
         assert_eq!(dog2.get::<Vec<String>>("tags"), None);
@@ -412,10 +368,10 @@ mod tests {
         assert_eq!(dog.stringify_trusted().unwrap(), dog2.stringify_trusted().unwrap());
         assert_eq!(json::get::<String>(&["name"], &res).unwrap(), "barky");
         assert_eq!(json::get::<String>(&["type"], &res).unwrap(), "canadian");
-        assert_eq!(dog2.get::<i64>("size").unwrap(), 69);
-        assert_eq!(dog2.get::<String>("name").unwrap(), "barky");
-        assert_eq!(dog2.get::<String>("type").unwrap(), "canadian");
-        assert_eq!(dog2.get::<Vec<String>>("tags").unwrap(), vec!["flappy", "noisy"]);
+        assert_eq!(dog2.get::<u64>("size").unwrap(), &69);
+        assert_eq!(dog2.get::<String>("name").unwrap(), &String::from("barky"));
+        assert_eq!(dog2.get::<String>("type").unwrap(), &String::from("canadian"));
+        assert_eq!(dog2.get::<Vec<String>>("tags").unwrap(), &vec!["flappy", "noisy"]);
     }
 }
 

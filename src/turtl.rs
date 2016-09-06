@@ -31,7 +31,7 @@ impl Turtl {
         let num_workers = 3;
         let turtl = Turtl {
             events: event::EventEmitter::new(),
-            user: User::blank(),
+            user: User::new(),
             //storage: Storage::new(db_location),
             api: Api::new(String::new(), tx_main.clone()),
             msg: Some(tx_msg),
