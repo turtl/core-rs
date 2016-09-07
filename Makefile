@@ -17,6 +17,9 @@ run: build
 test:
 	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
+test-st:
+	RUST_TEST_TASKS=1 cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
+
 doc:
 	cargo doc -p turtl-core --no-deps
 
