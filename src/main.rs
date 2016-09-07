@@ -37,7 +37,6 @@ use ::std::thread;
 use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
-use ::futures::Future;
 
 use ::error::{TError, TResult};
 use ::util::event::Emitter;
@@ -90,30 +89,11 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
             }, "app:shutdown");
         }
 
-        // run any post-init setup turtl needs
-        turtl.write().unwrap().api.set_endpoint(String::from("https://api.turtlapp.com/v2"));
-
-        turtl.read().unwrap().db.run(|conn| -> TResult<String> {
-            try!(conn.execute("CREATE TABLE dragons (id integer primary key, name varchar(255))", &[]));
-            try!(conn.execute("INSERT INTO dragons (name) VALUES ($1)", &[&String::from("Kofi")]));
-            let mut res = try!(conn.prepare("SELECT id, name FROM dragons"));
-            let names = try!(res.query_map(&[], |row| {
-                let id: i64 = row.get(0);
-                let name: String = row.get(1);
-                println!("- name1: {}, {}", id, name);
-                name
-            }));
-            for name in names {
-                println!("- name2: {}", name.unwrap());
-            }
-            Ok(String::from("done"))
-        }).and_then(|x| {
-            println!("storage: x: {}", x);
-            ::futures::finished(())
-        }).or_else(|e| {
-            error!("storage: {}", e);
-            ::futures::finished::<(), ()>(())
-        }).forget();
+        let api_endpoint: String = match config::get(&["api", "endpoint"]) {
+            Ok(x) => x,
+            Err(_) => String::from("https://api.turtlapp.com/v2"),
+        };
+        turtl.write().unwrap().api.set_endpoint(api_endpoint);
 
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.

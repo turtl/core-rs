@@ -2,10 +2,11 @@
 //! functions/interfaces for updating or retrieving stateful info about the app.
 
 use ::std::sync::{Arc, RwLock};
+use ::std::ops::Drop;
 
 use ::error::{TError, TResult};
 use ::util::event;
-use ::storage::{self, Storage};
+use ::storage::Storage;
 use ::api::Api;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
@@ -48,6 +49,8 @@ impl Turtl {
         Ok(Arc::new(RwLock::new(turtl)))
     }
 
+    /// Wrapper to handle making sending messages a bit nicer. you probably want
+    /// `Turtl.remote_send` instead.
     pub fn with_remote_sender<F>(&self, cb: F) -> TResult<()>
         where F: FnOnce(&mut Messenger) + Send + 'static
     {
@@ -61,6 +64,7 @@ impl Turtl {
         }
     }
 
+    /// Send a message to (presumably) our UI.
     pub fn remote_send(&self, msg: String) -> TResult<()> {
         self.with_remote_sender(move |messenger| {
             match messenger.send(msg) {
@@ -70,12 +74,19 @@ impl Turtl {
         })
     }
 
+    /// Shut down this Turtl instance and all the state/threads it manages
     pub fn shutdown(&mut self) {
-        storage::stop(&self.db);
+        self.db.stop();
         match self.with_remote_sender(|messenger| messenger.shutdown()) {
             Err(e) => error!("turtl::shutdown() -- error shutting down messenger thread: {:?}", e),
             _ => (),
         }
+    }
+}
+
+impl Drop for Turtl {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 

@@ -19,7 +19,7 @@ pub enum OpData {
 }
 
 /// A simple trait for allowing easy conversion from data into OpData
-pub trait OpConverter : Sized {
+pub trait OpConverter: Sized {
     /// Convert a piece of data into an OpData enum
     fn to_opdata(self) -> OpData;
 

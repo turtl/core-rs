@@ -61,14 +61,17 @@ macro_rules! make_macro_data {
     (
         $( $name:ident($datatype:ty), )*
     ) => {
+        #[derive(Debug)]
         pub enum ModelData {
             $( $name(Option<$datatype>), )*
         }
 
+        #[derive(Debug)]
         pub enum ModelDataRef<'a> {
             $( $name(Option<&'a $datatype>), )*
         }
 
+        #[derive(Debug)]
         pub enum ModelDataRefMut<'a> {
             $( $name(Option<&'a mut $datatype>), )*
         }
@@ -124,15 +127,27 @@ pub trait Model: Emitter + Serialize + Deserialize {
     /// Get the fields in this model
     fn fields(&self) -> Vec<&'static str>;
 
+    /// Get the raw ModelDataRef object for a field
+    fn get_raw<'a>(&'a self, field: &str) -> ModelDataRef<'a>;
+
+    /// Get the raw ModelDataRefMut object for a field
+    fn get_raw_mut<'a>(&'a mut self, field: &str) -> ModelDataRefMut<'a>;
+
     /// Get a field's value out of this model by field name
     fn get<'a, T>(&'a self, field: &str) -> Option<&'a T>
         where ModelDataRef<'a>: From<Option<&'a T>>,
-              Option<&'a T>: From<ModelDataRef<'a>>;
+              Option<&'a T>: From<ModelDataRef<'a>>
+    {
+        From::from(self.get_raw(field))
+    }
 
     /// Get a field's value out of this model by field name
     fn get_mut<'a, T>(&'a mut self, field: &str) -> Option<&'a mut T>
         where ModelDataRefMut<'a>: From<Option<&'a mut T>>,
-              Option<&'a mut T>: From<ModelDataRefMut<'a>>;
+              Option<&'a mut T>: From<ModelDataRefMut<'a>>
+    {
+        From::from(self.get_raw_mut(field))
+    }
 
     /// Set an Option value into a field in this model by field name
     fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
@@ -221,17 +236,14 @@ macro_rules! model {
                 vec![ $( stringify!($field) ),* ]
             }
 
-            fn get<'a, T>(&'a self, field: &str) -> Option<&'a T>
-                where ::models::model::ModelDataRef<'a>: From<Option<&'a T>>,
-                      Option<&'a T>: From<::models::model::ModelDataRef<'a>>
-            {
+            fn get_raw<'a>(&'a self, field: &str) -> ::models::model::ModelDataRef<'a> {
                 let val: ::models::model::ModelDataRef;
                 if field == "id" {
                     val = From::from(match self.id {
                         Some(ref x) => Some(x),
                         None => None,
                     });
-                    return From::from(val);
+                    return val;
                 }
                 $(
                     if field == fix_type!(stringify!($field)) {
@@ -239,23 +251,20 @@ macro_rules! model {
                             Some(ref x) => Some(x),
                             None => None,
                         });
-                        return From::from(val);
+                        return val;
                     }
                 )*
-                None
+                ::models::model::ModelDataRef::Bool(None)
             }
 
-            fn get_mut<'a, T>(&'a mut self, field: &str) -> Option<&'a mut T>
-                where ::models::model::ModelDataRefMut<'a>: From<Option<&'a mut T>>,
-                      Option<&'a mut T>: From<::models::model::ModelDataRefMut<'a>>
-            {
+            fn get_raw_mut<'a>(&'a mut self, field: &str) -> ::models::model::ModelDataRefMut<'a> {
                 let val: ::models::model::ModelDataRefMut;
                 if field == "id" {
                     val = From::from(match self.id {
                         Some(ref mut x) => Some(x),
                         None => None,
                     });
-                    return From::from(val);
+                    return val;
                 }
                 $(
                     if field == fix_type!(stringify!($field)) {
@@ -263,10 +272,10 @@ macro_rules! model {
                             Some(ref mut x) => Some(x),
                             None => None,
                         });
-                        return From::from(val);
+                        return val;
                     }
                 )*
-                None
+                ::models::model::ModelDataRefMut::Bool(None)
             }
 
             fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> ::error::TResult<()>
