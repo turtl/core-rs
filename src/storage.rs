@@ -79,7 +79,7 @@ impl Storage {
 
     /// Run a query
     pub fn run<F, T>(&self, run: F) -> TFutureResult<T>
-        where T: OpConverter + Send + 'static,
+        where T: OpConverter + Send + Sync + 'static,
               F: FnOnce(Arc<Connection>) -> TResult<T> + Sync + Send + 'static
     {
         let (fut_tx, fut_rx) = futures::oneshot::<TResult<OpData>>();
@@ -110,31 +110,52 @@ impl Storage {
     }
 
     /// Save a model to our db. Make sure it's serialized before handing it in.
-    pub fn save<T>(model: &T) -> TFutureResult<()>
-        where T: Protected
+    pub fn save<T>(&self, model: &T) -> TFutureResult<String>
+        where T: Protected + Sync + Send
     {
         let id = model.id::<String>();
-        let fields = model.public_fields();
+        let fields = model.public_fields()
+            .into_iter()
+            .filter(|x| x != &"id")
+            .collect::<Vec<_>>();
+        let mut vals: Vec<ModelDataRef> = Vec::with_capacity(fields.len() + 1);
         let query = match id {
             Some(_) => {
-                let mut qry = format!("UPDATE {} SET ", model.table());
+                let mut qryvals = String::new();
                 let mut i = 1;
-                let mut vals: Vec<ModelDataRef> = Vec::with_capacity(fields.len() + 1);
-                for field in fields {
+                for field in &fields {
                     vals.push(model.get_raw(field));
-                    qry = qry + &format!("{} = ${} ", field, i);
+                    let comma = if i == fields.len() {
+                        ""
+                    } else {
+                        ", "
+                    };
+                    qryvals = qryvals + &format!("{} = ${}{}", field, i, comma);
                     i += 1;
                 }
-                qry = qry + &format!("WHERE id = ${}", i);
                 vals.push(ModelDataRef::String(id));
-                qry
+                format!("UPDATE {} SET {} WHERE id = ${};", model.table(), qryvals, i)
             },
             None => {
-                String::new()
+                let mut qryfields = String::new();
+                let mut qryvals = String::new();
+                let mut i = 1;
+                for field in &fields {
+                    vals.push(model.get_raw(field));
+                    let comma = if i == fields.len() {
+                        ""
+                    } else {
+                        ", "
+                    };
+                    qryfields = qryfields + &format!("{}{}", field, comma);
+                    qryvals = qryvals + &format!("${}{}", i, comma);
+                    i += 1;
+                }
+                format!("INSERT INTO {} ({}) VALUES ({});", model.table(), qryfields, qryvals)
             },
         };
-        println!("query: {}", query);
-        futures::done(Ok(()))
+        println!("query: {}, {:?}", query, vals);
+        ::futures::finished(String::new())
             .boxed()
     }
 }
@@ -156,6 +177,19 @@ mod tests {
     use ::error::TResult;
     use ::turtl::{Turtl, TurtlWrap};
     use ::util::stopper::Stopper;
+    use ::util::json;
+
+    use ::models::model::Model;
+    use ::models::protected::Protected;
+
+    protected!{
+        pub struct Shiba {
+            ( color: String ),
+            ( name: String,
+              tags: Vec<String> ),
+            ( )
+        }
+    }
 
     fn fake_turtl() -> TurtlWrap {
         Turtl::new_wrap(
@@ -165,15 +199,38 @@ mod tests {
         ).unwrap()
     }
 
-    #[test]
-    fn runs_queries() {
+    // Gives us a bunch of setup work for FREE...a (running) db object, a main
+    // looper fn which runs our Futures, and a stop function to end it all.
+    //
+    // Keeps its state locally so our tests can worry about their own setup as
+    // opposed to having a bunch of random shitty variables polluting
+    // everything.
+    fn setup() -> (Arc<Storage>, Box<Fn() + Send + Sync>, Box<Fn() + Send + Sync>) {
         let stopper = Arc::new(Stopper::new());
         stopper.set(true);
         let tx_main = Arc::new(MsQueue::new());
         let db = Arc::new(Storage::new(tx_main.clone(), &String::from(":inmem:")).unwrap());
-        let stopclone = stopper.clone();
-        let dbclone = db.clone();
         let turtl = fake_turtl();
+        let stopclone = stopper.clone();
+        let mainloop = move || {
+            // loccy mcbrah
+            let turtl_loc = turtl.clone();
+            while stopclone.running() {
+                let handler = tx_main.pop();
+                handler.call_box(turtl_loc.clone());
+            }
+        };
+        let dbclone = db.clone();
+        let stopfn = move || {
+            stopper.set(false);
+            dbclone.stop();
+        };
+        (db, Box::new(mainloop), Box::new(stopfn))
+    }
+
+    #[test]
+    fn runs_queries() {
+        let (db, mainloop, stopfn) = setup();
 
         let id = Arc::new(RwLock::new(0u64));
         let name = Arc::new(RwLock::new(String::new()));
@@ -202,19 +259,44 @@ mod tests {
             *(errclone.write().unwrap()) = Err(e);
             ::futures::finished::<(), ()>(())
         }).then(move |_| {
-            stopclone.set(false);
-            dbclone.stop();
+            stopfn();
             ::futures::finished::<(), ()>(())
         }).forget();
 
-        while stopper.running() {
-            //debug!("turtl: main thread message loop");
-            let handler = tx_main.pop();
-            handler.call_box(turtl.clone());
-        }
+        mainloop();
 
         assert!((*(id.read().unwrap())) > 0);
         assert_eq!(*(name.read().unwrap()), "Kofi");
         assert!((*(err.read().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn saves_models() {
+        let (db, mainloop, stopfn) = setup();
+
+        let model: Shiba = json::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
+
+        assert_eq!(model.table(), "shiba");
+
+        let id = Arc::new(RwLock::new(0u64));
+        let name = Arc::new(RwLock::new(String::new()));
+        let err: Arc<RwLock<TResult<()>>> = Arc::new(RwLock::new(Ok(())));
+        let idclone = id.clone();
+        let nameclone = name.clone();
+        let errclone = err.clone();
+
+        db.save(&model)
+            .and_then(|id: String| {
+                println!("got id: {:?}", id);
+                ::futures::finished(())
+            })
+            .or_else(move |e| {
+                *(errclone.write().unwrap()) = Err(e);
+                ::futures::finished::<(), ()>(())
+            })
+            .forget();
+
+        stopfn();
+        mainloop();
     }
 }
