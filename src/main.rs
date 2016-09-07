@@ -26,10 +26,11 @@ mod config;
 #[macro_use]
 mod util;
 mod messaging;
-mod storage;
 mod api;
 mod crypto;
+#[macro_use]
 mod models;
+mod storage;
 mod dispatch;
 mod turtl;
 
