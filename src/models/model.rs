@@ -170,6 +170,11 @@ pub trait Model: Emitter + Serialize + Deserialize {
         self.get("id")
     }
 
+    /// Is this model new?
+    fn is_new(&self) -> bool {
+        self.get::<String>("id").is_none()
+    }
+
     /// Clear out this model's data
     fn clear(&mut self) -> TResult<()>;
 
@@ -511,6 +516,14 @@ mod tests {
         rabbit.city = Some(String::from("sc"));
 
         assert_eq!(rabbit.stringify().unwrap(), "{\"id\":\"12345\",\"name\":null,\"type\":\"hopper\",\"city\":\"sc\",\"chews_on_things_that_dont_belong_to_him\":null}");
+    }
+
+    #[test]
+    fn is_new() {
+        let mut rabbit = Rabbit::new();
+        assert_eq!(rabbit.is_new(), true);
+        rabbit.set("id", String::from("6969")).unwrap();
+        assert_eq!(rabbit.is_new(), false);
     }
 }
 
