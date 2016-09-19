@@ -2,17 +2,21 @@
 //! Probably.
 
 use ::std::thread;
-use ::std::sync::Arc;
+use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
 use ::crossbeam::sync::MsQueue;
 use ::futures::{self, Future, Canceled};
 use ::rusqlite::Connection;
+use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
+use ::rusqlite::types::Value as SqlValue;
+use ::libc::c_int;
 
 use ::util::opdata::{OpData, OpConverter};
 use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::util::stopper::Stopper;
+use ::util::json;
 use ::models::model::ModelDataRef;
 use ::models::protected::Protected;
 use ::turtl::TurtlWrap;
@@ -22,6 +26,54 @@ use ::error::{TResult, TFutureResult, TError};
 pub type StorageMsg = Box<Thunk<Arc<Connection>>>;
 pub type StorageSender = Arc<MsQueue<StorageMsg>>;
 
+/// Make ModelDataRef a ToSql type
+impl<'a> ToSql for ModelDataRef<'a> {
+    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
+        match *self {
+            ModelDataRef::Bool(ref x) => {
+                match *x {
+                    Some(val) => val.bind_parameter(stmt, col),
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+            ModelDataRef::I64(ref x) => {
+                match *x {
+                    Some(val) => val.bind_parameter(stmt, col),
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+            ModelDataRef::F64(ref x) => {
+                match *x {
+                    Some(val) => val.bind_parameter(stmt, col),
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+            ModelDataRef::String(ref x) => {
+                match *x {
+                    Some(val) => val.bind_parameter(stmt, col),
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+            ModelDataRef::Bin(ref x) => {
+                match *x {
+                    Some(val) => val.bind_parameter(stmt, col),
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+            ModelDataRef::List(ref x) => {
+                match *x {
+                    Some(val) => match json::stringify(val) {
+                        Ok(val) => val.bind_parameter(stmt, col),
+                        Err(_) => Null.bind_parameter(stmt, col),
+                    },
+                    None => Null.bind_parameter(stmt, col),
+                }
+            },
+        }
+    }
+}
+
+/// Make ModelDataRef a ToSql type
 /// Start our storage thread, which is the actual keeper of our db Connection.
 ///
 /// We will be talking to it via a channel. It's set up this way because Turtl
@@ -109,54 +161,85 @@ impl Storage {
         });
     }
 
+    /// Given a table, return the schema fields for that table
+    pub fn fields(&self, table: &String) -> TResult<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     /// Save a model to our db. Make sure it's serialized before handing it in.
-    pub fn save<T>(&self, model: &T) -> TFutureResult<String>
-        where T: Protected + Sync + Send
+    pub fn save<T>(&self, model: Arc<RwLock<T>>) -> TFutureResult<Arc<RwLock<T>>>
+        where T: Protected + Send + Sync + 'static
     {
-        let id = model.id::<String>();
-        let fields = model.public_fields()
-            .into_iter()
-            .filter(|x| x != &"id")
-            .collect::<Vec<_>>();
-        let mut vals: Vec<ModelDataRef> = Vec::with_capacity(fields.len() + 1);
-        let query = match id {
-            Some(_) => {
-                let mut qryvals = String::new();
-                let mut i = 1;
-                for field in &fields {
-                    vals.push(model.get_raw(field));
-                    let comma = if i == fields.len() {
-                        ""
-                    } else {
-                        ", "
-                    };
-                    qryvals = qryvals + &format!("{} = ${}{}", field, i, comma);
-                    i += 1;
+        let model_s = model.clone();
+        self.run(move |conn| -> TResult<()> {
+            let modelr = model_s.read().unwrap();
+            if modelr.id::<String>().is_none() {
+                return Err(TError::MissingField(format!("Storage::save() -- model missing `id` field")));
+            }
+
+            // TODO: grab from table schema, not model!
+            let fields = modelr.public_fields();
+
+            // build an INSERT REPLACE statement (more or less an upsert)
+            let mut vals: Vec<ModelDataRef> = Vec::with_capacity(fields.len() + 1);
+            let mut qryfields = String::new();
+            let mut qryvals = String::new();
+            let mut i = 1;
+            for field in &fields {
+                vals.push(modelr.get_raw(field));
+                let comma = if i == fields.len() { "" } else { ", " };
+                qryfields = qryfields + &format!("{}{}", field, comma);
+                qryvals = qryvals + &format!("${}{}", i, comma);
+                i += 1;
+            }
+            let query = format!("INSERT OR REPLACE INTO {} ({}) VALUES ({});", modelr.table(), qryfields, qryvals);
+
+            let mut qvals: Vec<&ToSql> = Vec::with_capacity(vals.len());
+            for val in &vals {
+                let ts: &ToSql = val;
+                qvals.push(ts);
+            }
+            try!(conn.execute(&query[..], qvals.as_slice()));
+
+            Ok(())
+        }).and_then(move |_| futures::finished(model)).boxed()
+    }
+
+    /// Given a model (with an ID) populate the model's data.
+    pub fn get<T>(&self, model: Arc<RwLock<T>>) -> TFutureResult<Arc<RwLock<T>>>
+        where T: Protected + Send + Sync + 'static
+    {
+        let model_s = model.clone();
+        self.run(move |conn| -> TResult<()> {
+            let modelr = model_s.read().unwrap();
+            let table = modelr.table();
+            let id: String = match modelr.id::<String>() {
+                Some(x) => x.clone(),
+                None => return Err(TError::MissingField(format!("Storage::get() -- model missing `id` field"))),
+            };
+
+            // TODO: grab from table schema, not model!
+            let fields = modelr.public_fields();
+
+            // make sure we don't hold our lock
+            drop(modelr);
+
+            let fields_str: String = fields.join(", ");
+            let query = format!("SELECT {} FROM {} WHERE id = $1 LIMIT 1", fields_str, table);
+            conn.query_row_and_then(&query[..], &[&id], |row| -> TResult<()> {
+                for field in fields {
+                    let data: SqlValue = try!(row.get_checked(field));
+                    try!(match data {
+                        SqlValue::Integer(x) => model_s.write().unwrap().set(field, x),
+                        SqlValue::Real(x) => model_s.write().unwrap().set(field, x),
+                        SqlValue::Text(x) => model_s.write().unwrap().set(field, x),
+                        SqlValue::Blob(x) => model_s.write().unwrap().set(field, x),
+                        SqlValue::Null => model_s.write().unwrap().unset(field),
+                    });
                 }
-                vals.push(ModelDataRef::String(id));
-                format!("UPDATE {} SET {} WHERE id = ${};", model.table(), qryvals, i)
-            },
-            None => {
-                let mut qryfields = String::new();
-                let mut qryvals = String::new();
-                let mut i = 1;
-                for field in &fields {
-                    vals.push(model.get_raw(field));
-                    let comma = if i == fields.len() {
-                        ""
-                    } else {
-                        ", "
-                    };
-                    qryfields = qryfields + &format!("{}{}", field, comma);
-                    qryvals = qryvals + &format!("${}{}", i, comma);
-                    i += 1;
-                }
-                format!("INSERT INTO {} ({}) VALUES ({});", model.table(), qryfields, qryvals)
-            },
-        };
-        println!("query: {}, {:?}", query, vals);
-        ::futures::finished(String::new())
-            .boxed()
+                Ok(())
+            })
+        }).and_then(move |_| futures::done(Ok(model))).boxed()
     }
 }
 
@@ -174,10 +257,11 @@ mod tests {
     use ::crossbeam::sync::MsQueue;
     use ::futures::Future;
 
-    use ::error::TResult;
+    use ::error::{TResult, TFutureResult, TError};
     use ::turtl::{Turtl, TurtlWrap};
     use ::util::stopper::Stopper;
     use ::util::json;
+    use ::crypto;
 
     use ::models::model::Model;
     use ::models::protected::Protected;
@@ -205,7 +289,7 @@ mod tests {
     // Keeps its state locally so our tests can worry about their own setup as
     // opposed to having a bunch of random shitty variables polluting
     // everything.
-    fn setup() -> (Arc<Storage>, Box<Fn() + Send + Sync>, Box<Fn() + Send + Sync>) {
+    fn setup() -> (Arc<Storage>, Box<Fn() + Send + Sync>, Box<Fn() -> TFutureResult<()> + Send + Sync>) {
         let stopper = Arc::new(Stopper::new());
         stopper.set(true);
         let tx_main = Arc::new(MsQueue::new());
@@ -221,9 +305,10 @@ mod tests {
             }
         };
         let dbclone = db.clone();
-        let stopfn = move || {
+        let stopfn = move || -> TFutureResult<()> {
             stopper.set(false);
             dbclone.stop();
+            ::futures::finished::<(), TError>(()).boxed()
         };
         (db, Box::new(mainloop), Box::new(stopfn))
     }
@@ -259,8 +344,7 @@ mod tests {
             *(errclone.write().unwrap()) = Err(e);
             ::futures::finished::<(), ()>(())
         }).then(move |_| {
-            stopfn();
-            ::futures::finished::<(), ()>(())
+            stopfn()
         }).forget();
 
         mainloop();
@@ -274,29 +358,52 @@ mod tests {
     fn saves_models() {
         let (db, mainloop, stopfn) = setup();
 
-        let model: Shiba = json::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
+        let mut model: Shiba = json::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
+        let key = crypto::random_key().unwrap();
+        model.key = Some(key.clone());
+        model.serialize().unwrap();
+        let model = Arc::new(RwLock::new(model));
 
-        assert_eq!(model.table(), "shiba");
+        assert_eq!(model.read().unwrap().table(), "shiba");
 
-        let id = Arc::new(RwLock::new(0u64));
-        let name = Arc::new(RwLock::new(String::new()));
+        //let id = Arc::new(RwLock::new(0u64));
+        //let name = Arc::new(RwLock::new(String::new()));
         let err: Arc<RwLock<TResult<()>>> = Arc::new(RwLock::new(Ok(())));
-        let idclone = id.clone();
-        let nameclone = name.clone();
+        //let idclone = id.clone();
+        //let nameclone = name.clone();
         let errclone = err.clone();
 
-        db.save(&model)
-            .and_then(|id: String| {
-                println!("got id: {:?}", id);
+        let db1 = db.clone();
+        let db2 = db.clone();
+        println!("");
+        println!("---");
+        db.run(|conn| -> TResult<()> { try!(conn.execute("CREATE TABLE shiba (id rowid, color varchar(64), name varchar(64), tags varchar(255), body blob)", &[])); Ok(()) })
+            .and_then(move |_| {
+                db1.save(model.clone())
+            })
+            .and_then(move |shiba| {
+                println!("shiba saved: {:?}", shiba.read().unwrap().id::<String>());
+                println!("getting...");
+                let mut sheeb: Shiba = json::parse(&String::from(r#"{"id":"6969"}"#)).unwrap();
+                sheeb.key = Some(key.clone());
+                let sheeb = Arc::new(RwLock::new(sheeb));
+                db2.get(sheeb.clone())
+            })
+            .and_then(|sheeb| {
+                sheeb.write().unwrap().deserialize().unwrap();
+                println!("finally: {:?}", sheeb.read().unwrap().get::<String>("name"));
                 ::futures::finished(())
             })
             .or_else(move |e| {
+                println!("err: {:?}", e);
                 *(errclone.write().unwrap()) = Err(e);
                 ::futures::finished::<(), ()>(())
             })
+            .then(move |_| {
+                stopfn()
+            })
             .forget();
 
-        stopfn();
         mainloop();
     }
 }

@@ -1,4 +1,3 @@
-extern crate clouseau;
 extern crate crossbeam;
 extern crate crypto as rust_crypto;
 extern crate fern;
@@ -8,6 +7,7 @@ extern crate gcrypt;
 extern crate hyper;
 #[macro_use]
 extern crate lazy_static;
+extern crate libc;
 #[macro_use]
 extern crate log;
 extern crate nanomsg;
