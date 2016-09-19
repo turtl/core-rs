@@ -89,7 +89,6 @@ impl From<Value> for ModelData {
             Value::Null => blankval,
             Value::Bool(x) => ModelData::Bool(Some(x)),
             Value::I64(x) => ModelData::I64(Some(x)),
-            Value::U64(x) => ModelData::U64(Some(x)),
             Value::F64(x) => ModelData::F64(Some(x)),
             Value::String(x) => ModelData::String(Some(x)),
             Value::Array(_) => {
@@ -114,7 +113,6 @@ impl From<Value> for ModelData {
 make_macro_data! {
     Bool(bool),
     I64(i64),
-    U64(u64),
     F64(f64),
     String(String),
     Bin(Vec<u8>),
@@ -180,6 +178,9 @@ pub trait Model: Emitter + Serialize + Deserialize {
 
     /// Set multiple values into this model
     fn set_multi(&mut self, data: Value) -> TResult<()>;
+
+    /// Clear out a model field
+    fn unset(&mut self, field: &str) -> TResult<()>;
 
     /// Reset a model with a JSON Value *object*
     fn reset(&mut self, data: Value) -> TResult<()> {
@@ -281,6 +282,18 @@ macro_rules! model {
                     }
                 )*
                 ::models::model::ModelDataRefMut::Bool(None)
+            }
+
+            fn unset(&mut self, field: &str) -> ::error::TResult<()> {
+                if field == "id" {
+                    self.id = None;
+                }
+                $(
+                    if field == fix_type!(stringify!($field)) {
+                        self.$field = None;
+                    }
+                )*
+                Ok(())
             }
 
             fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> ::error::TResult<()>

@@ -52,10 +52,10 @@ pub trait Protected: Model + fmt::Debug {
     fn model_type(&self) -> &str;
 
     /// Grab the public fields for this model
-    fn public_fields(&self) -> Vec<&str>;
+    fn public_fields(&self) -> Vec<&'static str>;
 
     /// Grab the private fields for this model
-    fn private_fields(&self) -> Vec<&str>;
+    fn private_fields(&self) -> Vec<&'static str>;
 
     /// Grab the name of this model's table
     fn table(&self) -> String;
@@ -186,7 +186,7 @@ pub trait Protected: Model + fmt::Debug {
 /// ```
 /// # #[macro_use] mod models;
 /// # fn main() {
-/// protected!(Squirrel, (size: u64), (name: String), ());
+/// protected!(Squirrel, (size: i64), (name: String), ());
 /// # }
 /// ```
 #[macro_export]
@@ -251,7 +251,7 @@ macro_rules! protected {
                 &self.model_type[..]
             }
 
-            fn public_fields(&self) -> Vec<&str> {
+            fn public_fields(&self) -> Vec<&'static str> {
                 vec![
                     "id",
                     "body",
@@ -259,7 +259,7 @@ macro_rules! protected {
                 ]
             }
 
-            fn private_fields(&self) -> Vec<&str> {
+            fn private_fields(&self) -> Vec<&'static str> {
                 vec![
                     $( fix_type!(stringify!($priv_field)), )*
                 ]
@@ -288,7 +288,7 @@ mod tests {
 
     protected!{
         pub struct Dog {
-            ( size: u64 ),
+            ( size: i64 ),
             ( name: String,
               type_: String,
               tags: Vec<String> ),
@@ -313,7 +313,7 @@ mod tests {
         let mut dog = Dog::new();
         dog.active = true;
         dog.set("id", String::from("123")).unwrap();
-        dog.set("size", 42u64).unwrap();
+        dog.set("size", 42i64).unwrap();
         dog.set("name", String::from("barky")).unwrap();
         assert_eq!(json::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
         assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn can_serialize_json() {
         let mut dog = Dog::new();
-        dog.set("size", 32u64).unwrap();
+        dog.set("size", 32i64).unwrap();
         dog.set("name", String::from("timmy")).unwrap();
         dog.set("type", String::from("tiny")).unwrap();
         dog.set("tags", vec![String::from("canine"), String::from("3-legged")]).unwrap();
@@ -358,7 +358,7 @@ mod tests {
         dog2.set_multi(dog.untrusted_data()).unwrap();
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
         dog2.key = Some(key.clone());
-        assert_eq!(dog2.get::<u64>("size").unwrap(), &69);
+        assert_eq!(dog2.get::<i64>("size").unwrap(), &69);
         assert_eq!(dog2.get::<String>("name"), None);
         assert_eq!(dog2.get::<String>("type"), None);
         assert_eq!(dog2.get::<Vec<String>>("tags"), None);
@@ -366,7 +366,7 @@ mod tests {
         assert_eq!(dog.stringify_trusted().unwrap(), dog2.stringify_trusted().unwrap());
         assert_eq!(json::get::<String>(&["name"], &res).unwrap(), "barky");
         assert_eq!(json::get::<String>(&["type"], &res).unwrap(), "canadian");
-        assert_eq!(dog2.get::<u64>("size").unwrap(), &69);
+        assert_eq!(dog2.get::<i64>("size").unwrap(), &69);
         assert_eq!(dog2.get::<String>("name").unwrap(), &String::from("barky"));
         assert_eq!(dog2.get::<String>("type").unwrap(), &String::from("canadian"));
         assert_eq!(dog2.get::<Vec<String>>("tags").unwrap(), &vec!["flappy", "noisy"]);
