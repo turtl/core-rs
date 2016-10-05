@@ -11,12 +11,12 @@ use ::rusqlite::Connection;
 use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
 use ::rusqlite::types::Value as SqlValue;
 use ::libc::c_int;
+use ::jedi::{self, Value};
 
 use ::util::opdata::{OpData, OpConverter};
 use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::util::stopper::Stopper;
-use ::util::json;
 use ::models::model::ModelDataRef;
 use ::models::protected::Protected;
 use ::turtl::TurtlWrap;
@@ -62,7 +62,7 @@ impl<'a> ToSql for ModelDataRef<'a> {
             },
             ModelDataRef::List(ref x) => {
                 match *x {
-                    Some(val) => match json::stringify(val) {
+                    Some(val) => match jedi::stringify(val) {
                         Ok(val) => val.bind_parameter(stmt, col),
                         Err(_) => Null.bind_parameter(stmt, col),
                     },
@@ -84,15 +84,14 @@ fn start(location: &String) -> (StorageSender, thread::JoinHandle<()>, Arc<Stopp
     stopper.set(true);
     let queue = Arc::new(MsQueue::new());
     let recv = queue.clone();
-    let location = String::from(&location[..]);
+    let location: String = location.clone();
     let stopper_local = stopper.clone();
     let handle = thread::spawn(move || {
-        let conn;
-        if location == ":inmem:" {
-            conn = Connection::open_in_memory();
+        let conn = if location == ":memory:" {
+            Connection::open_in_memory()
         } else {
-            conn = Connection::open_in_memory();
-        }
+            Connection::open(location)
+        };
         let conn = match conn {
             Ok(x) => Arc::new(x),
             Err(e) => {
@@ -260,10 +259,10 @@ mod tests {
     use ::error::{TResult, TFutureResult, TError};
     use ::turtl::{Turtl, TurtlWrap};
     use ::util::stopper::Stopper;
-    use ::util::json;
+    use ::jedi;
     use ::crypto;
 
-    use ::models::model::Model;
+    use ::models::model::{self, Model};
     use ::models::protected::Protected;
 
     protected!{
@@ -358,7 +357,7 @@ mod tests {
     fn saves_models() {
         let (db, mainloop, stopfn) = setup();
 
-        let mut model: Shiba = json::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
+        let mut model: Shiba = jedi::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
         let key = crypto::random_key().unwrap();
         model.key = Some(key.clone());
         model.serialize().unwrap();
@@ -375,16 +374,19 @@ mod tests {
 
         let db1 = db.clone();
         let db2 = db.clone();
+
         println!("");
         println!("---");
+        println!("cid: {}", model::cid(&String::from("af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0")).unwrap());
         db.run(|conn| -> TResult<()> { try!(conn.execute("CREATE TABLE shiba (id rowid, color varchar(64), name varchar(64), tags varchar(255), body blob)", &[])); Ok(()) })
             .and_then(move |_| {
+                println!("savetina");
                 db1.save(model.clone())
             })
             .and_then(move |shiba| {
                 println!("shiba saved: {:?}", shiba.read().unwrap().id::<String>());
                 println!("getting...");
-                let mut sheeb: Shiba = json::parse(&String::from(r#"{"id":"6969"}"#)).unwrap();
+                let mut sheeb: Shiba = jedi::parse(&String::from(r#"{"id":"6969"}"#)).unwrap();
                 sheeb.key = Some(key.clone());
                 let sheeb = Arc::new(RwLock::new(sheeb));
                 db2.get(sheeb.clone())

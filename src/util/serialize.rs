@@ -292,7 +292,7 @@ macro_rules! serializable {
 
 #[cfg(test)]
 mod tests {
-    use ::util::json::{self};
+    use ::jedi::{self};
 
     serializable!{
         #[allow(dead_code)]
@@ -343,13 +343,13 @@ mod tests {
     #[test]
     fn can_serialize() {
         let crapper = LittleCrapper { active: false, name: String::from("barry"), type_: String::from("speedy"), location: String::from("my pants") };
-        let json_str = json::stringify(&crapper).unwrap();
+        let json_str = jedi::stringify(&crapper).unwrap();
         assert_eq!(json_str, r#"{"name":"barry","type":"speedy","location":"my pants"}"#);
     }
 
     #[test]
     fn can_deserialize() {
-        let crapper: LittleCrapper = json::parse(&String::from(r#"{"name":"omg","location":"city hall"}"#)).unwrap();
+        let crapper: LittleCrapper = jedi::parse(&String::from(r#"{"name":"omg","location":"city hall"}"#)).unwrap();
         assert_eq!(crapper.name, "omg");
         assert_eq!(crapper.type_, "");
         assert_eq!(crapper.location, "city hall");
@@ -365,7 +365,7 @@ mod tests {
                 LittleCrapper::new(String::from("sandra"), String::from("the bed"))
             ]
         };
-        let json_str = json::stringify(&tree).unwrap();
+        let json_str = jedi::stringify(&tree).unwrap();
         assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","type":"sneak","location":"here"},{"name":"sandra","type":"sneak","location":"the bed"}]}"#);
     }
 }

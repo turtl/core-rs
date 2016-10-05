@@ -1,5 +1,7 @@
 use ::std::collections::HashMap;
 
+use ::jedi;
+
 use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
 use ::api::Status;
@@ -7,7 +9,6 @@ use ::models::model::Model;
 use ::models::protected::Protected;
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
-use ::util::json;
 
 protected!{
     pub struct User {
@@ -122,7 +123,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
                 Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
                 _ => (),
             }
-            api.post("/auth", json::to_val(&()))
+            api.post("/auth", jedi::to_val(&()))
                 .map(move |_| {
                     let ref mut user = turtl2.write().unwrap().user;
                     user.do_login(key, auth);
@@ -173,7 +174,7 @@ impl User {
     pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
         self.key = Some(key);
         self.auth = Some(auth);
-        self.trigger("login", &json::to_val(&()));
+        self.trigger("login", &jedi::to_val(&()));
     }
 }
 

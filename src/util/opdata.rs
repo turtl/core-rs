@@ -3,7 +3,8 @@
 //!
 //! TODO: rebuild using From
 
-use ::util::json::Value;
+use ::jedi::Value;
+
 use ::error::{TResult, TError};
 
 #[derive(Debug)]

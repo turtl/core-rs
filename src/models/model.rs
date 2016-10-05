@@ -1,9 +1,34 @@
+use ::std::sync::RwLock;
+
+use ::time;
 use ::serde::ser::Serialize;
 use ::serde::de::Deserialize;
+use ::jedi::{self, Value};
 
 use ::error::{TError, TResult};
-use ::util::json::{self, Value};
 use ::util::event::Emitter;
+
+lazy_static! {
+    /// create a static/global cid counter
+    static ref CID_COUNTER: RwLock<u32> = RwLock::new(0);
+
+    /// holds our app's client id
+    static ref CLIENT_ID: RwLock<String> = RwLock::new(String::new());
+}
+
+/// Create a turtl object id from a client id
+pub fn cid(client_id: &String) -> TResult<String> {
+    let mut counter_guard = (*CID_COUNTER).write().unwrap();
+    let counter: u32 = counter_guard.clone();
+    (*counter_guard) += 1;
+    let now = time::get_time();
+    let milis = ((now.sec as u64) * 1000) + ((now.nsec as u64) / 1000000);
+    let mut cid = format!("{:01$x}", milis, 12);
+    let counter_str = format!("{:01$x}", (counter & 65535), 4);
+    cid.push_str(&client_id[..]);
+    cid.push_str(&counter_str[..]);
+    Ok(cid)
+}
 
 /// A macro to make it easy to create From impls for ModelData
 macro_rules! make_model_from {
@@ -89,6 +114,7 @@ impl From<Value> for ModelData {
             Value::Null => blankval,
             Value::Bool(x) => ModelData::Bool(Some(x)),
             Value::I64(x) => ModelData::I64(Some(x)),
+            Value::U64(x) => ModelData::I64(Some(x as i64)),
             Value::F64(x) => ModelData::F64(Some(x)),
             Value::String(x) => ModelData::String(Some(x)),
             Value::Array(_) => {
@@ -96,7 +122,7 @@ impl From<Value> for ModelData {
                 // is a Vec<String>. we *could* do Vec<u8> except we're never
                 // going to pass binary data via a JSON array (we use base64) so
                 // the only other Vec type we have is Vec<String> (like tags).
-                let arr: Vec<String> = match json::from_val(val) {
+                let arr: Vec<String> = match jedi::from_val(val) {
                     Ok(x) => x,
                     Err(_) => {
                         warn!("ModelData::from(Value) -- problem decoding Array type (couldn't find matching type)");
@@ -150,12 +176,12 @@ pub trait Model: Emitter + Serialize + Deserialize {
     /// Set an Option value into a field in this model by field name
     fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> TResult<()>
         where ModelData: From<Option<T>>,
-              Option<T>: From<ModelData> + ::util::json::Serialize;
+              Option<T>: From<ModelData> + ::jedi::Serialize;
 
     /// Set a value into a field in this model by field name
     fn set<T>(&mut self, field: &str, val: T) -> TResult<()>
         where ModelData: From<Option<T>>,
-              Option<T>: From<ModelData> + ::util::json::Serialize
+              Option<T>: From<ModelData> + ::jedi::Serialize
     {
         self.set_raw(field, Some(val))
     }
@@ -186,13 +212,13 @@ pub trait Model: Emitter + Serialize + Deserialize {
     fn reset(&mut self, data: Value) -> TResult<()> {
         try!(self.clear());
         let res = self.set_multi(data);
-        self.trigger("reset", &::util::json::Value::Null);
+        self.trigger("reset", &::jedi::Value::Null);
         res
     }
 
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
-        json::stringify(self).map_err(|e| toterr!(e))
+        jedi::stringify(self).map_err(|e| toterr!(e))
     }
 }
 
@@ -298,18 +324,18 @@ macro_rules! model {
 
             fn set_raw<T>(&mut self, field: &str, val: Option<T>) -> ::error::TResult<()>
                 where ::models::model::ModelData: From<Option<T>>,
-                      Option<T>: From<::models::model::ModelData> + ::util::json::Serialize
+                      Option<T>: From<::models::model::ModelData> + ::jedi::Serialize
             {
                 let data: ::models::model::ModelData = From::from(val);
                 if field == "id" {
                     self.id = From::from(data);
-                    self.trigger("set:id", &::util::json::Value::Null);
+                    self.trigger("set:id", &::jedi::Value::Null);
                     return Ok(())
                 }
                 $(
                     if field == fix_type!(stringify!($field)) {
                         self.$field = From::from(data);
-                        self.trigger(concat!("set:", stringify!($field)), &::util::json::Value::Null);
+                        self.trigger(concat!("set:", stringify!($field)), &::jedi::Value::Null);
                         return Ok(())
                     }
                 )*
@@ -320,13 +346,13 @@ macro_rules! model {
                 $(
                     try!(self.set_raw::<$field_type>(fix_type!(stringify!($field)), None));
                 )*
-                self.trigger("clear", &::util::json::Value::Null);
+                self.trigger("clear", &::jedi::Value::Null);
                 Ok(())
             }
 
-            fn set_multi(&mut self, data: ::util::json::Value) -> ::error::TResult<()> {
+            fn set_multi(&mut self, data: ::jedi::Value) -> ::error::TResult<()> {
                 let mut hash = match data {
-                    ::util::json::Value::Object(x) => x,
+                    ::jedi::Value::Object(x) => x,
                     _ => return Err(::error::TError::BadValue(format!("Model::reset() -- data given was not a JSON object"))),
                 };
 
@@ -354,7 +380,7 @@ macro_rules! model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::util::json::{self, Value};
+    use ::jedi::{self, Value};
     use std::sync::{Arc, RwLock};
 
     model! {
@@ -410,7 +436,7 @@ mod tests {
         assert_eq!(rabbit.name, None);
         assert_eq!(rabbit.city, None);
 
-        let json: Value = json::parse(&String::from(r#"{"has_job":false,"name":"slappy","city":"duluth"}"#)).unwrap();
+        let json: Value = jedi::parse(&String::from(r#"{"has_job":false,"name":"slappy","city":"duluth"}"#)).unwrap();
         rabbit.reset(json).unwrap();
 
         assert_eq!(rabbit.name, Some(String::from("slappy")));
@@ -429,7 +455,7 @@ mod tests {
             let mut rabbit = Rabbit::new();
             rabbit.bind("hop", cb, "rabbit:hop");
 
-            let jval = json::obj();
+            let jval = jedi::obj();
             assert_eq!(rdata.read().unwrap()[0], 0);
             rabbit.trigger("hellp", &jval);
             assert_eq!(rdata.read().unwrap()[0], 0);
@@ -503,14 +529,14 @@ mod tests {
             assert_eq!(rdata.read().unwrap()[2], 1);
             assert_eq!(rdata.read().unwrap()[3], 0);
 
-            let json: Value = json::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
+            let json: Value = jedi::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
             rabbit.set_multi(json).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 4);
             assert_eq!(rdata.read().unwrap()[1], 3);
             assert_eq!(rdata.read().unwrap()[2], 1);
             assert_eq!(rdata.read().unwrap()[3], 0);
 
-            let json: Value = json::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
+            let json: Value = jedi::parse(&String::from(r#"{"name":"slappy"}"#)).unwrap();
             rabbit.reset(json).unwrap();
             assert_eq!(rdata.read().unwrap()[0], 6);
             assert_eq!(rdata.read().unwrap()[1], 4);

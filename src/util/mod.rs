@@ -4,7 +4,6 @@ use std::time::Duration;
 pub mod logger;
 pub mod thunk;
 pub mod opdata;
-pub mod json;
 pub mod event;
 pub mod thredder;
 pub mod stopper;

@@ -1,13 +1,19 @@
+/// A collection of utilities for dealing with JSON and YAML objects.
+
+#[macro_use]
+extern crate quick_error;
+extern crate serde;
+extern crate serde_json;
+extern crate serde_yaml;
+
 use ::std::error::Error;
 use ::std::convert::From;
 
-use ::serde_json;
 use ::serde_json::Error as SerdeJsonError;
 use ::serde_yaml::Error as SerdeYamlError;
 pub use ::serde_json::Value;
 pub use ::serde::de::Deserialize;
 pub use ::serde::ser::Serialize;
-use ::serde_yaml;
 
 quick_error! {
     #[derive(Debug)]

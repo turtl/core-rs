@@ -5,6 +5,7 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate gcrypt;
 extern crate hyper;
+extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
@@ -38,6 +39,7 @@ use ::std::thread;
 use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
+use ::jedi::Value;
 
 use ::error::{TError, TResult};
 use ::util::event::Emitter;
@@ -62,18 +64,51 @@ pub fn stop(tx: Pipeline) {
     tx.push(Box::new(move |_| {}));
 }
 
+struct Config {
+    db_location: String,
+    api_endpoint: String,
+}
+
+/// This takes a JSON-encoded object, and parses out the values we care about
+/// into a `Config` struct which can be used to configure various parts of the
+/// app.
+fn process_config(config_str: String) -> Config {
+    let runtime_config: Value = match jedi::parse(&config_str) {
+        Ok(x) => x,
+        Err(_) => jedi::obj(),
+    };
+    let db_location: String = match jedi::get(&["data_location"], &runtime_config) {
+        Ok(x) => x,
+        Err(_) => String::from("/tmp/turtl.sql"),
+    };
+    let api_endpoint: String = match jedi::get(&["api", "endpoint"], &runtime_config) {
+        Ok(x) => x,
+        Err(_) => match config::get(&["api", "endpoint"]) {
+            Ok(x) => x,
+            Err(_) => String::from("https://api.turtlapp.com/v2"),
+        },
+    };
+    Config {
+        db_location: db_location,
+        api_endpoint: api_endpoint,
+    }
+}
+
 /// Start our app...spawns all our worker/helper threads, including our comm
 /// system that listens for external messages.
-pub fn start(db_location: String) -> thread::JoinHandle<()> {
+pub fn start(config_str: String) -> thread::JoinHandle<()> {
     (*RUN).set(true);
     thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
+        // load our ocnfiguration
+        let runtime_config: Config = process_config(config_str);
+
         let queue_main = Arc::new(MsQueue::new());
 
         // start our messaging thread
         let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &db_location) {
+        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &runtime_config.db_location) {
             Ok(x) => x,
             Err(err) => {
                 error!("main::start() -- error creating Turtl object: {}", err);
@@ -90,11 +125,7 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
             }, "app:shutdown");
         }
 
-        let api_endpoint: String = match config::get(&["api", "endpoint"]) {
-            Ok(x) => x,
-            Err(_) => String::from("https://api.turtlapp.com/v2"),
-        };
-        turtl.write().unwrap().api.set_endpoint(api_endpoint);
+        turtl.write().unwrap().api.set_endpoint(&runtime_config.api_endpoint);
 
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.
@@ -119,6 +150,7 @@ pub fn start(db_location: String) -> thread::JoinHandle<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    start(String::from("d:/tmp/turtl-rs.sqlite")).join().unwrap();
+    let config = String::from(r#"{"data_location":"d:/tmp/turtl-rs.sqlite","api":{"endpoint":"http://api.turtl.dev:8181"}}"#);
+    start(config).join().unwrap();
 }
 

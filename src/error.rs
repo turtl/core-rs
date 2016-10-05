@@ -3,9 +3,9 @@ use ::std::convert::From;
 
 use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
+use ::jedi::JSONError;
 
 use ::crypto::CryptoError;
-use ::util::json::JSONError;
 
 quick_error! {
     #[derive(Debug)]

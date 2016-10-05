@@ -4,9 +4,9 @@ use ::hyper;
 use ::hyper::method::Method;
 use ::hyper::header::Headers;
 pub use ::hyper::status::StatusCode as Status;
+use ::jedi::{self, Value};
 
 use ::error::{TResult, TFutureResult, TError};
-use ::util::json::{self, Value};
 use ::util::thredder::{Thredder, Pipeline};
 use ::crypto;
 
@@ -26,8 +26,8 @@ impl Api {
     }
 
     /// Set the API endpoint
-    pub fn set_endpoint(&mut self, endpoint: String) {
-        self.endpoint = endpoint;
+    pub fn set_endpoint(&mut self, endpoint: &String) {
+        self.endpoint = endpoint.clone();
     }
 
     /// Set the API's authentication
@@ -57,7 +57,7 @@ impl Api {
         let method2 = method.clone();
         self.thredder.run(move || {
             let client = hyper::Client::new();
-            let body = try!(json::stringify(&data));
+            let body = try!(jedi::stringify(&data));
             let mut headers = Headers::new();
             match auth {
                 Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),
@@ -81,7 +81,7 @@ impl Api {
                     info!("api::call() -- res({}): {} {}", out.len(), method2, resource);
                     out
                 })
-                .and_then(|out| json::parse::<Value>(&out).map_err(|e| toterr!(e)))
+                .and_then(|out| jedi::parse::<Value>(&out).map_err(|e| toterr!(e)))
         })
     }
 

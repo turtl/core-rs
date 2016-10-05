@@ -31,10 +31,10 @@
 use std::collections::BTreeMap;
 
 use ::std::fmt;
+use ::jedi;
 
 use ::error::{TResult, TError};
 use ::models::model::Model;
-use ::util::json::{self};
 use ::crypto::{self, CryptoOp};
 
 /// The Protected trait defines a set of functionality for our models such that
@@ -61,36 +61,36 @@ pub trait Protected: Model + fmt::Debug {
     fn table(&self) -> String;
 
     /// Grab a JSON Value representation of ALL this model's data
-    fn data(&self) -> json::Value {
-        json::to_val(self)
+    fn data(&self) -> jedi::Value {
+        jedi::to_val(self)
     }
 
     /// Get a set of fields and return them as a JSON Value
-    fn get_fields(&self, fields: &Vec<&str>) -> json::Value {
-        let mut map: BTreeMap<String, json::Value> = BTreeMap::new();
-        let data = json::to_val(self);
+    fn get_fields(&self, fields: &Vec<&str>) -> jedi::Value {
+        let mut map: BTreeMap<String, jedi::Value> = BTreeMap::new();
+        let data = jedi::to_val(self);
         for field in fields {
-            let val = json::walk(&[field], &data);
+            let val = jedi::walk(&[field], &data);
             match val {
                 Ok(v) => { map.insert(String::from(*field), v.clone()); },
                 Err(..) => {}
             }
         }
-        json::Value::Object(map)
+        jedi::Value::Object(map)
     }
 
     /// Grab all public fields for this model as a json Value
-    fn untrusted_data(&self) -> json::Value {
+    fn untrusted_data(&self) -> jedi::Value {
         self.get_fields(&self.public_fields())
     }
 
     /// Grab all private fields for this model as a json Value
-    fn trusted_data(&self) -> json::Value {
+    fn trusted_data(&self) -> jedi::Value {
         self.get_fields(&self.private_fields())
     }
 
     /// Return a JSON dump of all fields. Really, this is a wrapper around
-    /// `json::stringify(model.data())`.
+    /// `jedi::stringify(model.data())`.
     ///
     /// Use this function when sending a model to a trusted source (ie inproc
     /// messaging to our view layer).
@@ -98,16 +98,16 @@ pub trait Protected: Model + fmt::Debug {
     /// __NEVER__ use this function to save data to disk or transmit over a
     /// network connection.
     fn stringify_trusted(&self) -> TResult<String> {
-        json::stringify(&self.data()).map_err(|e| toterr!(e))
+        jedi::stringify(&self.data()).map_err(|e| toterr!(e))
     }
 
     /// Return a JSON dump of all public fields. Really, this is a wrapper
-    /// around `json::stringify(model.untrusted_data())`.
+    /// around `jedi::stringify(model.untrusted_data())`.
     ///
     /// Use this function for sending a model to an *untrusted* source, such as
     /// saving to disk or over a network connection.
     fn stringify_untrusted(&self) -> TResult<String> {
-        json::stringify(&self.untrusted_data()).map_err(|e| toterr!(e))
+        jedi::stringify(&self.untrusted_data()).map_err(|e| toterr!(e))
     }
 
     /// "Serializes" a model...returns all public data with an *encrypted* set
@@ -115,7 +115,7 @@ pub trait Protected: Model + fmt::Debug {
     ///
     /// It returns the Value of all *public* fields, but with the `body`
     /// populated with the encrypted data.
-    fn serialize(&mut self) -> TResult<json::Value> {
+    fn serialize(&mut self) -> TResult<jedi::Value> {
         let body;
         {
             let fakeid = String::from("<no id>");
@@ -124,7 +124,7 @@ pub trait Protected: Model + fmt::Debug {
                 None => &fakeid,
             };
             let data = self.trusted_data();
-            let json = try!(json::stringify(&data));
+            let json = try!(jedi::stringify(&data));
 
             let key = match self.key() {
                 Some(x) => x,
@@ -141,7 +141,7 @@ pub trait Protected: Model + fmt::Debug {
     /// the values in the decrypted JSON dump back into the model.
     ///
     /// It returns the Value of all public fields.
-    fn deserialize(&mut self) -> TResult<json::Value> {
+    fn deserialize(&mut self) -> TResult<jedi::Value> {
         let fakeid = String::from("<no id>");
         let json_bytes;
         {
@@ -160,7 +160,7 @@ pub trait Protected: Model + fmt::Debug {
             json_bytes = try!(crypto::decrypt(&key, &body));
         }
         let json_str = try!(String::from_utf8(json_bytes));
-        let parsed = try!(json::parse(&json_str));
+        let parsed = try!(jedi::parse(&json_str));
         try!(self.set_multi(parsed));
         Ok(self.trusted_data())
     }
@@ -282,7 +282,7 @@ protected!{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::util::json;
+    use ::jedi;
     use ::crypto;
     use ::models::model::Model;
 
@@ -315,7 +315,7 @@ mod tests {
         dog.set("id", String::from("123")).unwrap();
         dog.set("size", 42i64).unwrap();
         dog.set("name", String::from("barky")).unwrap();
-        assert_eq!(json::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(jedi::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
         assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
 
@@ -339,16 +339,16 @@ mod tests {
     #[test]
     fn encrypts_decrypts() {
         let json = String::from(r#"{"size":69,"name":"barky","type":"canadian","tags":["flappy","noisy"]}"#);
-        let mut dog: Dog = json::parse(&json).unwrap();
+        let mut dog: Dog = jedi::parse(&json).unwrap();
         let key = crypto::random_key().unwrap();
         dog.key = Some(key.clone());
         let serialized = dog.serialize().unwrap();
 
-        let body: String = json::get(&["body"], &serialized).unwrap();
-        match json::get::<String>(&["name"], &serialized) {
+        let body: String = jedi::get(&["body"], &serialized).unwrap();
+        match jedi::get::<String>(&["name"], &serialized) {
             Ok(..) => panic!("data from Protected::serialize() contains private fields"),
             Err(e) => match e {
-                json::JSONError::NotFound(..) => (),
+                jedi::JSONError::NotFound(..) => (),
                 _ => panic!("error while testing data returned from Protected::serialize() - {}", e),
             }
         }
@@ -364,8 +364,8 @@ mod tests {
         assert_eq!(dog2.get::<Vec<String>>("tags"), None);
         let res = dog2.deserialize().unwrap();
         assert_eq!(dog.stringify_trusted().unwrap(), dog2.stringify_trusted().unwrap());
-        assert_eq!(json::get::<String>(&["name"], &res).unwrap(), "barky");
-        assert_eq!(json::get::<String>(&["type"], &res).unwrap(), "canadian");
+        assert_eq!(jedi::get::<String>(&["name"], &res).unwrap(), "barky");
+        assert_eq!(jedi::get::<String>(&["type"], &res).unwrap(), "canadian");
         assert_eq!(dog2.get::<i64>("size").unwrap(), &69);
         assert_eq!(dog2.get::<String>("name").unwrap(), &String::from("barky"));
         assert_eq!(dog2.get::<String>("type").unwrap(), &String::from("canadian"));

@@ -1,8 +1,8 @@
 use ::futures::Future;
+use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
-use ::util::{self, json};
-use ::util::json::Value;
+use ::util;
 use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
 use ::models::user::User;
@@ -20,7 +20,7 @@ fn process_res(turtl: TurtlWrap, res: TResult<()>) {
                 }
                 util::sleep(10);
                 let ref mut events = turtl.write().unwrap().events;
-                events.trigger("app:shutdown", &json::to_val(&()));
+                events.trigger("app:shutdown", &jedi::to_val(&()));
             }
             _ => error!("dispatch: error processing message: {}", e),
         },
@@ -30,15 +30,15 @@ fn process_res(turtl: TurtlWrap, res: TResult<()>) {
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
-    let data: Value = try!(json::parse(msg));
+    let data: Value = try!(jedi::parse(msg));
 
     // grab the command from the data
-    let cmd: String = try!(json::get(&["0"], &data));
+    let cmd: String = try!(jedi::get(&["0"], &data));
 
     let res = match cmd.as_ref() {
         "user:login" => {
-            let username = try!(json::get(&["1", "username"], &data));
-            let password = try!(json::get(&["1", "password"], &data));
+            let username = try!(jedi::get(&["1", "username"], &data));
+            let password = try!(jedi::get(&["1", "password"], &data));
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
             User::login(turtl.clone(), &username, &password)
@@ -65,7 +65,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             turtl.read().unwrap().remote_send("{\"e\":\"pong\"}".to_owned())
                 .map(|_| ())
         }
-        "shutdown" => Err(TError::Shutdown),
+        "app:shutdown" => Err(TError::Shutdown),
         _ => Err(TError::Msg(format!("bad command: {}", cmd))),
     };
     process_res(turtl, res);

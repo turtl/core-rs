@@ -4,7 +4,8 @@
 //! We also define an event struct for triggering events.
 
 use ::std::collections::HashMap;
-use ::util::json::Value;
+
+use ::jedi::Value;
 
 /// Defines what type of binding we have
 enum BindType {
@@ -154,18 +155,18 @@ impl Default for EventEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::util::json::{self, Value};
+    use ::jedi::{self, Value};
     use std::sync::{Arc, RwLock};
 
     #[test]
     fn bind_emit() {
         let data = Arc::new(RwLock::new(vec![0]));
-        let jval = json::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
+        let jval = jedi::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
         let rdata = data.clone();
         {
             let data = data.clone();
             let cb = move |x: &Value| {
-                assert_eq!(json::stringify(x).unwrap(), r#"{"name":"larry"}"#);
+                assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
             let mut emitter = EventEmitter::new();
@@ -186,12 +187,12 @@ mod tests {
     #[test]
     fn bind_once_emit() {
         let data = Arc::new(RwLock::new(vec![0]));
-        let jval = json::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
+        let jval = jedi::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
         let rdata = data.clone();
         {
             let data = data.clone();
             let cb = move |x: &Value| {
-                assert_eq!(json::stringify(x).unwrap(), r#"{"name":"larry"}"#);
+                assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
             let mut emitter = EventEmitter::new();
@@ -211,12 +212,12 @@ mod tests {
     #[test]
     fn unbind() {
         let data = Arc::new(RwLock::new(vec![0]));
-        let jval = json::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
+        let jval = jedi::parse(&String::from(r#"{"name":"larry"}"#)).unwrap();
         let rdata = data.clone();
         {
             let data = data.clone();
             let cb = move |x: &Value| {
-                assert_eq!(json::stringify(x).unwrap(), r#"{"name":"larry"}"#);
+                assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
             let mut emitter = EventEmitter::new();

@@ -12,6 +12,7 @@ futures = { git = "https://github.com/alexcrichton/futures-rs", rev = "f67296365
 futures-cpupool = { git = "https://github.com/alexcrichton/futures-rs", rev = "f6729636520f313c0e1f420329c1e2f19aba826c" }
 gcrypt = "0.3.0"
 hyper = "0.9.10"
+jedi = { path = "jedi" }
 lazy_static = "0.2.1"
 libc = "0.2.15"
 log = "0.3.6"
