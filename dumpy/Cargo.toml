@@ -1,0 +1,12 @@
+[package]
+name = "dumpy"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+
+[dependencies]
+jedi = { path = "../jedi" }
+rusqlite = "0.7.3"
+quick-error = "1.1.0"
+serde = "0.7.14"
+serde_json = "0.7.4"
+
