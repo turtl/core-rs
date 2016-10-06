@@ -13,11 +13,29 @@ lazy_static! {
     static ref CID_COUNTER: RwLock<u32> = RwLock::new(0);
 
     /// holds our app's client id
-    static ref CLIENT_ID: RwLock<String> = RwLock::new(String::new());
+    static ref CLIENT_ID: RwLock<Option<String>> = RwLock::new(None);
+}
+
+/// Set the model system's client id
+pub fn get_client_id() -> Option<String> {
+    let guard = (*CLIENT_ID).read().unwrap();
+    (*guard).clone()
+}
+
+/// Set the model system's client id
+pub fn set_client_id(id: String) -> TResult<()> {
+    debug!("model -- set_client_id(): {}", id);
+    let mut guard = (*CLIENT_ID).write().unwrap();
+    *guard = Some(id);
+    Ok(())
 }
 
 /// Create a turtl object id from a client id
-pub fn cid(client_id: &String) -> TResult<String> {
+pub fn cid() -> TResult<String> {
+    let client_id = match get_client_id() {
+        Some(ref x) => x.clone(),
+        None => return Err(TError::MissingData(format!("model: CLIENT_ID missing"))),
+    };
     let mut counter_guard = (*CID_COUNTER).write().unwrap();
     let counter: u32 = counter_guard.clone();
     (*counter_guard) += 1;
@@ -187,11 +205,8 @@ pub trait Model: Emitter + Serialize + Deserialize {
     }
 
     /// Get this model's ID
-    fn id<'a, T>(&'a self) -> Option<&'a T>
-        where ModelDataRef<'a>: From<Option<&'a T>>,
-              Option<&'a T>: From<ModelDataRef<'a>>
-    {
-        self.get("id")
+    fn id<'a>(&'a self) -> Option<&'a String> {
+        self.get::<String>("id")
     }
 
     /// Is this model new?
@@ -421,7 +436,7 @@ mod tests {
     fn get_id() {
         let mut rabbit = Rabbit::new();
         rabbit.set("id", String::from("696969")).unwrap();
-        assert_eq!(rabbit.id::<String>().unwrap(), "696969");
+        assert_eq!(rabbit.id().unwrap(), "696969");
     }
 
     #[test]

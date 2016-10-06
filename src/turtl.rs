@@ -4,6 +4,8 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
+use ::jedi::Value;
+
 use ::error::{TError, TResult};
 use ::util::event;
 use ::storage::Storage;
@@ -27,7 +29,7 @@ pub type TurtlWrap = Arc<RwLock<Turtl>>;
 
 impl Turtl {
     /// Create a new Turtl app
-    pub fn new(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> TResult<Turtl> {
+    pub fn new(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String, dumpy_schema: Value) -> TResult<Turtl> {
         // TODO: match num processors - 1
         let num_workers = 3;
         let turtl = Turtl {
@@ -37,15 +39,15 @@ impl Turtl {
             api: Api::new(String::new(), tx_main.clone()),
             msg: Some(tx_msg),
             work: Thredder::new("work", tx_main.clone(), num_workers),
-            db: try!(Storage::new(tx_main.clone(), db_location)),
+            db: try!(Storage::new(tx_main.clone(), db_location, dumpy_schema)),
         };
         Ok(turtl)
     }
 
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
-    pub fn new_wrap(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String) -> TResult<TurtlWrap> {
-        let turtl = try!(Turtl::new(tx_main, tx_msg, db_location));
+    pub fn new_wrap(tx_main: Pipeline, tx_msg: MsgSender, db_location: &String, dumpy_schema: Value) -> TResult<TurtlWrap> {
+        let turtl = try!(Turtl::new(tx_main, tx_msg, db_location, dumpy_schema));
         Ok(Arc::new(RwLock::new(turtl)))
     }
 

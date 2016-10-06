@@ -5,6 +5,7 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
+use ::crypto;
 use ::crossbeam::sync::MsQueue;
 use ::futures::{self, Future, Canceled};
 use ::rusqlite::Connection;
@@ -12,12 +13,13 @@ use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
 use ::rusqlite::types::Value as SqlValue;
 use ::libc::c_int;
 use ::jedi::{self, Value};
+use ::dumpy::Dumpy;
 
 use ::util::opdata::{OpData, OpConverter};
 use ::util::thunk::Thunk;
 use ::util::thredder::Pipeline;
 use ::util::stopper::Stopper;
-use ::models::model::ModelDataRef;
+use ::models::model::{self, ModelDataRef};
 use ::models::protected::Protected;
 use ::turtl::TurtlWrap;
 
@@ -57,6 +59,14 @@ impl<'a> ToSql for ModelDataRef<'a> {
             ModelDataRef::Bin(ref x) => {
                 match *x {
                     Some(val) => val.bind_parameter(stmt, col),
+                    /*
+                    Some(val) => {
+                        match crypto::to_base64(val) {
+                            Ok(val) => val.bind_parameter(stmt, col),
+                            Err(..) => Null.bind_parameter(stmt, col),
+                        }
+                    },
+                    */
                     None => Null.bind_parameter(stmt, col),
                 }
             },
@@ -73,13 +83,26 @@ impl<'a> ToSql for ModelDataRef<'a> {
     }
 }
 
+/// Make sure we have a client ID, and sync it with the model system
+fn setup_client_id(conn: &Connection, dumpy: Arc<Dumpy>) -> TResult<()> {
+    let id = match try!(dumpy.kv_get(conn, "client_id")) {
+        Some(x) => x,
+        None => {
+            let client_id = try!(crypto::random_hash());
+            try!(dumpy.kv_set(conn, "client_id", &client_id));
+            client_id
+        },
+    };
+    model::set_client_id(id)
+}
+
 /// Make ModelDataRef a ToSql type
 /// Start our storage thread, which is the actual keeper of our db Connection.
 ///
 /// We will be talking to it via a channel. It's set up this way because Turtl
 /// needs to be shareable across threads but Connection is not Send/Sync so we
 /// store an interface to the Connection instead of the Connection itself.
-fn start(location: &String) -> (StorageSender, thread::JoinHandle<()>, Arc<Stopper>) {
+fn start(location: &String, dumpy: Arc<Dumpy>) -> (StorageSender, thread::JoinHandle<()>, Arc<Stopper>) {
     let stopper = Arc::new(Stopper::new());
     stopper.set(true);
     let queue = Arc::new(MsQueue::new());
@@ -97,8 +120,27 @@ fn start(location: &String) -> (StorageSender, thread::JoinHandle<()>, Arc<Stopp
             Err(e) => {
                 error!("storage::start() -- {}", e);
                 return;
-            }
+            },
         };
+
+        // set up dumpy
+        match dumpy.init(&conn) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("storage::start() -- dumpy.init() {}", e);
+                return;
+            }
+        }
+
+        match setup_client_id(&conn, dumpy.clone()) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("storage::start() -- client_id: {}", e);
+                return;
+            },
+        }
+
+        info!("storage::start() -- main loop");
         while stopper_local.running() {
             let handler: StorageMsg = recv.pop();
             handler.call_box(conn.clone());
@@ -112,17 +154,20 @@ fn start(location: &String) -> (StorageSender, thread::JoinHandle<()>, Arc<Stopp
 pub struct Storage {
     tx: StorageSender,
     tx_main: Pipeline,
+    dumpy: Arc<Dumpy>,
     pub handle: thread::JoinHandle<()>,
     stopper: Arc<Stopper>,
 }
 
 impl Storage {
     /// Make a Storage lol
-    pub fn new(tx_main: Pipeline, location: &String) -> TResult<Storage> {
-        let (tx, handle, stopper) = start(location);
+    pub fn new(tx_main: Pipeline, location: &String, schema: Value) -> TResult<Storage> {
+        let dumpy = Arc::new(Dumpy::new(schema));
+        let (tx, handle, stopper) = start(location, dumpy.clone());
         Ok(Storage {
             tx: tx,
             tx_main: tx_main,
+            dumpy: dumpy,
             handle: handle,
             stopper: stopper,
         })
@@ -160,11 +205,39 @@ impl Storage {
         });
     }
 
-    /// Given a table, return the schema fields for that table
-    pub fn fields(&self, table: &String) -> TResult<Vec<String>> {
-        Ok(Vec::new())
+    /// Save a model to our db. Make sure it's serialized before handing it in.
+    pub fn save<T>(&self, model: &T) -> TFutureResult<()>
+        where T: Protected
+    {
+        let modeldata = model.untrusted_data();
+        let dumpy = self.dumpy.clone();
+        let table = model.table();
+
+        self.run(move |conn| -> TResult<()> {
+            dumpy.store(&conn, &table, &modeldata)
+                .map_err(|e| From::from(e))
+        }).boxed()
     }
 
+    /// Get a model's data by id
+    pub fn get<T>(&self, model: &T) -> TFutureResult<Value>
+        where T: Protected
+    {
+        let id = model.id().map(|x| x.clone());
+        let table = model.table();
+        let dumpy = self.dumpy.clone();
+
+        self.run(move |conn| -> TResult<Value> {
+            let id: String = match id {
+                Some(x) => x,
+                None => return Err(TError::MissingField(format!("Storage::get() -- model missing `id` field"))),
+            };
+            dumpy.get(&conn, &table, &id)
+                .map_err(|e| From::from(e))
+        }).boxed()
+    }
+
+    /*
     /// Save a model to our db. Make sure it's serialized before handing it in.
     pub fn save<T>(&self, model: Arc<RwLock<T>>) -> TFutureResult<Arc<RwLock<T>>>
         where T: Protected + Send + Sync + 'static
@@ -172,7 +245,7 @@ impl Storage {
         let model_s = model.clone();
         self.run(move |conn| -> TResult<()> {
             let modelr = model_s.read().unwrap();
-            if modelr.id::<String>().is_none() {
+            if modelr.id().is_none() {
                 return Err(TError::MissingField(format!("Storage::save() -- model missing `id` field")));
             }
 
@@ -212,7 +285,7 @@ impl Storage {
         self.run(move |conn| -> TResult<()> {
             let modelr = model_s.read().unwrap();
             let table = modelr.table();
-            let id: String = match modelr.id::<String>() {
+            let id: String = match modelr.id() {
                 Some(x) => x.clone(),
                 None => return Err(TError::MissingField(format!("Storage::get() -- model missing `id` field"))),
             };
@@ -240,6 +313,7 @@ impl Storage {
             })
         }).and_then(move |_| futures::done(Ok(model))).boxed()
     }
+    */
 }
 
 impl Drop for Storage {
@@ -278,7 +352,8 @@ mod tests {
         Turtl::new_wrap(
             Arc::new(MsQueue::new()),
             Arc::new(MsQueue::new()),
-            &String::from(":inmem:")
+            &String::from(":inmem:"),
+            jedi::obj(),
         ).unwrap()
     }
 
@@ -289,10 +364,11 @@ mod tests {
     // opposed to having a bunch of random shitty variables polluting
     // everything.
     fn setup() -> (Arc<Storage>, Box<Fn() + Send + Sync>, Box<Fn() -> TFutureResult<()> + Send + Sync>) {
+        let schema = jedi::parse(&String::from(r#"{"notes":{"indexes":[{"name":"boards","fields":["boards"]}]}}"#)).unwrap();
         let stopper = Arc::new(Stopper::new());
         stopper.set(true);
         let tx_main = Arc::new(MsQueue::new());
-        let db = Arc::new(Storage::new(tx_main.clone(), &String::from(":inmem:")).unwrap());
+        let db = Arc::new(Storage::new(tx_main.clone(), &String::from(":memory:"), schema).unwrap());
         let turtl = fake_turtl();
         let stopclone = stopper.clone();
         let mainloop = move || {
@@ -355,6 +431,7 @@ mod tests {
 
     #[test]
     fn saves_models() {
+        /*
         let (db, mainloop, stopfn) = setup();
 
         let mut model: Shiba = jedi::parse(&String::from(r#"{"id":"6969","color":"sesame","name":"kofi","tags":["defiant","aloof"]}"#)).unwrap();
@@ -377,14 +454,13 @@ mod tests {
 
         println!("");
         println!("---");
-        println!("cid: {}", model::cid(&String::from("af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0")).unwrap());
+        println!("cid: {}", model::cid().unwrap());
         db.run(|conn| -> TResult<()> { try!(conn.execute("CREATE TABLE shiba (id rowid, color varchar(64), name varchar(64), tags varchar(255), body blob)", &[])); Ok(()) })
             .and_then(move |_| {
-                println!("savetina");
                 db1.save(model.clone())
             })
             .and_then(move |shiba| {
-                println!("shiba saved: {:?}", shiba.read().unwrap().id::<String>());
+                println!("shiba saved: {:?}", shiba.read().unwrap().id());
                 println!("getting...");
                 let mut sheeb: Shiba = jedi::parse(&String::from(r#"{"id":"6969"}"#)).unwrap();
                 sheeb.key = Some(key.clone());
@@ -407,5 +483,6 @@ mod tests {
             .forget();
 
         mainloop();
+        */
     }
 }

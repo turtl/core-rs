@@ -1,5 +1,6 @@
 extern crate crossbeam;
 extern crate crypto as rust_crypto;
+extern crate dumpy;
 extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
@@ -66,6 +67,7 @@ pub fn stop(tx: Pipeline) {
 
 struct Config {
     db_location: String,
+    dumpy_schema: Value,
     api_endpoint: String,
 }
 
@@ -81,6 +83,10 @@ fn process_config(config_str: String) -> Config {
         Ok(x) => x,
         Err(_) => String::from("/tmp/turtl.sql"),
     };
+    let dumpy_schema: Value = match jedi::get(&["schema"], &runtime_config) {
+        Ok(x) => x,
+        Err(_) => jedi::obj(),
+    };
     let api_endpoint: String = match jedi::get(&["api", "endpoint"], &runtime_config) {
         Ok(x) => x,
         Err(_) => match config::get(&["api", "endpoint"]) {
@@ -90,6 +96,7 @@ fn process_config(config_str: String) -> Config {
     };
     Config {
         db_location: db_location,
+        dumpy_schema: dumpy_schema,
         api_endpoint: api_endpoint,
     }
 }
@@ -108,7 +115,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
         let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &runtime_config.db_location) {
+        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &runtime_config.db_location, runtime_config.dumpy_schema.clone()) {
             Ok(x) => x,
             Err(err) => {
                 error!("main::start() -- error creating Turtl object: {}", err);
@@ -125,11 +132,13 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             }, "app:shutdown");
         }
 
+        // set our api endpoint
         turtl.write().unwrap().api.set_endpoint(&runtime_config.api_endpoint);
 
         // run our main loop. all threads pipe their data/responses into this
         // loop, meaning <main> only has to check one place to grab messages.
         // this creates an event loop of sorts, without all the grossness.
+        info!("main::start() -- main loop");
         while (*RUN).running() {
             debug!("turtl: main thread message loop");
             let handler = queue_main.pop();
