@@ -15,7 +15,8 @@ use ::jedi::{Value, JSONError};
 
 pub mod error;
 
-use ::error::{DError, DResult};
+pub use ::error::DError;
+use ::error::DResult;
 
 /// The Dumpy struct stores our schema and acts as a namespace for our public
 /// functions.
@@ -58,8 +59,20 @@ impl Dumpy {
             }
         };
         for index in &indexes {
-            let idx_name = try!(jedi::get::<String>(&["name"], index));
             let fields = try!(jedi::get::<Vec<String>>(&["fields"], index));
+            let idx_name: String = match jedi::get::<String>(&["name"], index) {
+                Ok(x) => x,
+                Err(e) => match e {
+                    JSONError::DeadEnd | JSONError::NotFound(_) => {
+                        let mut name = fields[0].clone();
+                        for field in &fields[1..] {
+                            name = format!("{}_{}", name, field);
+                        }
+                        name
+                    }
+                    _ => return Err(From::from(e)),
+                }
+            };
             let mut val_vec: Vec<Vec<String>> = Vec::new();
             let blankval = String::from("");
 
@@ -208,7 +221,6 @@ impl Dumpy {
 
     /// Set a value into the key/val store
     pub fn kv_set(&self, conn: &Connection, key: &str, val: &String) -> DResult<()> {
-        // TODO finish set kv
         try!(conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val]));
         Ok(())
     }
@@ -236,6 +248,12 @@ impl Dumpy {
             },
         }
     }
+
+    /// Remove a k/v val
+    pub fn kv_delete(&self, conn: &Connection, key: &str) -> DResult<()> {
+        try!(conn.execute("DELETE FROM dumpy_kv WHERE key = $1", &[&key]));
+        Ok(())
+    }
 }
 
 
@@ -247,7 +265,7 @@ mod tests {
 
     fn pre_test() -> (Connection, Dumpy) {
         let conn = Connection::open_in_memory().unwrap();
-        let schema = jedi::parse(&String::from(r#"{"boards":null,"notes":{"indexes":[{"name":"boards","fields":["boards"]},{"name":"user_boards","fields":["user_id","boards"]}]}}"#)).unwrap();
+        let schema = jedi::parse(&String::from(r#"{"boards":null,"notes":{"indexes":[{"fields":["boards"]},{"name":"user_boards","fields":["user_id","boards"]}]}}"#)).unwrap();
         let dumpy = Dumpy::new(schema);
         (conn, dumpy)
     }
@@ -323,6 +341,10 @@ mod tests {
         assert_eq!(val.unwrap(), "i got no feelin'");
 
         let val = dumpy.kv_get(&conn, "doesnt_exist").unwrap();
+        assert_eq!(val, None);
+
+        dumpy.kv_delete(&conn, "some_setting").unwrap();
+        let val = dumpy.kv_get(&conn, "some_setting").unwrap();
         assert_eq!(val, None);
     }
 }
