@@ -5,7 +5,6 @@
 extern int32_t carrier_send(char*, uint8_t*, size_t);
 extern uint8_t* carrier_recv_nb(char*, uint64_t*);
 extern uint8_t* carrier_recv(char*, uint64_t*);
-extern int32_t carrier_vacuum();
 extern int32_t carrier_free(uint8_t*);
 
 void send(int id, char* msg) {
@@ -53,10 +52,6 @@ int main() {
 	fflush(stdout);
 	sleep(5);
 
-	printf("vacuuming: %d\n", carrier_vacuum());
-	fflush(stdout);
-	sleep(5);
-
 	printf("sending %d\n", (num * 8));
 	fflush(stdout);
 	for(int i = 0; i < (num * 8); i++) {
@@ -72,10 +67,6 @@ int main() {
 		recv(i);
 	}
 	printf("recv done!\n");
-	fflush(stdout);
-	sleep(5);
-
-	printf("vacuuming: %d\n", carrier_vacuum());
 	fflush(stdout);
 	sleep(5);
 
