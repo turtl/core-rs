@@ -1,3 +1,4 @@
+extern crate carrier;
 extern crate crossbeam;
 extern crate crypto as rust_crypto;
 extern crate dumpy;
@@ -12,7 +13,6 @@ extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate log;
-extern crate nanomsg;
 #[macro_use]
 extern crate quick_error;
 extern crate rusqlite;
@@ -38,6 +38,8 @@ mod turtl;
 
 use ::std::thread;
 use ::std::sync::Arc;
+use ::std::fs;
+use ::std::io::ErrorKind;
 
 use ::crossbeam::sync::MsQueue;
 use ::jedi::Value;
@@ -66,7 +68,7 @@ pub fn stop(tx: Pipeline) {
 }
 
 struct Config {
-    db_location: String,
+    data_folder: String,
     dumpy_schema: Value,
     api_endpoint: String,
 }
@@ -79,7 +81,7 @@ fn process_config(config_str: String) -> Config {
         Ok(x) => x,
         Err(_) => jedi::obj(),
     };
-    let db_location: String = match jedi::get(&["data_location"], &runtime_config) {
+    let data_folder: String = match jedi::get(&["data_folder"], &runtime_config) {
         Ok(x) => x,
         Err(_) => String::from("/tmp/turtl.sql"),
     };
@@ -95,7 +97,7 @@ fn process_config(config_str: String) -> Config {
         },
     };
     Config {
-        db_location: db_location,
+        data_folder: data_folder,
         dumpy_schema: dumpy_schema,
         api_endpoint: api_endpoint,
     }
@@ -109,13 +111,28 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
         // load our ocnfiguration
         let runtime_config: Config = process_config(config_str);
 
+        match fs::create_dir(&runtime_config.data_folder[..]) {
+            Ok(()) => {
+                info!("main::start() -- created data folder: {}", runtime_config.data_folder);
+            },
+            Err(e) => {
+                match e.kind() {
+                    ErrorKind::AlreadyExists => (),
+                    _ => {
+                        error!("main::start() -- error creating data folder: {:?}", e.kind());
+                        return;
+                    }
+                }
+            }
+        }
+
         let queue_main = Arc::new(MsQueue::new());
 
         // start our messaging thread
         let (tx_msg, handle) = messaging::start(queue_main.clone());
 
         // create our turtl object
-        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &runtime_config.db_location, runtime_config.dumpy_schema.clone()) {
+        let turtl = match turtl::Turtl::new_wrap(queue_main.clone(), tx_msg, &runtime_config.data_folder, runtime_config.dumpy_schema.clone()) {
             Ok(x) => x,
             Err(err) => {
                 error!("main::start() -- error creating Turtl object: {}", err);
@@ -159,7 +176,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 fn main() {
     init().unwrap();
-    let config = String::from(r#"{"data_location":"d:/tmp/turtl-rs.sqlite","api":{"endpoint":"http://api.turtl.dev:8181"}}"#);
+    let config = String::from(r#"{"data_folder":"d:/tmp/turtl/","api":{"endpoint":"http://api.turtl.dev:8181"}}"#);
     start(config).join().unwrap();
 }
 

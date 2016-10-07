@@ -96,7 +96,7 @@ impl From<JSONError> for TError {
 }
 from_err!(::std::io::Error);
 from_err!(::fern::InitError);
-from_err!(::nanomsg::Error);
+from_err!(::carrier::CError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);

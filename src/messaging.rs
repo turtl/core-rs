@@ -1,17 +1,14 @@
-//! The messenger is responsible for proxing messages between nanomsg (our
-//! remote) and our main thread.
+//! The messenger is responsible for proxing messages between our remote and 
+//! our main thread.
 //!
 //! This module is essentially the window into the app, essentially acting as an
 //! event bus to/from our remote sender (generally, this is a UI of some sort).
 
-use ::std::io::{Read, Write};
 use ::std::thread::{self, JoinHandle};
 use ::std::sync::Arc;
 
 use ::crossbeam::sync::MsQueue;
-use ::nanomsg::{Socket, Protocol};
-use ::nanomsg::Error as NanoError;
-use ::nanomsg::endpoint::Endpoint;
+use ::carrier;
 
 use ::config;
 use ::error::{TResult, TError};
@@ -22,89 +19,70 @@ use ::turtl::TurtlWrap;
 use ::stop;
 
 pub struct Messenger {
-    /// The nanomsg socket
-    socket: Socket,
-    /// The endpoint we're bound/connected to
-    endpoint: Option<Endpoint>,
+    /// Whether we're bound or not. Kind of vestigial
+    bound: bool,
+
+    /// The channel we're listening to
+    channel_in: String,
+
+    /// The channel we're sending on
+    channel_out: String,
 }
 
 impl Messenger {
     /// Create a new messenger
-    fn new() -> Messenger {
+    fn new(channel: String) -> Messenger {
         Messenger {
-            socket: Socket::new(Protocol::Pair).unwrap(),
-            endpoint: None,
+            bound: true,
+            channel_in: format!("{}-core-in", channel),
+            channel_out: format!("{}-core-out", channel),
         }
     }
 
-    /// Bind to a nanomsg socket
-    fn bind(&mut self, address: &String) -> TResult<()> {
-        info!("messaging: bind: address: {}", address);
-        self.endpoint = Some(try!(self.socket.bind(address)));
-        util::sleep(100);
-        Ok(())
+    /// Create a new messenger with channel-in/channel-out flipped
+    fn new_reversed(channel: String) -> Messenger {
+        let mut messenger = Messenger::new(channel);
+        let channtmp = messenger.channel_in;
+        messenger.channel_in = messenger.channel_out;
+        messenger.channel_out = channtmp;
+        messenger
     }
 
     #[allow(dead_code)]
-    /// Connect to a nanomsg socket
-    fn connect(&mut self, address: &String) -> TResult<()> {
-        info!("messaging: connect: address: {}", address);
-        self.endpoint = Some(try!(self.socket.connect(address)));
-        util::sleep(100);
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    /// Blocking receive on the nanomsg socket.
+    /// Blocking receive
     fn recv(&mut self) -> TResult<String> {
-        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
-        let mut message = String::new();
-        try!(self.socket.read_to_string(&mut message));
-        debug!("messaging: recv: {}", message.len());
-        Ok(message)
+        let bytes = try!(carrier::recv(&self.channel_in[..]));
+        debug!("messaging: recv: {}", bytes.len());
+        String::from_utf8(bytes).map_err(|e| From::from(e))
     }
 
-    /// Non-blocking receive on the nanomsg socket.
+    /// Non-blocking receive
     fn recv_nb(&mut self) -> TResult<String> {
-        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
-        let mut bin = Vec::<u8>::new();
-        try!(self.socket.nb_read_to_end(&mut bin).map_err(|e| {
-            match e {
-                NanoError::TryAgain => TError::TryAgain,
-                _ => toterr!(e),
-            }
-        }));
-
-        let msg = try!(String::from_utf8(bin));
-        debug!("messaging: recv: {}", msg.len());
-        Ok(msg)
+        let maybe_bytes = try!(carrier::recv_nb(&self.channel_in[..]));
+        match maybe_bytes {
+            Some(x) => {
+                debug!("messaging: recv: {}", x.len());
+                String::from_utf8(x).map_err(|e| From::from(e))
+            },
+            None => Err(TError::TryAgain),
+        }
     }
 
-    /// Send a message out on the nanomsg socket
+    /// Send a message out
     pub fn send(&mut self, msg: String) -> TResult<()> {
-        if !self.is_bound() { return Err(TError::MissingData(format!("messenger is not bound"))); }
         debug!("messaging: send: {}", msg.len());
-        let msg_bytes = msg.as_bytes();
-        try!(self.socket.write_all(msg_bytes));
-        Ok(())
+        carrier::send_string(&self.channel_out[..], &msg)
+            .map_err(|e| From::from(e))
     }
 
     /// Shutdown the bound/connected socket endpoint
     pub fn shutdown(&mut self) {
-        if self.endpoint.is_none() { return; }
-        self.endpoint.as_mut().map(|mut x| x.shutdown());
-        self.endpoint = None;
+        self.bound = false;
     }
 
     /// Are we bound/connected?
     pub fn is_bound(&self) -> bool {
-        self.endpoint.is_some()
-    }
-}
-
-impl Drop for Messenger {
-    fn drop(&mut self) {
-        self.shutdown();
+        self.bound
     }
 }
 
@@ -126,11 +104,9 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
 //pub type MsgThunk = Thunk<&mut Messenger>;
 pub type MsgSender = Arc<MsQueue<Box<MsgThunk>>>;
 
-/// Start a thread that handles proxying messages between main and nanomsg.
+/// Start a thread that handles proxying messages between main and remote.
 ///
-/// Currently, the implementation relies on polling. This may change once the
-/// nanomsg-rs lib gets multithread support (https://github.com/thehydroimpulse/nanomsg.rs/issues/70)
-/// but until then we do this the stupid way.
+/// Currently, the implementation relies on polling.
 pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
     // create our main <--> messaging communication channel
     let queue = Arc::new(MsQueue::new());
@@ -140,10 +116,6 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
     let recv = queue.clone();
 
     let handle = thread::spawn(move || {
-        // create our messenger! this binds to nanomsg and lets us send/recv
-        // messages from our remote friend
-        let mut messenger = Messenger::new();
-
         // read our bind address from config, otherwise use a default
         let address: String = match config::get(&["messaging", "address"]) {
             Ok(x) => x,
@@ -153,14 +125,8 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
             }
         };
 
-        // bind to nanomsg
-        match messenger.bind(&address) {
-            Ok(..) => (),
-            Err(e) => {
-                error!("messaging: error binding {}: {}", address, e);
-                return;
-            }
-        }
+        // create our messenger!
+        let mut messenger = Messenger::new(address);
 
         // a simple internal function called when we have a problem and don't
         // want to panic. this stops the messenger and also kills the main
@@ -197,7 +163,7 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                 None => (),
             }
 
-            // grab a message from our nanomsg remote (non-blocking)
+            // grab a message from our remote (non-blocking)
             match messenger.recv_nb() {
                 Ok(x) => {
                     nn_errcount = 0;
@@ -214,9 +180,9 @@ pub fn start(tx_main: Pipeline) -> (MsgSender, JoinHandle<()>) {
                 Err(TError::TryAgain) => (),
                 Err(e) => {
                     nn_errcount += 1;
-                    error!("messaging: problem polling nanomsg socket: {:?}", e);
+                    error!("messaging: problem polling remote socket: {:?}", e);
                     if nn_errcount > 10 {
-                        error!("messaging: too many nanomsg failures, leaving");
+                        error!("messaging: too many remove failures, leaving");
                         terminate(messenger);
                         break;
                     }
@@ -264,8 +230,7 @@ mod tests {
         let panicref = panic.clone();
         let pongref = pong.clone();
         let handle = thread::spawn(move || {
-            let mut messenger = Messenger::new();
-            messenger.bind(&String::from("inproc://turtltest")).unwrap();
+            let mut messenger = Messenger::new(String::from("inproc://turtltest"));
             let message = messenger.recv().unwrap();
 
             let res = match message.as_ref() {
@@ -287,8 +252,7 @@ mod tests {
             }
         });
 
-        let mut messenger = Messenger::new();
-        messenger.connect(&String::from("inproc://turtltest")).unwrap();
+        let mut messenger = Messenger::new_reversed(String::from("inproc://turtltest"));
         messenger.send(String::from("ping")).unwrap();
         let response = messenger.recv().unwrap();
         assert_eq!(response, r#"pong"#);
