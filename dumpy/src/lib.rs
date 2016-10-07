@@ -35,7 +35,7 @@ impl Dumpy {
     /// Init our dumpy store on an existing connection.
     pub fn init(&self, conn: &Connection) -> DResult<()> {
         try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_objects (id VARCHAR(64) PRIMARY KEY, table_name VARCHAR(32), data TEXT)", &[]));
-        try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id ROWID, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", &[]));
+        try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id INTEGER PRIMARY KEY, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", &[]));
         try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", &[]));
 
         try!(conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", &[]));
