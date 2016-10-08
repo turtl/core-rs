@@ -1,0 +1,10 @@
+[package]
+name = "turtl_client"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+
+[dependencies]
+carrier = { path = "../carrier" }
+config = { path = "../config" }
+turtl_core = { path = ".." }
+
