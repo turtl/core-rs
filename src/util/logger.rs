@@ -27,7 +27,18 @@ pub fn setup_logger() -> TResult<()> {
         output: vec![fern::OutputConfig::stdout()],
         level: log::LogLevelFilter::Trace,
     };
-    try!(fern::init_global_logger(logger_config, level));
+    match fern::init_global_logger(logger_config, level) {
+        Ok(_) => (),
+        Err(e) => {
+            match e {
+                fern::InitError::SetLoggerError(_) => (),
+                _ => {
+                    println!("logger: err: {}", e);
+                    return Err(From::from(e));
+                }
+            }
+        },
+    }
     Ok(())
 }
 
