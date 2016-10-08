@@ -12,7 +12,7 @@ fn process_res(turtl: TurtlWrap, res: TResult<()>) {
         Ok(..) => (),
         Err(e) => match e {
             TError::Shutdown => {
-                warn!("dispatch: got shutdown signal, quitting");
+                info!("dispatch: got shutdown signal, quitting");
                 util::sleep(10);
                 match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
                     Ok(..) => (),
@@ -62,11 +62,17 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         },
         "ping" => {
             info!("ping!");
-            turtl.read().unwrap().remote_send("{\"e\":\"pong\"}".to_owned())
+            turtl.read().unwrap().remote_send(String::from(r#"{"e":"pong"}"#))
                 .map(|_| ())
         }
         "app:shutdown" => Err(TError::Shutdown),
-        _ => Err(TError::Msg(format!("bad command: {}", cmd))),
+        _ => {
+            match turtl.read().unwrap().remote_send(format!(r#"{{"e":"unknown_command","cmd":"{}"}}"#, cmd)) {
+                Err(e) => error!("dispatch -- problem sending error message: {}", e),
+                _ => ()
+            }
+            Err(TError::Msg(format!("bad command: {}", cmd)))
+        }
     };
     process_res(turtl, res);
     Ok(())
