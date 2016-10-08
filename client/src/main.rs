@@ -61,7 +61,13 @@ mod tests {
     #[test]
     fn inits_shuts_down() {
         let handle = init();
+        send(r#"["ping"]"#);
+        let msg = recv();
+        assert_eq!(msg, r#"{"e":"pong"}"#);
+        sleep(10);
         send(r#"["app:shutdown"]"#);
+        let msg = recv();
+        assert_eq!(msg, r#"{"e":"shutdown"}"#);
         end(handle);
     }
 
@@ -71,10 +77,11 @@ mod tests {
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
         let msg = format!(r#"["user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
-        println!("msg: {}", msg);
-        send(&msg[..]);
+        send(msg.as_str());
         let msg = recv();
-        println!("login: recv: {}", msg);
+        assert_eq!(msg, r#"{"e":"login-success"}"#);
+        sleep(10);
+        send(r#"["app:shutdown"]"#);
         end(handle);
     }
 }
