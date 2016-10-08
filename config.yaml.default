@@ -1,5 +1,41 @@
 ---
 loglevel: "debug"
 messaging:
- address: "inproc://turtl"
+  # we no longer use nanomsg, any arbitrary string will do
+  address: "turtlapp"
+
+api:
+  endpoint: "https://api.turtlapp.com/v2"
+
+schema:
+  users:
+  personas:
+  boards:
+    indexes:
+      - fields:
+          - user_id
+  notes:
+    indexes:
+      - fields:
+          - user_id
+      - fields:
+          - boards
+      - fields:
+          - has_file
+  invites:
+  files:
+    indexes:
+      - fields:
+          - note_id
+      - fields:
+          - synced
+      - fields:
+          - has_data
+
+# configuration for test client
+client:
+  test:
+    # test account to use
+    username: turtluser
+    password: acctpassword
 

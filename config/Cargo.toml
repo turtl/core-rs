@@ -1,0 +1,9 @@
+[package]
+name = "config"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+
+[dependencies]
+jedi = { path = "../jedi" }
+lazy_static = "0.2.1"
+

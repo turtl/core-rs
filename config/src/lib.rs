@@ -1,21 +1,35 @@
+extern crate jedi;
+#[macro_use]
+extern crate lazy_static;
+
 use ::std::fs::File;
 use ::std::path::Path;
 use ::std::io::prelude::*;
+use ::std::env;
 
-use ::jedi::{self, Value, Deserialize};
+use ::jedi::{JSONError, Value, Deserialize};
 
-use ::error::TResult;
+pub type TResult<T> = Result<T, JSONError>;
 
 lazy_static! {
     /// create a static/global CONFIG var, and load it with our config data
     static ref CONFIG: Value = {
-        load_config().unwrap()
+        match load_config() {
+            Ok(x) => x,
+            Err(e) => {
+                panic!("error loading config: {}", e);
+            },
+        }
     };
 }
 
 /// load/parse our config file, and return the parsed JSON value
 fn load_config() -> TResult<Value> {
-    let path = Path::new("config.yaml");
+    let path_env = match env::var("TURTL_CONFIG_FILE") {
+        Ok(x) => x,
+        Err(_) => String::from("config.yaml"),
+    };
+    let path = Path::new(&path_env[..]);
     let mut file = try!(File::open(&path));
     let mut contents = String::new();
     try!(file.read_to_string(&mut contents));
