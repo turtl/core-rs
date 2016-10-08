@@ -11,10 +11,6 @@ quick_error! {
     #[derive(Debug)]
     /// Turtl's main error object.
     pub enum TError {
-        Shutdown {
-            description("shutting down")
-            display("shutting down")
-        }
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err.description())

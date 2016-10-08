@@ -66,12 +66,6 @@ impl Turtl {
     pub fn shutdown(&mut self) {
         self.kv = None;
         self.db = None;
-        match self.msg.send_rev(String::from("turtl:internal:msg:shutdown")) {
-            Ok(_) => (),
-            Err(e) => {
-                error!("turtl::shutdown() -- error shutting down messaging thread: {}", e)
-            }
-        }
     }
 }
 

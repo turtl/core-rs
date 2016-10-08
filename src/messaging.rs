@@ -45,7 +45,6 @@ impl Messenger {
         messenger
     }
 
-    #[allow(dead_code)]
     /// Blocking receive
     pub fn recv(&self) -> TResult<String> {
         let bytes = try!(carrier::recv(&self.channel_in[..]));
@@ -53,6 +52,7 @@ impl Messenger {
         String::from_utf8(bytes).map_err(|e| From::from(e))
     }
 
+    #[allow(dead_code)]
     /// Non-blocking receive
     pub fn recv_nb(&self) -> TResult<String> {
         let maybe_bytes = try!(carrier::recv_nb(&self.channel_in[..]));
@@ -107,19 +107,21 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
 /// Start a thread that handles proxying messages between main and remote.
 ///
 /// Currently, the implementation relies on polling.
-pub fn start(tx_main: Pipeline) -> JoinHandle<()> {
-    thread::spawn(move || {
+pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+    fn get_channel() -> String {
         // read our bind address from config, otherwise use a default
-        let address: String = match config::get(&["messaging", "address"]) {
+        match config::get(&["messaging", "address"]) {
             Ok(x) => x,
             Err(e) => {
                 error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
                 String::from("inproc://turtl")
             }
-        };
-
+        }
+    }
+    let handle = thread::spawn(move || {
         // create our messenger!
-        let mut messenger = Messenger::new(address);
+        let mut messenger = Messenger::new(get_channel());
+        info!("messaging::start() -- main loop");
         while messenger.is_bound() {
             // grab a message from our remote
             match messenger.recv() {
@@ -128,6 +130,7 @@ pub fn start(tx_main: Pipeline) -> JoinHandle<()> {
                         messenger.shutdown();
                         continue;
                     }
+                    debug!("messaging: recv: {}", x.len());
                     tx_main.push(Box::new(move |turtl: TurtlWrap| {
                         let msg = x;
                         match dispatch::process(turtl, &msg) {
@@ -142,7 +145,19 @@ pub fn start(tx_main: Pipeline) -> JoinHandle<()> {
             }
         }
         info!("messaging::start() -- shutting down");
-    })
+    });
+    let shutdown_fn = || {
+        let messenger = Messenger::new(get_channel());
+        // send out a shutdown signal on the *incoming* channel so the messaging
+        // system gets it
+        match messenger.send_rev(String::from("turtl:internal:msg:shutdown")) {
+            Ok(_) => (),
+            Err(e) => {
+                error!("turtl::shutdown() -- error shutting down messaging thread: {}", e)
+            }
+        }
+    };
+    (handle, Box::new(shutdown_fn))
 }
 
 #[cfg(test)]

@@ -7,26 +7,6 @@ use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
 use ::models::user::User;
 
-fn process_res(turtl: TurtlWrap, res: TResult<()>) {
-    match res {
-        Ok(..) => (),
-        Err(e) => match e {
-            TError::Shutdown => {
-                info!("dispatch: got shutdown signal, quitting");
-                util::sleep(10);
-                match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
-                    Ok(..) => (),
-                    Err(..) => (),
-                }
-                util::sleep(10);
-                let ref mut events = turtl.write().unwrap().events;
-                events.trigger("app:shutdown", &jedi::to_val(&()));
-            }
-            _ => error!("dispatch: error processing message: {}", e),
-        },
-    };
-}
-
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
@@ -60,12 +40,22 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 .forget();
             Ok(())
         },
+        "app:shutdown" => {
+            info!("dispatch: got shutdown signal, quitting");
+            match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
+                Ok(..) => (),
+                Err(..) => (),
+            }
+            util::sleep(10);
+            let ref mut events = turtl.write().unwrap().events;
+            events.trigger("app:shutdown", &jedi::to_val(&()));
+            Ok(())
+        },
         "ping" => {
             info!("ping!");
             turtl.read().unwrap().remote_send(String::from(r#"{"e":"pong"}"#))
                 .map(|_| ())
-        }
-        "app:shutdown" => Err(TError::Shutdown),
+        },
         _ => {
             match turtl.read().unwrap().remote_send(format!(r#"{{"e":"unknown_command","cmd":"{}"}}"#, cmd)) {
                 Err(e) => error!("dispatch -- problem sending error message: {}", e),
@@ -74,7 +64,12 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             Err(TError::Msg(format!("bad command: {}", cmd)))
         }
     };
-    process_res(turtl, res);
+    match res {
+        Ok(..) => (),
+        Err(e) => match e {
+            _ => error!("dispatch: error processing message: {}", e),
+        },
+    };
     Ok(())
 }
 

@@ -65,7 +65,7 @@ lazy_static!{
 }
 
 /// Stop all threads and close down Turtl
-pub fn stop(tx: Pipeline) {
+fn stop(tx: Pipeline) {
     (*RUN).set(false);
     tx.push(Box::new(move |_| {}));
 }
@@ -127,7 +127,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             let queue_main = Arc::new(MsQueue::new());
 
             // start our messaging thread
-            let handle = messaging::start(queue_main.clone());
+            let (handle, msg_shutdown) = messaging::start(queue_main.clone());
 
             // grab our messaging channel from config
             let msg_channel: String = match config::get(&["messaging", "address"]) {
@@ -166,6 +166,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             }
             info!("main::start() -- shutting down");
             turtl.write().unwrap().shutdown();
+            msg_shutdown();
             match handle.join() {
                 Ok(_) => (),
                 Err(e) => {
