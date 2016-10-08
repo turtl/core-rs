@@ -1,11 +1,17 @@
 [package]
-name = "turtl-core"
+name = "turtl_core"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 build = "build.rs"
 
+[lib]
+name = "turtl_core"
+crate-type = ["rlib"]		# ["rlib", "staticlib"]
+doctest = false				# these annoy me
+
 [dependencies]
 carrier = { path = "carrier" }
+config = { path = "config" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.2.10"
 dumpy = { path = "dumpy" }

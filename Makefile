@@ -11,14 +11,11 @@ all: build
 build: 
 	cargo build
 
-run: build
-	cargo run
-
 test:
 	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
 test-st:
-	RUST_TEST_TASKS=1 cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
+	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
 
 doc:
 	cargo doc -p turtl-core --no-deps
