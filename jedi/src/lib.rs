@@ -49,17 +49,20 @@ quick_error! {
 
 pub type JResult<T> = Result<T, JSONError>;
 
-impl From<SerdeJsonError> for JSONError {
-    fn from(err: SerdeJsonError) -> JSONError {
-        JSONError::Boxed(Box::new(err))
-    }
+/// A macro to make it easy to create From impls for JSONError
+macro_rules! from_err {
+    ($t:ty) => (
+        impl From<$t> for JSONError {
+            fn from(err: $t) -> JSONError {
+                JSONError::Boxed(Box::new(err))
+            }
+        }
+    )
 }
 
-impl From<SerdeYamlError> for JSONError {
-    fn from(err: SerdeYamlError) -> JSONError {
-        JSONError::Boxed(Box::new(err))
-    }
-}
+from_err!(::std::io::Error);
+from_err!(SerdeJsonError);
+from_err!(SerdeYamlError);
 
 /// Parse a JSON string and return a Result<Value>
 pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
