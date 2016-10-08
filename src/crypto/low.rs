@@ -249,7 +249,7 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 */
 
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses
-/// ruct-crypto.
+/// rust-crypto.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let mut result: Vec<u8> = vec![0; keylen];
     match hasher {
@@ -273,7 +273,7 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 ///
 /// Note that most crypto libs either pad for you or assume you have done your
 /// own padding, so we implement ours here. Also note that this is only actually
-/// used in a handful of places, where later crypto primitives (AES-GCM, for
+/// used in a handful of places where later crypto primitives (AES-GCM, for
 /// instance) can't be used due to backwards compat issues.
 fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
     let blocksize: usize = *AES_BLOCK_SIZE;

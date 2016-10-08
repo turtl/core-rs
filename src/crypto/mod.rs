@@ -507,8 +507,9 @@ pub fn uuid() -> CResult<String> {
     // UUID (when factoring in the dashes, '4', and the [8,9,a,b] byte). then
     // convert the bytes to hex.
     let rand = try!(low::to_hex(&try!(low::rand_bytes(15))));
+    let ab89_byte = try!(low::rand_bytes(1))[0];
     let yvals = ['8', '9', 'a', 'b'];
-    let mut uuid = String::new();
+    let mut uuid = String::with_capacity(36);
     let mut i = 0;
     for char in rand.chars() {
         // match on our counter to insert the correct characters in the right
@@ -531,7 +532,7 @@ pub fn uuid() -> CResult<String> {
                 uuid.push('-');
                 i += 1;
                 // grab a random 8 || 9 || a || b character and push it
-                let idx = ((yvals.len() as f64) * try!(low::rand_float())).floor() as usize;
+                let idx = (ab89_byte as usize) % yvals.len();
                 uuid.push(yvals[idx]);
                 i += 1;
             },
@@ -804,9 +805,7 @@ mod tests {
             let uuidstr = uuid().unwrap();
             assert_eq!(uuidstr.len(), 36);
             let mut i = 0;
-            //println!("uuid: {}", uuidstr);
             for chr in uuidstr.chars() {
-                //println!("i/c: {}: {}", chr, i);
                 match i {
                     8 | 13 | 18 | 23 => assert_eq!(chr, '-'),
                     14 => assert_eq!(chr, '4'),
