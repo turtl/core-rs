@@ -39,7 +39,7 @@ impl Carrier {
     }
 
     /// Ensure a channel exists
-    pub fn ensure(&self, channel: &String) -> Arc<MsQueue<Vec<u8>>> {
+    fn ensure(&self, channel: &String) -> Arc<MsQueue<Vec<u8>>> {
         let mut guard = self.queues.write().unwrap();
         if (*guard).contains_key(channel) {
             (*guard).get(channel).unwrap().clone()
@@ -48,6 +48,11 @@ impl Carrier {
             (*guard).insert(channel.clone(), queue.clone());
             queue
         }
+    }
+
+    fn wipe(&self) {
+        let mut guard = self.queues.write().unwrap();
+        guard.clear();
     }
 }
 
@@ -74,6 +79,11 @@ pub fn recv(channel: &str) -> CResult<Vec<u8>> {
 pub fn recv_nb(channel: &str) -> CResult<Option<Vec<u8>>> {
     let queue = (*CONN).ensure(&String::from(channel));
     Ok(queue.try_pop())
+}
+
+/// Wipe out all queues
+pub fn wipe() {
+    (*CONN).wipe();
 }
 
 // -----------------------------------------------------------------------------
@@ -207,5 +217,13 @@ mod tests {
         let msg = String::from_utf8(recv("core").unwrap()).unwrap();
         assert_eq!(msg, "hello, there");
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn wiping() {
+        send_string("messages", String::from("this is another test")).unwrap();
+        send_string("messages", String::from("yoohoo")).unwrap();
+        wipe();
+        assert_eq!(recv_nb("messages").unwrap(), None);
     }
 }

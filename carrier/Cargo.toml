@@ -5,7 +5,7 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [lib]
 name = "carrier"
-crate-type = ["staticlib"]
+crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 crossbeam = "0.2.10"
