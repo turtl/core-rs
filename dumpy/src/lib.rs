@@ -1,6 +1,23 @@
-/// This is a storage abstraction layer over SQLite. Don't use this library
-/// directly, it was made specifically for the Turtl app and probably won't ever
-/// do the things you want it to.
+/// This is a storage abstraction layer over SQLite.
+///
+/// It provides a simple interface to "dump" JSON objects into SQLite and pull
+/// them back out again. It actually stores all objects in one big table, and
+/// has a secondary table that provides indexes. Thre are a few reasons for it
+/// working like this:
+///
+///   1. It's simple. There's no "schema" ...we just send in a JSON object and
+///      it gets stringified and stored in the object body. Any fields we want
+///      to search on are indexed in the separate index table.
+///   2. Having indexes in a second table means we can do things like have
+///      multi-value indexes. So if you have an object, and you want to index
+///      each value of an array in that object, you just make a separate entry
+///      in the index table for each value, and point each one to your target
+///      object.
+///
+/// All that said, unless this use-case fits yours perfectly, don't use this
+/// library. It's interface could be thought of as a crude IndexedDB. It was
+/// made specifically for the Turtl app and probably won't ever do the things
+/// you want it to.
 
 extern crate jedi;
 #[macro_use]
@@ -39,6 +56,7 @@ impl Dumpy {
         try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", &[]));
 
         try!(conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", &[]));
+        try!(conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index_obj ON dumpy_index (table_name, object_id)", &[]));
         try!(conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS dumpy_idx_kv ON dumpy_kv (key)", &[]));
         Ok(())
     }
@@ -165,10 +183,17 @@ impl Dumpy {
         Ok(())
     }
 
+    /// Remove all traces of an object.
+    pub fn delete(&self, conn: &Connection, table: &String, id: &String) -> DResult<()> {
+        try!(conn.execute("DELETE FROM dumpy_objects WHERE table_name = $1 AND id = $2", &[table, id]));
+        try!(conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, id]));
+        Ok(())
+    }
+
     /// Get an object from dumpy's store
-    pub fn get(&self, conn: &Connection, table: &String, id: &String) -> DResult<Value> {
+    pub fn get(&self, conn: &Connection, table: &String, id: &String) -> DResult<Option<Value>> {
         let query = "SELECT data FROM dumpy_objects WHERE id = $1 AND table_name = $2";
-        conn.query_row_and_then(query, &[id, table], |row| -> DResult<Value> {
+        let res = conn.query_row_and_then(query, &[id, table], |row| -> DResult<Value> {
             let data: SqlValue = try!(row.get_checked("data"));
             match data {
                 SqlValue::Text(ref x) => {
@@ -176,7 +201,17 @@ impl Dumpy {
                 },
                 _ => Err(DError::Msg(format!("dumpy: {}: {}: `data` field is not a string", table, id))),
             }
-        })
+        });
+        match res {
+            Ok(x) => Ok(Some(x)),
+            Err(e) => match e {
+                DError::SqlError(e) => match e {
+                    SqlError::QueryReturnedNoRows => Ok(None),
+                    _ => Err(From::from(e)),
+                },
+                _ => Err(e),
+            },
+        }
     }
 
     /// Find objects using a given index/values
@@ -228,17 +263,17 @@ impl Dumpy {
     /// Get a value from the key/val store
     pub fn kv_get(&self, conn: &Connection, key: &str) -> DResult<Option<String>> {
         let query = "SELECT value FROM dumpy_kv WHERE key = $1";
-        let res = conn.query_row_and_then(query, &[&key], |row| -> DResult<Option<String>> {
+        let res = conn.query_row_and_then(query, &[&key], |row| -> DResult<String> {
             let data: SqlValue = try!(row.get_checked("value"));
             match data {
                 SqlValue::Text(x) => {
-                    Ok(Some(x))
+                    Ok(x)
                 },
                 _ => Err(DError::Msg(format!("dumpy: kv: {}: `value` field is not a string", key))),
             }
         });
         match res {
-            Ok(x) => Ok(x),
+            Ok(x) => Ok(Some(x)),
             Err(e) => match e {
                 DError::SqlError(e) => match e {
                     SqlError::QueryReturnedNoRows => Ok(None),
@@ -262,6 +297,8 @@ mod tests {
     use super::*;
     use ::jedi;
     use ::rusqlite::Connection;
+    use ::rusqlite::types::Value as SqlValue;
+    use ::error::DResult;
 
     fn pre_test() -> (Connection, Dumpy) {
         let conn = Connection::open_in_memory().unwrap();
@@ -282,11 +319,37 @@ mod tests {
         let note = jedi::parse(&String::from(r#"{"id":"abc123","user_id":"andrew123","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
         dumpy.init(&conn).unwrap();
         dumpy.store(&conn, &String::from("notes"), &note).unwrap();
-        let note = dumpy.get(&conn, &String::from("notes"), &String::from("abc123")).unwrap();
+        let note = dumpy.get(&conn, &String::from("notes"), &String::from("abc123")).unwrap().unwrap();
         assert_eq!(jedi::get::<String>(&["id"], &note).unwrap(), "abc123");
         assert_eq!(jedi::get::<String>(&["user_id"], &note).unwrap(), "andrew123");
         assert_eq!(jedi::get::<Vec<String>>(&["boards"], &note).unwrap(), vec![String::from("1234"), String::from("5678")]);
         assert_eq!(jedi::get::<String>(&["body"], &note).unwrap(), "this is my note lol");
+    }
+
+    #[test]
+    fn deletes_stuff() {
+        fn index_count(conn: &Connection) -> i64 {
+            conn.query_row_and_then("SELECT COUNT(*) AS count FROM dumpy_index", &[], |row| -> DResult<i64> {
+                let data: SqlValue = try!(row.get_checked("count"));
+                match data {
+                    SqlValue::Integer(ref x) => Ok(x.clone()),
+                    _ => Err(DError::Msg(format!("error grabbing count"))),
+                }
+            }).unwrap()
+        }
+        let (conn, dumpy) = pre_test();
+        let note1 = jedi::parse(&String::from(r#"{"id":"n0mnm","user_id":"3443","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
+        let note2 = jedi::parse(&String::from(r#"{"id":"6tuns","user_id":"9823","boards":["1234","2222"],"body":"this is my note lol"}"#)).unwrap();
+        dumpy.init(&conn).unwrap();
+        dumpy.store(&conn, &String::from("notes"), &note1).unwrap();
+        dumpy.store(&conn, &String::from("notes"), &note2).unwrap();
+        assert!(dumpy.get(&conn, &String::from("notes"), &String::from("6tuns")).unwrap().is_some());
+        assert!(dumpy.get(&conn, &String::from("notes"), &String::from("n0mnm")).unwrap().is_some());
+        assert_eq!(index_count(&conn), 8);
+        dumpy.delete(&conn, &String::from("notes"), &String::from("n0mnm")).unwrap();
+        assert!(dumpy.get(&conn, &String::from("notes"), &String::from("6tuns")).unwrap().is_some());
+        assert!(dumpy.get(&conn, &String::from("notes"), &String::from("n0mnm")).unwrap().is_none());
+        assert_eq!(index_count(&conn), 4);
     }
 
     #[test]
