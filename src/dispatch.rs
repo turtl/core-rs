@@ -40,6 +40,11 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 .forget();
             Ok(())
         },
+        "app:api:set_endpoint" => {
+            let endpoint = try!(jedi::get(&["1"], &data));
+            turtl.write().unwrap().api.set_endpoint(&endpoint);
+            turtl.read().unwrap().remote_send(String::from(r#"{"e":"api:endpoint:set"}"#))
+        },
         "app:shutdown" => {
             info!("dispatch: got shutdown signal, quitting");
             match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
