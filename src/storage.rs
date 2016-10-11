@@ -132,14 +132,14 @@ impl Storage {
     }
 
     /// Get a model's data by id
-    pub fn get<T>(&self, model: &T) -> TResult<Value>
+    pub fn get<T>(&self, model: &T) -> TResult<Option<Value>>
         where T: Protected
     {
         let id = model.id().map(|x| x.clone());
         let table = model.table();
         let dumpy = self.dumpy.clone();
 
-        self.run(move |conn| -> TResult<Value> {
+        self.run(move |conn| -> TResult<Option<Value>> {
             let id: String = match id {
                 Some(x) => x,
                 None => return Err(TError::MissingField(format!("Storage::get() -- model missing `id` field"))),
