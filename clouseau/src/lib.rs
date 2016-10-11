@@ -1,52 +1,8 @@
-//! Clouseau is a quick and dirty in-memory, full-text search index (if you can
-//! call it that).  The ultimate goal of this project is to be a fast, in-memory
-//! search index for many different types of queries. For now it's a simple word
-//! search lib.
+//! Clouseau is a quick and dirty in-memory, full-text search engine.
 //!
-//! The index itself is based on bloom filters. This means that each document
-//! indexed has a fixed size index (~20K bits, or 2.5kb) and fast searching, but
-//! the index itself is not 100% accurate (it may return false positives, but
-//! never false negatives). Searching is O(N), N being the number of documents
-//! indexed.
-//!
-//! All the words indexed are run through a Porter stemmer, so if searching on
-//! the word "fill" and the document contains the word "filled" it will match.
-//!
-//! It does NOT support the following:
-//!
-//! - Phrase searching
-//! - Complex queries (all words passed to `search` are ANDed)
-//! - Ranking (documents are always sorted by doc ID)
-//! - 100% accuracy (false positives may be returned)
-//!
-//! It is really meant as a quick and dirty "throw some words at some indexed
-//! documents and see which ones contain the given words" lib.
-//!
-//! When searching, the index returns just the IDs of the given documents. If
-//! you need the actual document data itself, you must store it somewhere else.
-//! Document IDs are sorted A-z before being returned.
-//!
-//! # Examples
-//!
-//! // `2` here is the exected number of documents we'll be indexing. It's not
-//! // essential this is 100% accurate (it's just a hint to the hash table that
-//! // holds our per-document indexes).
-//! let index = FtIndex::with_capacity(2);
-//!
-//! // Index our documents by their ids (`1234`, `6969`).
-//! index.index(&String::from("1234"), &String::from("I am often filled with glee for I like bugs and bugs like me"));
-//! index.index(&String::from("6969"), &String::from("There once was a man from Venus, who could fill a whole room with his"));
-//!
-//! // Note that searching just returns document ids
-//! assert_eq!(index.search(&String::from("fill")), vec!["1234", "6969"]);
-//! assert_eq!(index.search(&String::from("bugs")), vec!["1234"]);
-//! assert_eq!(index.search(&String::from("man venus")), vec!["6969"]);
-//! assert_eq!(index.search(&String::from("fill room")), vec!["6969"]);
-//!
-//! // You can reindex documents as well by calling `index` again (which
-//! // entirely replaces the index)
-//! index.index(&String::from("1234"), &String::from("I am often filled with glee for I like dogs and dos like me"));
-//! assert_eq!(index.search(&String::from("dogs")), vec!["1234"]);
+//! It builds off of SQLite's in-memory capabilities (and full-text search),
+//! acting as a simplified interface specifically for indexing and retrieving
+//! objects.
 
 
 //                          ....~?=:::~M8.+$??Z$DON??=Z+,+=~.....               
