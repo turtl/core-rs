@@ -1,23 +1,23 @@
-/// This is a storage abstraction layer over SQLite.
-///
-/// It provides a simple interface to "dump" JSON objects into SQLite and pull
-/// them back out again. It actually stores all objects in one big table, and
-/// has a secondary table that provides indexes. Thre are a few reasons for it
-/// working like this:
-///
-///   1. It's simple. There's no "schema" ...we just send in a JSON object and
-///      it gets stringified and stored in the object body. Any fields we want
-///      to search on are indexed in the separate index table.
-///   2. Having indexes in a second table means we can do things like have
-///      multi-value indexes. So if you have an object, and you want to index
-///      each value of an array in that object, you just make a separate entry
-///      in the index table for each value, and point each one to your target
-///      object.
-///
-/// All that said, unless this use-case fits yours perfectly, don't use this
-/// library. It's interface could be thought of as a crude IndexedDB. It was
-/// made specifically for the Turtl app and probably won't ever do the things
-/// you want it to.
+//! This is a storage abstraction layer over SQLite.
+//!
+//! It provides a simple interface to "dump" JSON objects into SQLite and pull
+//! them back out again. It actually stores all objects in one big table, and
+//! has a secondary table that provides indexes. Thre are a few reasons for it
+//! working like this:
+//!
+//!   1. It's simple. There's no "schema" ...we just send in a JSON object and
+//!      it gets stringified and stored in the object body. Any fields we want
+//!      to search on are indexed in the separate index table.
+//!   2. Having indexes in a second table means we can do things like have
+//!      multi-value indexes. So if you have an object, and you want to index
+//!      each value of an array in that object, you just make a separate entry
+//!      in the index table for each value, and point each one to your target
+//!      object.
+//!
+//! All that said, unless this use-case fits yours perfectly, don't use this
+//! library. It's interface could be thought of as a crude IndexedDB. It was
+//! made specifically for the Turtl app and probably won't ever do the things
+//! you want it to.
 
 extern crate jedi;
 #[macro_use]
