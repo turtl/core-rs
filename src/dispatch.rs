@@ -12,13 +12,15 @@ use ::models::user::User;
 pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
     let data: Value = try!(jedi::parse(msg));
 
+    // grab the request id from the data
+    let req: String = try!(jedi::get(&["0"], &data));
     // grab the command from the data
-    let cmd: String = try!(jedi::get(&["0"], &data));
+    let cmd: String = try!(jedi::get(&["1"], &data));
 
     let res = match cmd.as_ref() {
         "user:login" => {
-            let username = try!(jedi::get(&["1", "username"], &data));
-            let password = try!(jedi::get(&["1", "password"], &data));
+            let username = try!(jedi::get(&["2", "username"], &data));
+            let password = try!(jedi::get(&["2", "password"], &data));
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
             User::login(turtl.clone(), &username, &password)
@@ -41,7 +43,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             Ok(())
         },
         "app:api:set_endpoint" => {
-            let endpoint = try!(jedi::get(&["1"], &data));
+            let endpoint = try!(jedi::get(&["2"], &data));
             turtl.write().unwrap().api.set_endpoint(&endpoint);
             turtl.read().unwrap().remote_send(String::from(r#"{"e":"api:endpoint:set"}"#))
         },

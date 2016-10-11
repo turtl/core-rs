@@ -37,8 +37,8 @@ pub fn recv() -> String {
 fn main() {
     let handle = init();
 
-    send(r#"["ping"]"#);
-    let msg = recv();
+    send(r#"["0","ping"]"#);
+    let msg = recv("0");
     println!("client: got {}", msg);
 
     handle.join().unwrap();
