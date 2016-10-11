@@ -155,6 +155,12 @@ impl Carrier {
         (*guard).contains_key(channel)
     }
 
+    /// Count how many active channels there are
+    fn count(&self) -> u32 {
+        let guard = self.queues.read().unwrap();
+        (*guard).len() as u32
+    }
+
     /// Remove a channel
     fn remove(&self, channel: &String) {
         let mut guard = self.queues.write().unwrap();
@@ -200,6 +206,11 @@ pub fn recv_nb(channel: &str) -> CResult<Option<Vec<u8>>> {
     res
 }
 
+/// Returns the number of active channels
+pub fn count() -> u32 {
+    (*CONN).count()
+}
+
 /// Wipe out all queues
 pub fn wipe() {
     (*CONN).wipe();
@@ -210,6 +221,7 @@ mod tests {
     use ::std::thread;
 
     use super::*;
+    use ::std::sync::{Arc, RwLock};
 
     #[test]
     fn send_recv_simple() {
@@ -236,6 +248,30 @@ mod tests {
         let msg = String::from_utf8(recv("core").unwrap()).unwrap();
         assert_eq!(msg, "hello, there");
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn lock_testing() {
+        let tests = 999;
+        let mut handles: Vec<thread::JoinHandle<()>> = Vec::with_capacity(tests as usize);
+        let counter = Arc::new(RwLock::new(0));
+        for _ in 0..tests {
+            let wcounter = counter.clone();
+            handles.push(thread::spawn(move || {
+                let msg = recv("threading").unwrap();
+                assert_eq!(String::from_utf8(msg).unwrap(), "get a job");
+                *(wcounter.write().unwrap()) += 1;
+            }));
+        }
+
+        for _ in 0..tests {
+            send_string("threading", String::from("get a job")).unwrap();
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        assert_eq!(*(counter.read().unwrap()), tests);
     }
 
     // Would love to test wiping, but running in multi-thread mode screws up the
