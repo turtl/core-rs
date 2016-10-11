@@ -252,10 +252,10 @@ mod tests {
 
     #[test]
     fn lock_testing() {
-        let tests = 999;
-        let mut handles: Vec<thread::JoinHandle<()>> = Vec::with_capacity(tests as usize);
+        let num_tests = 999;
+        let mut handles: Vec<thread::JoinHandle<()>> = Vec::with_capacity(num_tests as usize);
         let counter = Arc::new(RwLock::new(0));
-        for _ in 0..tests {
+        for _ in 0..num_tests {
             let wcounter = counter.clone();
             handles.push(thread::spawn(move || {
                 let msg = recv("threading").unwrap();
@@ -264,14 +264,16 @@ mod tests {
             }));
         }
 
-        for _ in 0..tests {
-            send_string("threading", String::from("get a job")).unwrap();
+        for _ in 0..num_tests {
+            handles.push(thread::spawn(|| {
+                send_string("threading", String::from("get a job")).unwrap();
+            }));
         }
 
         for handle in handles {
             handle.join().unwrap();
         }
-        assert_eq!(*(counter.read().unwrap()), tests);
+        assert_eq!(*(counter.read().unwrap()), num_tests);
     }
 
     // Would love to test wiping, but running in multi-thread mode screws up the
