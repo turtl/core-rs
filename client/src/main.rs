@@ -54,20 +54,26 @@ mod tests {
     use super::*;
 
     fn end(handle: thread::JoinHandle<()>) {
+        send(r#"["app:shutdown"]"#);
         handle.join().unwrap();
         carrier::wipe();
     }
 
     #[test]
-    fn inits_shuts_down() {
+    fn ping_pong() {
         let handle = init();
         send(r#"["ping"]"#);
         let msg = recv();
         assert_eq!(msg, r#"{"e":"pong"}"#);
-        sleep(10);
-        send(r#"["app:shutdown"]"#);
+        end(handle);
+    }
+
+    #[test]
+    fn set_api_endpoint() {
+        let handle = init();
+        send(r#"["app:api:set_endpoint","https://api.turtl.it/v2"]"#);
         let msg = recv();
-        assert_eq!(msg, r#"{"e":"shutdown"}"#);
+        assert_eq!(msg, r#"{"e":"api:endpoint:set"}"#);
         end(handle);
     }
 
