@@ -1,3 +1,13 @@
+//! Dispatch takes messages sent from our wonderful UI and runs the needed core
+//! code to generate the response. Essentially, it's the RPC endpoint for core.
+//!
+//! Each message sent in is in the following format (JSON):
+//! 
+//!     ["<message id>", "<command>", arg1, arg2, ...]
+//!
+//! where the arg\* can be any valid JSON object. The Message ID is passed in
+//! when responding so the client knows which request we are responding to.
+
 use ::futures::Future;
 use ::jedi::{self, Value};
 
@@ -13,9 +23,15 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
     let data: Value = try!(jedi::parse(msg));
 
     // grab the request id from the data
-    let req: String = try!(jedi::get(&["0"], &data));
+    let mid: String = match jedi::get(&["0"], &data) {
+        Ok(x) => x,
+        Err(_) => return Err(TError::MissingField(String::from("missing mid (0)"))),
+    };
     // grab the command from the data
-    let cmd: String = try!(jedi::get(&["1"], &data));
+    let cmd: String = match jedi::get(&["1"], &data) {
+        Ok(x) => x,
+        Err(_) => return Err(TError::MissingField(String::from("missing cmd (1)"))),
+    };
 
     let res = match cmd.as_ref() {
         "user:login" => {
@@ -23,18 +39,20 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             let password = try!(jedi::get(&["2", "password"], &data));
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
+            let mid = mid.clone();
+            let mid2 = mid.clone();
             User::login(turtl.clone(), &username, &password)
                 .map(move |_| {
                     let turtl_inner = turtl1.read().unwrap();
-                    match turtl_inner.remote_send(String::from(r#"{"e":"login-success"}"#)) {
+                    match turtl_inner.msg_success(&mid, jedi::obj()) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
                 })
-                .map_err(move |_| {
+                .map_err(move |e| {
                     let mut turtl_inner = turtl2.write().unwrap();
                     turtl_inner.api.clear_auth();
-                    match turtl_inner.remote_send(String::from(r#"{"e":"error","data":{"name":"login-failed"}}"#)) {
+                    match turtl_inner.msg_error(&mid2, &e) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
@@ -45,11 +63,11 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "app:api:set_endpoint" => {
             let endpoint = try!(jedi::get(&["2"], &data));
             turtl.write().unwrap().api.set_endpoint(&endpoint);
-            turtl.read().unwrap().remote_send(String::from(r#"{"e":"api:endpoint:set"}"#))
+            turtl.read().unwrap().msg_success(&mid, jedi::obj())
         },
         "app:shutdown" => {
             info!("dispatch: got shutdown signal, quitting");
-            match turtl.read().unwrap().remote_send("{\"e\":\"shutdown\"}".to_owned()) {
+            match turtl.read().unwrap().msg_success(&mid, jedi::obj()) {
                 Ok(..) => (),
                 Err(..) => (),
             }
@@ -60,11 +78,11 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         },
         "ping" => {
             info!("ping!");
-            turtl.read().unwrap().remote_send(String::from(r#"{"e":"pong"}"#))
+            turtl.read().unwrap().msg_success(&mid, Value::String(String::from("pong")))
                 .map(|_| ())
         },
         _ => {
-            match turtl.read().unwrap().remote_send(format!(r#"{{"e":"unknown_command","cmd":"{}"}}"#, cmd)) {
+            match turtl.read().unwrap().msg_error(&mid, &TError::MissingCommand(cmd.clone())) {
                 Err(e) => error!("dispatch -- problem sending error message: {}", e),
                 _ => ()
             }
@@ -74,7 +92,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
     match res {
         Ok(..) => (),
         Err(e) => match e {
-            _ => error!("dispatch: error processing message: {}", e),
+            _ => error!("dispatch: error processing message: {:?}", e),
         },
     };
     Ok(())

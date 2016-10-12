@@ -29,9 +29,9 @@ pub fn send(msg: &str) {
     carrier::send_string(&format!("{}-core-in", channel), String::from(&msg[..])).unwrap();
 }
 
-pub fn recv() -> String {
+pub fn recv(mid: &str) -> String {
     let channel: String = config::get(&["messaging", "address"]).unwrap();
-    String::from_utf8(carrier::recv(&format!("{}-core-out", channel)).unwrap()).unwrap()
+    String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid)).unwrap()).unwrap()
 }
 
 fn main() {
@@ -40,6 +40,7 @@ fn main() {
     send(r#"["0","ping"]"#);
     let msg = recv("0");
     println!("client: got {}", msg);
+    send(r#"["1","app:shutdown"]"#);
 
     handle.join().unwrap();
 }
@@ -54,7 +55,7 @@ mod tests {
     use super::*;
 
     fn end(handle: thread::JoinHandle<()>) {
-        send(r#"["app:shutdown"]"#);
+        send(r#"["69","app:shutdown"]"#);
         handle.join().unwrap();
         carrier::wipe();
     }
@@ -62,18 +63,18 @@ mod tests {
     #[test]
     fn ping_pong() {
         let handle = init();
-        send(r#"["ping"]"#);
-        let msg = recv();
-        assert_eq!(msg, r#"{"e":"pong"}"#);
+        send(r#"["0","ping"]"#);
+        let msg = recv("0");
+        assert_eq!(msg, r#"{"e":0,"d":"pong"}"#);
         end(handle);
     }
 
     #[test]
     fn set_api_endpoint() {
         let handle = init();
-        send(r#"["app:api:set_endpoint","https://api.turtl.it/v2"]"#);
-        let msg = recv();
-        assert_eq!(msg, r#"{"e":"api:endpoint:set"}"#);
+        send(r#"["1","app:api:set_endpoint","https://api.turtl.it/v2"]"#);
+        let msg = recv("1");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         end(handle);
     }
 
@@ -82,10 +83,10 @@ mod tests {
         let handle = init();
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
-        let msg = format!(r#"["user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
+        let msg = format!(r#"["2","user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
         send(msg.as_str());
-        let msg = recv();
-        assert_eq!(msg, r#"{"e":"login-success"}"#);
+        let msg = recv("2");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
         send(r#"["app:shutdown"]"#);
         end(handle);

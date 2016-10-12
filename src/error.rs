@@ -31,6 +31,10 @@ quick_error! {
             description(str)
             display("missing data: {}", str)
         }
+        MissingCommand(str: String) {
+            description(str)
+            display("unknown command: {}", str)
+        }
         CryptoError(err: CryptoError) {
             cause(err)
             description("crypto error")

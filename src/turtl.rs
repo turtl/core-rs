@@ -4,9 +4,10 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
-use ::jedi::Value;
+use ::jedi::{self, Value};
+use ::serde::ser::{Serialize, Serializer};
 
-use ::error::TResult;
+use ::error::{TError, TResult};
 use ::util::event;
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -23,6 +24,23 @@ pub struct Turtl {
     pub msg: Messenger,
     pub kv: Option<Storage>,
     pub db: Option<Storage>,
+}
+
+/// Defines a container for sending responses to the client
+struct Response {
+    e: i64,
+    d: Value,
+}
+
+impl Serialize for Response {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+        where S: Serializer
+    {
+        let mut state = try!(serializer.serialize_struct("res", 2));
+        try!(serializer.serialize_struct_elt(&mut state, "e", &self.e));
+        try!(serializer.serialize_struct_elt(&mut state, "d", &self.d));
+        serializer.serialize_struct_end(state)
+    }
 }
 
 /// A handy type alias for passing Turtl around
@@ -58,8 +76,31 @@ impl Turtl {
     }
 
     /// Send a message to (presumably) our UI.
-    pub fn remote_send(&self, msg: String) -> TResult<()> {
-        self.msg.send(msg)
+    pub fn remote_send(&self, id: Option<String>, msg: String) -> TResult<()> {
+        match id {
+            Some(id) => self.msg.send_suffix(id, msg),
+            None => self.msg.send(msg),
+        }
+    }
+
+    /// Send a success response to a remote request
+    pub fn msg_success(&self, mid: &String, data: Value) -> TResult<()> {
+        let res = Response {
+            e: 0,
+            d: data,
+        };
+        let msg = try!(jedi::stringify(&res));
+        self.remote_send(Some(mid.clone()), msg)
+    }
+
+    /// Send an error response to a remote request
+    pub fn msg_error(&self, mid: &String, err: &TError) -> TResult<()> {
+        let res = Response {
+            e: 1,
+            d: Value::String(format!("{}", err)),
+        };
+        let msg = try!(jedi::stringify(&res));
+        self.remote_send(Some(mid.clone()), msg)
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

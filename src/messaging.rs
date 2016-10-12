@@ -72,6 +72,13 @@ impl Messenger {
             .map_err(|e| From::from(e))
     }
 
+    /// Send a message on the out channel, but suffix the channel
+    pub fn send_suffix(&self, suffix: String, msg: String) -> TResult<()> {
+        debug!("messaging: send_suffix: {}", msg.len());
+        carrier::send_string(format!("{}:{}", &self.channel_out, suffix).as_str(), msg)
+            .map_err(|e| From::from(e))
+    }
+
     /// Send a message out on the in channel
     pub fn send_rev(&self, msg: String) -> TResult<()> {
         debug!("messaging: send_rev: {}", msg.len());

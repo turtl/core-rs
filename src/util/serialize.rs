@@ -10,15 +10,6 @@
 //! ...lame. Surely, the next version of Rust will support this, rendering all
 //! my code useless. But hey, it's a really good test of my macro skills.
 
-/// Define a generic struct others can use for serialization. 
-///
-/// We use T here so we can implement this struct generically for any other
-/// struct that wants serialization.
-pub struct TurtlMapVisitor<'a, T: 'a> {
-    pub value: &'a T,
-    pub state: u8,
-}
-
 /// Define a generic struct we can use for deserialization.
 ///
 /// Note that we actually need the T specifier so we can implement this struct
@@ -50,60 +41,6 @@ macro_rules! fix_type {
                 _ => myval
             }
         }
-    }
-}
-
-/// Given a set of fields, ie:
-///
-///     (id, name, ...)
-///
-/// Define a set of `if` statements that map the current value being iterated on
-/// (recursively, since macros can't count) to a set of serializer calls. This
-/// is probably gibberish, so for example calling:
-///
-/// ```
-/// define_ser_fields!(0, id, name, title)
-/// ```
-///
-/// expands to:
-///
-/// ```
-/// if(self.state == 0) {
-///     return Ok(Some(try!(serializer.serialize_struct_elt("id", &self.value.id))))
-/// }
-/// if(self.state == 1) {
-///     return Ok(Some(try!(serializer.serialize_struct_elt("name", &self.value.name))))
-/// }
-/// if(self.state == 2) {
-///     return Ok(Some(try!(serializer.serialize_struct_elt("title", &self.value.title))))
-/// }
-/// if(self.state > $val) { return Ok(None) }
-/// ```
-///
-/// I'd use `match` instead of a bunch of ifs but I'm not sure how to make it
-/// work recursively, and also it doesn't like the `0+1+1` syntax used to count
-/// the recursion.
-///
-/// See [the serde serialization docs](https://github.com/serde-rs/serde#serialization-without-macros)
-/// if you need info one why this would be useful.
-#[macro_export]
-macro_rules! define_ser_fields {
-    // end of sequence (last element)
-    ( $val:expr, $this:ident, $ser:ident, $name:ident ) => {
-        if $this.state == $val {
-            $this.state += 1;
-            let field_str = fix_type!(stringify!($name));
-            return Ok(Some(try!($ser.serialize_struct_elt(field_str, &$this.value.$name))))
-        }
-        if $this.state > $val { return Ok(None) }
-    };
-    ( $val:expr, $this:ident, $ser:ident, $name:ident, $( $recname:ident ),* ) => {
-        if $this.state == $val {
-            $this.state += 1;
-            let field_str = fix_type!(stringify!($name));
-            return Ok(Some(try!($ser.serialize_struct_elt(field_str, &$this.value.$name))))
-        }
-        define_ser_fields!( 1 + $val, $this, $ser, $( $recname ),* );
     }
 }
 
@@ -199,22 +136,12 @@ macro_rules! serializable {
         $thestruct
 
         impl ::serde::ser::Serialize for $name {
-            fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+            fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
                 where S: ::serde::ser::Serializer
             {
-                serializer.serialize_struct(stringify!($name), ::util::serialize::TurtlMapVisitor {
-                    value: self,
-                    state: 0
-                })
-            }
-        }
-
-        impl<'a> ::serde::ser::MapVisitor for ::util::serialize::TurtlMapVisitor<'a, $name> {
-            fn visit<S>(&mut self, serializer: &mut S) -> Result<Option<()>, S::Error>
-                where S: ::serde::ser::Serializer
-            {
-                define_ser_fields!(0, self, serializer, $( $field ),*);
-                Ok(None)
+                let mut state = try!(serializer.serialize_struct(stringify!($name), 1));
+                $( try!(serializer.serialize_struct_elt(&mut state, fix_type!(stringify!($field)), &self.$field)); )*
+                serializer.serialize_struct_end(state)
             }
         }
 
