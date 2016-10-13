@@ -60,6 +60,9 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab the name of this model's table
     fn table(&self) -> String;
 
+    /// Either grab the existing or generate a new key for this model
+    fn generate_key(&mut self) -> TResult<&Vec<u8>>;
+
     /// Grab a JSON Value representation of ALL this model's data
     fn data(&self) -> jedi::Value {
         jedi::to_val(self)
@@ -267,6 +270,17 @@ macro_rules! protected {
 
             fn table(&self) -> String {
                 String::from(stringify!($name)).to_lowercase()
+            }
+
+            fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {
+                match self.key {
+                    Some(ref x) => Ok(x),
+                    None => {
+                        let key = try!(crypto::random_key());
+                        self.key = Some(key);
+                        Ok(self.key().unwrap())
+                    }
+                }
             }
         }
     }
