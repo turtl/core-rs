@@ -35,6 +35,7 @@ mod models;
 mod storage;
 mod dispatch;
 mod turtl;
+mod sync;
 
 use ::std::thread;
 use ::std::sync::Arc;
