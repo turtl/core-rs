@@ -87,8 +87,8 @@ pub fn setup_client_id(storage: &Storage) -> TResult<()> {
 
 /// This structure holds state for persisting (encrypted) data to disk.
 pub struct Storage {
-    conn: Connection,
-    dumpy: Arc<Dumpy>,
+    pub conn: Connection,
+    pub dumpy: Arc<Dumpy>,
 }
 
 impl Storage {
@@ -122,31 +122,42 @@ impl Storage {
         where T: Protected
     {
         let modeldata = model.untrusted_data();
-        let dumpy = self.dumpy.clone();
         let table = model.table();
 
-        self.run(move |conn| -> TResult<()> {
-            dumpy.store(&conn, &table, &modeldata)
-                .map_err(|e| From::from(e))
-        })
+        self.dumpy.store(&self.conn, &table, &modeldata)
+            .map_err(|e| From::from(e))
     }
 
     /// Get a model's data by id
-    pub fn get<T>(&self, model: &T) -> TResult<Option<Value>>
+    pub fn get<T>(&self, table: &str, id: &String) -> TResult<Option<T>>
         where T: Protected
     {
-        let id = model.id().map(|x| x.clone());
-        let table = model.table();
-        let dumpy = self.dumpy.clone();
+        match self.dumpy.get(&self.conn, &String::from(table), id) {
+            Ok(x) => match x {
+                Some(x) => {
+                    let res = match jedi::from_val(x) {
+                        Ok(x) => x,
+                        Err(e) => return Err(From::from(e)),
+                    };
+                    Ok(Some(res))
+                }
+                None => Ok(None),
+            },
+            Err(e) => Err(From::from(e)),
+        }
+    }
 
-        self.run(move |conn| -> TResult<Option<Value>> {
-            let id: String = match id {
-                Some(x) => x,
-                None => return Err(TError::MissingField(format!("Storage::get() -- model missing `id` field"))),
-            };
-            dumpy.get(&conn, &table, &id)
-                .map_err(|e| From::from(e))
-        })
+    /// Delete a model from storage
+    pub fn delete<T>(&self, model: &T) -> TResult<()>
+        where T: Protected
+    {
+        let id = match model.id() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("storage::destroy() -- missing `id` field"))),
+        };
+        let table = model.table();
+        self.dumpy.delete(&self.conn, &table, &id)
+            .map_err(|e| From::from(e))
     }
 }
 
@@ -157,8 +168,13 @@ unsafe impl Sync for Storage {}
 mod tests {
     use super::*;
 
+    use ::jedi::{self, Value};
+    use ::rusqlite::types::Value as SqlValue;
+
+    use ::error::TResult;
     use ::models::model::{self, Model};
     use ::models::protected::Protected;
+    use ::crypto;
 
     protected!{
         pub struct Shiba {
@@ -169,11 +185,67 @@ mod tests {
         }
     }
 
-    #[test]
-    fn runs_queries() {
+    fn pretest() -> Storage {
+        model::set_client_id(String::from("c0f4c762af6c42e4079cced2dfe16b4d010b190ad75ade9d83ff8cee0e96586d")).unwrap();
+        let schema_str = r#"{"notes":{"indexes":[{"fields":["user_id"]},{"fields":["boards"]}]}}"#;
+        let schema: Value = jedi::parse(&String::from(schema_str)).unwrap();
+        Storage::new(&String::from(":memory:"), schema).unwrap()
     }
 
     #[test]
-    fn saves_models() {
+    fn runs_queries() {
+        let storage = pretest();
+        storage.run(|conn| {
+            conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name VARCHAR(16))", &[]).unwrap();
+            Ok(())
+        }).unwrap();
+        storage.conn.execute("INSERT INTO test (name) VALUES ($1)", &[&String::from("bartholomew")]).unwrap();
+        let then = "SELECT * FROM test LIMIT 1";
+        let res = storage.conn.query_row_and_then(then, &[], |row| -> TResult<String> {
+            let name_sql: SqlValue = row.get_checked("name").unwrap();
+            match name_sql {
+                SqlValue::Text(ref x) => Ok(x.clone()),
+                _ => panic!("bad dates (name field was not a string)"),
+            }
+        }).unwrap();
+        assert_eq!(res, "bartholomew");
+    }
+
+    #[test]
+    fn saves_retrieves_models() {
+        let storage = pretest();
+        let mut model = Shiba::new();
+        let key = Vec::from(&(model.generate_key().unwrap())[..]);
+        model.set("color", String::from("sesame")).unwrap();
+        model.set("name", String::from("Kofi")).unwrap();
+        model.set("tags", vec![String::from("serious")]).unwrap();
+        model.serialize().unwrap();
+        storage.save(&model).unwrap();
+
+        let id = model.id().unwrap();
+        let mut shiba2: Shiba = storage.get("shiba", id).unwrap().unwrap();
+        shiba2.key = Some(key);
+        shiba2.deserialize().unwrap();
+        assert_eq!(shiba2.get::<String>("color").unwrap(), "sesame");
+        assert_eq!(shiba2.get::<String>("name").unwrap(), "Kofi");
+        assert_eq!(shiba2.get::<Vec<String>>("tags").unwrap(), &vec![String::from("serious")]);
+    }
+
+    #[test]
+    fn deletes_models() {
+        let storage = pretest();
+        let mut model = Shiba::new();
+        model.generate_key().unwrap();
+        model.set("color", String::from("sesame")).unwrap();
+        model.set("name", String::from("Kofi")).unwrap();
+        model.set("tags", vec![String::from("serious")]).unwrap();
+        model.serialize().unwrap();
+        storage.save(&model).unwrap();
+
+        storage.delete(&model).unwrap();
+
+        let id = model.id().unwrap();
+        let sheeb: Option<Shiba> = storage.get("shiba", id).unwrap();
+        assert!(sheeb.is_none());
     }
 }
