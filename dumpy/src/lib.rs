@@ -65,7 +65,10 @@ impl Dumpy {
     pub fn store(&self, conn: &Connection, table: &String, obj: &Value) -> DResult<()> {
         let id = try!(jedi::get::<String>(&["id"], obj));
         let json = try!(jedi::stringify(obj));
-        try!(conn.execute("INSERT INTO dumpy_objects (id, table_name, data) VALUES ($1, $2, $3)", &[&id, table, &json]));
+        // "upsert" the object
+        try!(conn.execute("INSERT OR REPLACE INTO dumpy_objects (id, table_name, data) VALUES ($1, $2, $3)", &[&id, table, &json]));
+        // wipte out all indexes for this object
+        try!(conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, &id]));
 
         let indexes = match jedi::get::<Vec<Value>>(&[table, "indexes"], &self.schema) {
             Ok(x) => x,
@@ -307,6 +310,16 @@ mod tests {
         (conn, dumpy)
     }
 
+    fn index_count(conn: &Connection) -> i64 {
+        conn.query_row_and_then("SELECT COUNT(*) AS count FROM dumpy_index", &[], |row| -> DResult<i64> {
+            let data: SqlValue = try!(row.get_checked("count"));
+            match data {
+                SqlValue::Integer(ref x) => Ok(x.clone()),
+                _ => Err(DError::Msg(format!("error grabbing count"))),
+            }
+        }).unwrap()
+    }
+
     #[test]
     fn inits() {
         let (conn, dumpy) = pre_test();
@@ -327,16 +340,25 @@ mod tests {
     }
 
     #[test]
+    fn upserts() {
+        let (conn, dumpy) = pre_test();
+        dumpy.init(&conn).unwrap();
+        let note = jedi::parse(&String::from(r#"{"id":"abc123","user_id":"andrew123","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
+        dumpy.store(&conn, &String::from("notes"), &note).unwrap();
+        assert_eq!(index_count(&conn), 4);
+        let note = jedi::parse(&String::from(r#"{"id":"abc123","user_id":"hellp","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
+        dumpy.store(&conn, &String::from("notes"), &note).unwrap();
+        assert_eq!(index_count(&conn), 4);
+        let note = jedi::parse(&String::from(r#"{"id":"abc123","user_id":"getajob","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
+        dumpy.store(&conn, &String::from("notes"), &note).unwrap();
+        assert_eq!(index_count(&conn), 4);
+        let note = dumpy.get(&conn, &String::from("notes"), &String::from("abc123")).unwrap().unwrap();
+        assert_eq!(jedi::get::<String>(&["id"], &note).unwrap(), "abc123");
+        assert_eq!(jedi::get::<String>(&["user_id"], &note).unwrap(), "getajob");
+    }
+
+    #[test]
     fn deletes_stuff() {
-        fn index_count(conn: &Connection) -> i64 {
-            conn.query_row_and_then("SELECT COUNT(*) AS count FROM dumpy_index", &[], |row| -> DResult<i64> {
-                let data: SqlValue = try!(row.get_checked("count"));
-                match data {
-                    SqlValue::Integer(ref x) => Ok(x.clone()),
-                    _ => Err(DError::Msg(format!("error grabbing count"))),
-                }
-            }).unwrap()
-        }
         let (conn, dumpy) = pre_test();
         let note1 = jedi::parse(&String::from(r#"{"id":"n0mnm","user_id":"3443","boards":["1234","5678"],"body":"this is my note lol"}"#)).unwrap();
         let note2 = jedi::parse(&String::from(r#"{"id":"6tuns","user_id":"9823","boards":["1234","2222"],"body":"this is my note lol"}"#)).unwrap();
