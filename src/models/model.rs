@@ -264,7 +264,13 @@ macro_rules! model {
         impl $name {
             pub fn new() -> $name {
                 $name {
-                    id: None,
+                    id: match ::models::model::cid() {
+                        Ok(x) => Some(x),
+                        Err(e) => {
+                            error!("model::new() -- problem generating cid: {}", e);
+                            None
+                        },
+                    },
                     $( $field: None, )*
                     $( $unserialized: Default::default(), )*
                     _emitter: ::util::event::EventEmitter::new(),
