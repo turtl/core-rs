@@ -15,23 +15,50 @@ use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::Messenger;
 
-/// Defines a container for our app's state
+/// Defines a container for our app's state. Note that most operations the user
+/// has access to via messaging get this object passed to them.
 pub struct Turtl {
+    /// This is our app-wide event bus.
     pub events: event::EventEmitter,
+    /// Holds our current user (Turtl only allows one logged-in user at once)
     pub user: User,
+    /// Our external API object. Note that most things API-related go through
+    /// the Sync system, but there are a handful of operations that Sync doesn't
+    /// handle that need API access (Personas (soon to be deprecated) and
+    /// invites come to mind). Use sparingly.
     pub api: Api,
+    /// Need to do some CPU-intensive work and have a Future finished when it's
+    /// done? Send it here! Great for decrypting models.
     pub work: Thredder,
+    /// Allows us to send messages to our UI
     pub msg: Messenger,
+    /// A storage system dedicated to key-value data. This *must* be initialized
+    /// before our main local db because our local db is baed off the currently
+    /// logged-in user, and we need persistant key-value storage even when
+    /// logged out.
     pub kv: Option<Storage>,
+    /// Our main database, initialized after a successful login. This db is
+    /// named via a function of the user ID and the server we're talking to,
+    /// meaning we can have multiple databases that store different things for
+    /// different people depending on server/user.
     pub db: Option<Storage>,
 }
 
-/// Defines a container for sending responses to the client
+/// Defines a container for sending responses to the client. We could use a hash
+/// table, but then the elements might serialize out of order. This allows us to
+/// force our "error" key (`e`) first, and put "data" (`d`) second.
+///
+/// Note that this is more or less a Turtl-enforced RPC system. Each "call" we
+/// run has a response of either error (`e = 1`) or success (`e = 0`) and
+/// any supporting data (the error that occurred, or the data we requested).
 struct Response {
+    /// `e > 0` means "error!!!1", `e == 0` means "great success!!"
     e: i64,
+    /// Any data we want to pass back to the UI
     d: Value,
 }
 
+// Make `Response` Serde serializable
 impl Serialize for Response {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
@@ -110,6 +137,8 @@ impl Turtl {
     }
 }
 
+// Probably don't need this since `shutdown` just wipes our internal state which
+// would happen anyway it Turtl is dropped, but whatever.
 impl Drop for Turtl {
     fn drop(&mut self) {
         self.shutdown();

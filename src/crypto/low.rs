@@ -64,21 +64,18 @@ quick_error! {
     }
 }
 
-impl From<::gcrypt::Error> for CryptoError {
-    fn from(err: ::gcrypt::Error) -> CryptoError {
-        CryptoError::Boxed(Box::new(err))
+macro_rules! make_boxed_err {
+    ($from:ty) => {
+        impl From<$from> for CryptoError {
+            fn from(err: $from) -> CryptoError {
+                CryptoError::Boxed(Box::new(err))
+            }
+        }
     }
 }
-impl From<::std::string::FromUtf8Error> for CryptoError {
-    fn from(err: ::std::string::FromUtf8Error) -> CryptoError {
-        CryptoError::Boxed(Box::new(err))
-    }
-}
-impl From<::serialize::hex::FromHexError> for CryptoError {
-    fn from(err: ::serialize::hex::FromHexError) -> CryptoError {
-        CryptoError::Boxed(Box::new(err))
-    }
-}
+make_boxed_err!(::gcrypt::Error);
+make_boxed_err!(::std::string::FromUtf8Error);
+make_boxed_err!(::serialize::hex::FromHexError);
 
 pub type CResult<T> = Result<T, CryptoError>;
 
