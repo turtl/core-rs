@@ -6,16 +6,17 @@ use ::std::fs::File;
 use ::std::path::Path;
 use ::std::io::prelude::*;
 use ::std::env;
+use ::std::sync::RwLock;
 
-use ::jedi::{JSONError, Value, Deserialize};
+use ::jedi::{JSONError, Value, Serialize, Deserialize};
 
 pub type TResult<T> = Result<T, JSONError>;
 
 lazy_static! {
     /// create a static/global CONFIG var, and load it with our config data
-    static ref CONFIG: Value = {
+    static ref CONFIG: RwLock<Value> = {
         match load_config() {
-            Ok(x) => x,
+            Ok(x) => RwLock::new(x),
             Err(e) => {
                 panic!("error loading config: {}", e);
             },
@@ -37,9 +38,17 @@ fn load_config() -> TResult<Value> {
     Ok(data)
 }
 
-#[allow(dead_code)]
 /// get a string value from our config
 pub fn get<T: Deserialize>(keys: &[&str]) -> TResult<T> {
-    Ok(try!(jedi::get(keys, &*CONFIG)))
+    let guard = (*CONFIG).read().unwrap();
+    jedi::get(keys, &guard)
+        .map_err(|e| From::from(e))
+}
+
+/// Set a value into our heroic config
+pub fn set<T: Serialize>(keys: &[&str], val: &T) -> TResult<()> {
+    let mut guard = (*CONFIG).write().unwrap();
+    jedi::set(keys, &mut guard, val)
+        .map_err(|e| From::from(e))
 }
 
