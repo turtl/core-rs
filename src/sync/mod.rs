@@ -87,6 +87,7 @@ pub trait Syncer {
         Ok(format!("{}:{}", guard.user_id, api_endpoint))
     }
 
+    /// Runs our syncer, with some quick checks on run status.
     fn runner(&self) {
         while !self.should_quit() {
             if self.is_enabled() {
@@ -98,6 +99,7 @@ pub trait Syncer {
     }
 }
 
+/// Start our syncing system!
 pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>) {
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
