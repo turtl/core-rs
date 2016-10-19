@@ -1,33 +1,28 @@
 use ::std::io::Read;
 
+use ::config;
 use ::hyper;
 use ::hyper::method::Method;
 use ::hyper::header::Headers;
 pub use ::hyper::status::StatusCode as Status;
 use ::jedi::{self, Value};
+use ::futures::{self, Future};
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util::thredder::{Thredder, Pipeline};
 use ::crypto;
 
 pub struct Api {
-    endpoint: String,
     auth: Option<String>,
     thredder: Thredder,
 }
 
 impl Api {
-    pub fn new(endpoint: String, tx_main: Pipeline) -> Api {
+    pub fn new(tx_main: Pipeline) -> Api {
         Api {
-            endpoint: endpoint,
             auth: None,
             thredder: Thredder::new("api", tx_main, 1),
         }
-    }
-
-    /// Set the API endpoint
-    pub fn set_endpoint(&mut self, endpoint: &String) {
-        self.endpoint = endpoint.clone();
     }
 
     /// Set the API's authentication
@@ -46,8 +41,12 @@ impl Api {
     /// Send out an API request
     pub fn call(&self, method: Method, resource: &str, data: Value) -> TFutureResult<Value> {
         info!("api::call() -- req: {} {}", method, resource);
-        let mut url = String::with_capacity(self.endpoint.len() + resource.len());
-        url.push_str(&self.endpoint[..]);
+        let endpoint = match config::get::<String>(&["api", "endpoint"]) {
+            Ok(x) => x,
+            Err(e) => return futures::failed(From::from(e)).boxed(),
+        };
+        let mut url = String::with_capacity(endpoint.len() + resource.len());
+        url.push_str(&endpoint[..]);
         url.push_str(resource);
         let auth = match &self.auth {
             &Some(ref x) => Some(String::from(&x[..])),

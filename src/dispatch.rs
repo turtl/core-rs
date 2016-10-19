@@ -10,6 +10,7 @@
 
 use ::futures::Future;
 use ::jedi::{self, Value};
+use ::config;
 
 use ::error::{TResult, TError};
 use ::util;
@@ -48,6 +49,9 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
+                    // TODO: init turtl.db w/ dumpy schema:
+                    //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+                    // TODO: start sync system
                 })
                 .map_err(move |e| {
                     let mut turtl_inner = turtl2.write().unwrap();
@@ -62,7 +66,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         },
         "app:api:set_endpoint" => {
             let endpoint = try!(jedi::get(&["2"], &data));
-            turtl.write().unwrap().api.set_endpoint(&endpoint);
+            config::set(&["api", "endpoint"], &endpoint);
             turtl.read().unwrap().msg_success(&mid, jedi::obj())
         },
         "app:shutdown" => {
