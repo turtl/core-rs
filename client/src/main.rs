@@ -88,7 +88,7 @@ mod tests {
         let msg = recv("2");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
-        send(r#"["app:shutdown"]"#);
+        send(r#"["3","app:shutdown"]"#);
         end(handle);
     }
 }
