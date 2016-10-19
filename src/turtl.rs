@@ -17,6 +17,11 @@ use ::sync::SyncConfig;
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
+///
+/// TODO: can we get rid of Turtl's RwLock? would be great to have all of its
+/// sub-objects manage their own Rw state (if needed) instead of having one big
+/// lock around the entire thing. this would also greatly simplify the
+/// implementation app-wide.
 pub struct Turtl {
     /// This is our app-wide event bus.
     pub events: event::EventEmitter,
@@ -67,7 +72,7 @@ impl Turtl {
             api: api,
             msg: Messenger::new(),
             work: Thredder::new("work", tx_main.clone(), num_workers),
-            async: Thredder::new("async", tx_main.clone(), 24),
+            async: Thredder::new("async", tx_main.clone(), 2),
             kv: kv,
             db: None,
             sync_config: sync_config,

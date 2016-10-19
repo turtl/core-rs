@@ -1,4 +1,4 @@
-//! The messenger is responsible for proxing messages between our remote and 
+//! The messenger is responsible for proxying messages between our remote and 
 //! our main thread.
 //!
 //! This module is essentially the window into the app, essentially acting as an
