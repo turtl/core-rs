@@ -54,6 +54,7 @@ use ::util::stopper::Stopper;
 use ::util::thredder::Pipeline;
 use ::sync::SyncConfig;
 use ::storage::Storage;
+use ::api::Api;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -129,20 +130,12 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // start our messaging thread
             let (handle, msg_shutdown) = messaging::start(queue_main.clone());
 
-            // grab our messaging channel name from config
-            let msg_channel: String = match config::get(&["messaging", "address"]) {
-                Ok(x) => x,
-                Err(e) => {
-                    error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
-                    String::from("inproc://turtl")
-                }
-            };
-
+            let api = Arc::new(RwLock::new(Api::new()));
             let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
             let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
 
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(queue_main.clone(), msg_channel, kv, sync_config.clone()));
+            let turtl = try!(turtl::Turtl::new_wrap(queue_main.clone(), api.clone(), kv.clone(), sync_config.clone()));
 
             // bind turtl.events "app:shutdown" to close everything
             {

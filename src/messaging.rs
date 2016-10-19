@@ -56,8 +56,8 @@ pub struct Messenger {
 }
 
 impl Messenger {
-    /// Create a new messenger
-    pub fn new(channel: String) -> Messenger {
+    /// Create a new messenger with a custom (non-config) channel
+    pub fn new_with_channel(channel: String) -> Messenger {
         Messenger {
             bound: true,
             channel_in: format!("{}-core-in", channel),
@@ -65,10 +65,23 @@ impl Messenger {
         }
     }
 
+    /// Create a new messenger
+    pub fn new() -> Messenger {
+        // grab our messaging channel name from config
+        let channel: String = match config::get(&["messaging", "address"]) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
+                String::from("inproc://turtl")
+            }
+        };
+        Messenger::new_with_channel(channel)
+    }
+
     #[allow(dead_code)]
     /// Create a new messenger with channel-in/channel-out flipped
     pub fn new_reversed(channel: String) -> Messenger {
-        let mut messenger = Messenger::new(channel);
+        let mut messenger = Messenger::new_with_channel(channel);
         let channtmp = messenger.channel_in;
         messenger.channel_in = messenger.channel_out;
         messenger.channel_out = channtmp;
@@ -145,19 +158,9 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
 ///
 /// Currently, the implementation relies on polling.
 pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
-    fn get_channel() -> String {
-        // read our bind address from config, otherwise use a default
-        match config::get(&["messaging", "address"]) {
-            Ok(x) => x,
-            Err(e) => {
-                error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
-                String::from("inproc://turtl")
-            }
-        }
-    }
     let handle = thread::spawn(move || {
         // create our messenger!
-        let mut messenger = Messenger::new(get_channel());
+        let mut messenger = Messenger::new();
         info!("messaging::start() -- main loop");
         while messenger.is_bound() {
             // grab a message from our remote
@@ -172,7 +175,7 @@ pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + 
                         let msg = x;
                         match dispatch::process(turtl, &msg) {
                             Ok(..) => (),
-                            Err(e) => error!("messaging: dispatch: {}", e),
+                            Err(e) => error!("messaging: dispatch: {}", format!("{}", e)),
                         }
                     }));
                 },
@@ -184,7 +187,7 @@ pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + 
         info!("messaging::start() -- shutting down");
     });
     let shutdown_fn = || {
-        let messenger = Messenger::new(get_channel());
+        let messenger = Messenger::new();
         // send out a shutdown signal on the *incoming* channel so the messaging
         // system gets it
         match messenger.send_rev(String::from("turtl:internal:msg:shutdown")) {
@@ -225,7 +228,7 @@ mod tests {
         let panicref = panic.clone();
         let pongref = pong.clone();
         let handle = thread::spawn(move || {
-            let messenger = Messenger::new(String::from("inproc://turtltest"));
+            let messenger = Messenger::new_with_channel(String::from("inproc://turtltest"));
             let message = messenger.recv().unwrap();
 
             let res = match message.as_ref() {

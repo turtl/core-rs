@@ -13,7 +13,7 @@ quick_error! {
     pub enum TError {
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
-            display("error: {}", err.description())
+            display("error: {}", err)
         }
         Msg(str: String) {
             description(str)

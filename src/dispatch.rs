@@ -34,7 +34,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         Err(_) => return Err(TError::MissingField(String::from("missing cmd (1)"))),
     };
 
-    let res = match cmd.as_ref() {
+    match cmd.as_ref() {
         "user:login" => {
             let username = try!(jedi::get(&["2", "username"], &data));
             let password = try!(jedi::get(&["2", "password"], &data));
@@ -55,7 +55,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 })
                 .map_err(move |e| {
                     let mut turtl_inner = turtl2.write().unwrap();
-                    turtl_inner.api.clear_auth();
+                    turtl_inner.api.write().unwrap().clear_auth();
                     match turtl_inner.msg_error(&mid2, &e) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
@@ -65,8 +65,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             Ok(())
         },
         "app:api:set_endpoint" => {
-            let endpoint = try!(jedi::get(&["2"], &data));
-            config::set(&["api", "endpoint"], &endpoint);
+            let endpoint: String = try!(jedi::get(&["2"], &data));
+            try!(config::set(&["api", "endpoint"], &endpoint));
             turtl.read().unwrap().msg_success(&mid, jedi::obj())
         },
         "app:shutdown" => {
@@ -92,13 +92,6 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             }
             Err(TError::Msg(format!("bad command: {}", cmd)))
         }
-    };
-    match res {
-        Ok(..) => (),
-        Err(e) => match e {
-            _ => error!("dispatch: error processing message: {:?}", e),
-        },
-    };
-    Ok(())
+    }
 }
 

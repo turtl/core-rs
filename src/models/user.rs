@@ -1,6 +1,6 @@
 use ::std::collections::HashMap;
 
-use ::jedi;
+use ::jedi::{self, Value};
 
 use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
@@ -109,6 +109,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
     debug!("user::try_auth() -- trying auth version {}", &version);
     let turtl1 = turtl.clone();
     let turtl2 = turtl.clone();
+    let turtl3 = turtl.clone();
     let ref work = turtl.read().unwrap().work;
     let username_clone = String::from(&username[..]);
     let password_clone = String::from(&password[..]);
@@ -117,18 +118,23 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             let (key, auth) = key_auth;
             let mut data = HashMap::new();
             data.insert("auth", String::from(&auth[..]));
-            let turtl2 = turtl1.clone();
-            let ref mut api = turtl1.write().unwrap().api;
-            match api.set_auth(String::from(&auth[..])) {
-                Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
-                _ => (),
+            {
+                let ref arcapi = turtl1.write().unwrap().api;
+                let mut api = arcapi.write().unwrap();
+                match api.set_auth(String::from(&auth[..])) {
+                    Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
+                    _ => (),
+                }
             }
-            api.post("/auth", jedi::to_val(&()))
-                .map(move |_| {
-                    let ref mut user = turtl2.write().unwrap().user;
-                    user.do_login(key, auth);
-                })
-                .boxed()
+            let turtl4 = turtl1.clone();
+            let tguard = turtl1.read().unwrap();
+            tguard.with_api(|api| -> TResult<Value> {
+                api.post("/auth", jedi::obj())
+            }).and_then(move |_| {
+                let ref mut user = turtl4.write().unwrap().user;
+                user.do_login(key, auth);
+                futures::finished(()).boxed()
+            }).boxed()
         })
         .or_else(move |err| {
             // return with the error value if we hav eanything other than
@@ -150,7 +156,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
                 return futures::failed(err).boxed();
             }
             // try again, lower version num
-            try_auth(turtl2, username, password, version - 1)
+            try_auth(turtl3, username, password, version - 1)
         })
         .boxed()
 }
