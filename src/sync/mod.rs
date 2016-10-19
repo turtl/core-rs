@@ -13,53 +13,104 @@
 //! plaintext private data. Keeping this in mind, the actual API object should
 //! be a separate instance from the one used in the Turtl object, and the Sync
 //! object should always be in a separate thread from the main Turtl object.
-//!
-//! NOTE: This is going to be an almost verbatim copy of the turtl/js
-//! models/_sync.js file, ported to Rust. Save for one or two bugs, the Turtl
-//! sync system works fantastically so is a good starting point.
-//! NOTE: The conversion won't be 100% because the javascript sync system is
-//! async, whereas this will be sync. However, this should actually simplify the
-//! design.
-//! NOTE: AL: might need to have two threads? Outgoing and incoming?
 
+mod incoming;
+mod outgoing;
 mod sync_model;
 
-use ::std::collections::HashMap;
+use ::std::thread;
+use ::std::sync::{Arc, RwLock};
 
-use ::sync::sync_model::SyncModel;
+use ::config;
 
-pub struct Sync {
-    /// A collection of `sync_id`s (that the API hands us after each write /
-    /// outgoing sync) which we should ignore when they come back. For isntance,
-    /// we might send a note, and get sync_id 1234 back. The next time we poll
-    /// for changes, we *will* get that note back...do we "add" it again to our
-    /// data?
-    /// TODO: make the sync system resilient to these kinds of shenanigans so we
-    /// don't have to track this at all. For instance, just track updates and
-    /// deletes. `update` should add if it doesnt exist, otherwise update.
-    ignore_on_next: HashMap<String, bool>,
-    /// Are we enabled?
-    enabled: bool,
+use ::util;
+use ::util::thredder::Pipeline;
+use ::error::TResult;
 
-    /// Tracks whether or not we're connected.
-    /// TODO: should just signal the main thread
-    connected: bool,
-    /// Tracks if we have an outgoing poll running already, and if so, don't run
-    /// another one.
-    /// TODO: remove, async
-    _polling: bool,
-    /// Tracks if we're pushing data to the API
-    /// TODO: remove, async
-    _outgoing_sync_running: bool,
+/// This holds the configuration for the sync system (whether it's enabled, the
+/// current user id/api endpoint, and any other information we need to make
+/// informed decisions about syncing).
+///
+/// Note that this is a separate struct so that it can be shared by *both the
+/// sync system and the main thread* without having the sync system live in the
+/// main thread itself. This allows the main thread to update the config without
+/// having direct access to the sync thread (and conversely, without sync having
+/// access to our precious data in the `Turtl` object that lives in the main
+/// thread).
+pub struct SyncConfig {
+    /// Whether or not to quit the sync thread
+    pub quit: bool,
+    /// Whether or not to run syncing
+    pub enabled: bool,
+    /// The current logged in user_id
+    pub user_id: String,
+}
 
-    /// For each type we get back from an outgoing poll, defines a collection
-    /// that is able to handle that incoming item (for instance a "note" coming
-    /// from the API might get handled by the NoteCollection).
-    /// TODO: rename to `trackers` (duhh, they're local) or something better
-    local_trackers: HashMap<String, Box<SyncModel>>,
+impl SyncConfig {
+    /// Create a new SyncConfig instance.
+    pub fn new() -> SyncConfig {
+        SyncConfig {
+            quit: false,
+            enabled: false,
+            user_id: String::from(""),
+        }
+    }
+}
 
-    /// Tracks the current outgoing poll
-    poll_id: u32,
+/// Defines some common functions for our incoming/outgoing sync objects
+pub trait Syncer {
+    /// Get a copy of the current sync config
+    fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
+
+    /// Run the sync operation for this syncer
+    fn run_sync(&self) -> TResult<()>;
+
+    /// Check to see if we should quit the thread
+    fn should_quit(&self) -> bool {
+        let config = self.get_config();
+        let guard = config.read().unwrap();
+        guard.quit.clone()
+    }
+
+    /// Check to see if we're enabled
+    fn is_enabled(&self) -> bool {
+        let config = self.get_config();
+        let guard = config.read().unwrap();
+        guard.enabled.clone()
+    }
+
+    /// Get our sync_id key (for our k/v store)
+    fn sync_key(&self) -> TResult<String> {
+        let config = self.get_config();
+        let guard = config.read().unwrap();
+        let api_endpoint = try!(config::get::<String>(&["api", "endpoint"]));
+        Ok(format!("{}:{}", guard.user_id, api_endpoint))
+    }
+
+    fn runner(&self) {
+        while !self.should_quit() {
+            if self.is_enabled() {
+                self.run_sync();
+            } else {
+                util::sleep(1000);
+            }
+        }
+    }
+}
+
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>) {
+    let tx_main_out = tx_main.clone();
+    let config_out = config.clone();
+    let handle_out = thread::spawn(move || {
+
+    });
+
+    let tx_main_in = tx_main.clone();
+    let config_in = config.clone();
+    let handle_in = thread::spawn(move || {
+
+    });
+    (handle_out, handle_in)
 }
 
 #[cfg(test)]

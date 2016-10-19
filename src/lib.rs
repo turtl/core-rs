@@ -38,7 +38,7 @@ mod turtl;
 mod sync;
 
 use ::std::thread;
-use ::std::sync::Arc;
+use ::std::sync::{Arc, RwLock};
 use ::std::fs;
 use ::std::io::ErrorKind;
 use ::std::os::raw::c_char;
@@ -52,6 +52,8 @@ use ::error::{TError, TResult};
 use ::util::event::Emitter;
 use ::util::stopper::Stopper;
 use ::util::thredder::Pipeline;
+use ::sync::SyncConfig;
+use ::storage::Storage;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -71,25 +73,20 @@ fn stop(tx: Pipeline) {
     tx.push(Box::new(move |_| {}));
 }
 
-struct RuntimeConfig {
-    data_folder: String,
-}
-
-/// This takes a JSON-encoded object, and parses out the values we care about
-/// into a `RuntimeConfig` struct which can be used to configure various parts
-/// of the app.
-fn process_runtime_config(config_str: String) -> RuntimeConfig {
+/// This takes a JSON-encoded object, and parses out the values we care about,
+/// and populates them into our app-wide config (overwriting any values we may
+/// have set in config.yaml).
+fn process_runtime_config(config_str: String) -> TResult<()> {
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
         Err(_) => jedi::obj(),
     };
     let data_folder: String = match jedi::get(&["data_folder"], &runtime_config) {
         Ok(x) => x,
-        Err(_) => String::from("/tmp/turtl.sql"),
+        Err(_) => String::from("/tmp/turtl.sqlite"),
     };
-    RuntimeConfig {
-        data_folder: data_folder,
-    }
+    try!(config::set(&["data_folder"], &data_folder));
+    Ok(())
 }
 
 /// Start our app...spawns all our worker/helper threads, including our comm
@@ -97,26 +94,28 @@ fn process_runtime_config(config_str: String) -> RuntimeConfig {
 ///
 /// NOTE: we have two configs. Our runtime config, which is passed in as a JSON
 /// string to start(), and our app config that is loaded on init from our
-/// config.yaml file.
-///
-/// The runtime config is meant to set up things that will be platform
-/// independent and our UI will most like have before it even starts the Turtl
-/// core. This includes
-///
-/// The app config is meant to provide everything else.
+/// config.yaml file. The runtime config is meant to set up things that will be
+/// platform dependent and our UI will most likely have before it even starts
+/// the Turtl core.
+/// NOTE: we copy the runtime config into our main config, overwriting any of
+/// those keys that exist in the config.yaml (app config). this gives the entire
+/// app access to our runtime config.
 pub fn start(config_str: String) -> thread::JoinHandle<()> {
     (*RUN).set(true);
     thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
             // load our ocnfiguration
-            let runtime_config: RuntimeConfig = process_runtime_config(config_str);
+            try!(process_runtime_config(config_str));
 
-            match fs::create_dir(&runtime_config.data_folder[..]) {
+            let data_folder = try!(config::get::<String>(&["data_folder"]));
+            match fs::create_dir(&data_folder) {
                 Ok(()) => {
-                    info!("main::start() -- created data folder: {}", runtime_config.data_folder);
+                    info!("main::start() -- created data folder: {}", data_folder);
                 },
                 Err(e) => {
                     match e.kind() {
+                        // talked to drew about directory already existing.
+                        // sounds good.
                         ErrorKind::AlreadyExists => (),
                         _ => {
                             return Err(From::from(e));
@@ -130,7 +129,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // start our messaging thread
             let (handle, msg_shutdown) = messaging::start(queue_main.clone());
 
-            // grab our messaging channel from config
+            // grab our messaging channel name from config
             let msg_channel: String = match config::get(&["messaging", "address"]) {
                 Ok(x) => x,
                 Err(e) => {
@@ -139,10 +138,11 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 }
             };
 
-            let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+            let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
+            let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
 
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(queue_main.clone(), msg_channel, &runtime_config.data_folder, dumpy_schema));
+            let turtl = try!(turtl::Turtl::new_wrap(queue_main.clone(), msg_channel, kv, sync_config.clone()));
 
             // bind turtl.events "app:shutdown" to close everything
             {
@@ -152,9 +152,6 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                     stop(tx_main_shutdown.clone());
                 }, "app:shutdown");
             }
-
-            // set our default api endpoint
-            turtl.write().unwrap().api.set_endpoint(&try!(config::get(&["api", "endpoint"])));
 
             // run our main loop. all threads pipe their data/responses into this
             // loop, meaning <main> only has to check one place to grab messages.

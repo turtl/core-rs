@@ -71,7 +71,7 @@ impl<'a> ToSql for ModelDataRef<'a> {
 }
 
 /// Make sure we have a client ID, and sync it with the model system
-pub fn setup_client_id(storage: &Storage) -> TResult<()> {
+pub fn setup_client_id(storage: Arc<Storage>) -> TResult<()> {
     let conn = &storage.conn;
     let dumpy = &storage.dumpy;
     let id = match try!(dumpy.kv_get(conn, "client_id")) {
