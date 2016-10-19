@@ -109,7 +109,6 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
     debug!("user::try_auth() -- trying auth version {}", &version);
     let turtl1 = turtl.clone();
     let turtl2 = turtl.clone();
-    let turtl3 = turtl.clone();
     let ref work = turtl.read().unwrap().work;
     let username_clone = String::from(&username[..]);
     let password_clone = String::from(&password[..]);
@@ -119,9 +118,8 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             let mut data = HashMap::new();
             data.insert("auth", String::from(&auth[..]));
             {
-                let ref arcapi = turtl1.write().unwrap().api;
-                let mut api = arcapi.write().unwrap();
-                match api.set_auth(String::from(&auth[..])) {
+                let ref api = turtl1.write().unwrap().api;
+                match api.set_auth(auth.clone()) {
                     Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
                     _ => (),
                 }
@@ -156,7 +154,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
                 return futures::failed(err).boxed();
             }
             // try again, lower version num
-            try_auth(turtl3, username, password, version - 1)
+            try_auth(turtl2, username, password, version - 1)
         })
         .boxed()
 }

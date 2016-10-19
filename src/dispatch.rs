@@ -54,8 +54,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     // TODO: start sync system
                 })
                 .map_err(move |e| {
-                    let mut turtl_inner = turtl2.write().unwrap();
-                    turtl_inner.api.write().unwrap().clear_auth();
+                    let turtl_inner = turtl2.write().unwrap();
+                    turtl_inner.api.clear_auth();
                     match turtl_inner.msg_error(&mid2, &e) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()

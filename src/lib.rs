@@ -130,7 +130,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // start our messaging thread
             let (handle, msg_shutdown) = messaging::start(queue_main.clone());
 
-            let api = Arc::new(RwLock::new(Api::new()));
+            let api = Arc::new(Api::new());
             let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
             let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
 

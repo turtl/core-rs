@@ -1,3 +1,7 @@
+//! The Api system is responsible for talking to our Turtl server, and manages
+//! our user authentication.
+
+use ::std::sync::RwLock;
 use ::std::io::Read;
 
 use ::config;
@@ -10,28 +14,47 @@ use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::crypto;
 
-pub struct Api {
+/// Holds our Api configuration. This consists of any mutable fields the Api
+/// needs to build URLs or make decisions.
+struct ApiConfig {
     auth: Option<String>,
 }
 
+impl ApiConfig {
+    /// Create a new, blank config
+    fn new() -> ApiConfig {
+        ApiConfig {
+            auth: None,
+        }
+    }
+}
+
+/// Our Api object. Responsible for making outbound calls to our Turtl server.
+pub struct Api {
+    config: RwLock<ApiConfig>,
+}
+
 impl Api {
+    /// Create an Api
     pub fn new() -> Api {
         Api {
-            auth: None,
+            config: RwLock::new(ApiConfig::new()),
         }
     }
 
     /// Set the API's authentication
-    pub fn set_auth(&mut self, auth: String) -> TResult<()> {
+    pub fn set_auth(&self, auth: String) -> TResult<()> {
         let auth_str = String::from("user:") + &auth;
         let base_auth = try!(crypto::to_base64(&Vec::from(auth_str.as_bytes())));
-        self.auth = Some(String::from("Basic ") + &base_auth);
+        let ref mut config_guard = self.config.write().unwrap();
+        config_guard.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())
     }
 
     /// Clear out the API auth
-    pub fn clear_auth(&mut self) {
-        self.auth = None;
+    pub fn clear_auth(&self) {
+        let ref mut config_guard = self.config.write().unwrap();
+        config_guard.auth = None;
     }
 
     /// Send out an API request
@@ -41,9 +64,9 @@ impl Api {
         let mut url = String::with_capacity(endpoint.len() + resource.len());
         url.push_str(&endpoint[..]);
         url.push_str(resource);
-        let auth = match &self.auth {
-            &Some(ref x) => Some(String::from(&x[..])),
-            &None => None
+        let auth = {
+            let ref guard = self.config.read().unwrap();
+            guard.auth.clone()
         };
         let resource = String::from(resource);
         let method2 = method.clone();

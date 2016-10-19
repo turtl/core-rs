@@ -1,7 +1,7 @@
 //! The Turtl module is the container for the state of the app. It provides
 //! functions/interfaces for updating or retrieving stateful info about the app.
 
-use ::std::sync::{Arc, RwLock, RwLockReadGuard};
+use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
 use ::jedi::{self, Value};
@@ -46,7 +46,7 @@ pub struct Turtl {
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (Personas (soon to be deprecated) and
     /// invites come to mind). Use sparingly.
-    pub api: Arc<RwLock<Api>>,
+    pub api: Arc<Api>,
 }
 
 /// A handy type alias for passing Turtl around
@@ -54,7 +54,7 @@ pub type TurtlWrap = Arc<RwLock<Turtl>>;
 
 impl Turtl {
     /// Create a new Turtl app
-    pub fn new(tx_main: Pipeline, api: Arc<RwLock<Api>>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<Turtl> {
+    pub fn new(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<Turtl> {
         // TODO: match num processors - 1
         let num_workers = 3;
 
@@ -77,7 +77,7 @@ impl Turtl {
 
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
-    pub fn new_wrap(tx_main: Pipeline, api: Arc<RwLock<Api>>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<TurtlWrap> {
+    pub fn new_wrap(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<TurtlWrap> {
         let turtl = try!(Turtl::new(tx_main, api, kv, sync_config));
         Ok(Arc::new(RwLock::new(turtl)))
     }
@@ -115,12 +115,11 @@ impl Turtl {
     /// handing the Api object off to a closure that runs inside of our `async`
     /// runner.
     pub fn with_api<F>(&self, cb: F) -> TFutureResult<Value>
-        where F: FnOnce(RwLockReadGuard<Api>) -> TResult<Value> + Send + Sync + 'static
+        where F: FnOnce(Arc<Api>) -> TResult<Value> + Send + Sync + 'static
     {
         let api = self.api.clone();
         self.async.run(move || {
-            let guard = api.read().unwrap();
-            cb(guard)
+            cb(api)
         })
     }
 
