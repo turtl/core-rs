@@ -20,7 +20,7 @@ quick_error! {
     pub enum JSONError {
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
-            display("json: error: {}", err.description())
+            display("json: error: {}", format!("{}", err))
         }
         Parse(err: serde_json::Error) {
             cause(err)
@@ -182,7 +182,7 @@ pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
         Ok(ref x) => {
             match serde_json::from_value((*x).clone()) {
                 Ok(x) => Ok(x),
-                Err(e) => Err(JSONError::NotFound(format!("get: {}", e))),
+                Err(e) => Err(JSONError::NotFound(format!("get: {:?}: {}", keys, e))),
             }
         },
         Err(e) => Err(e),
