@@ -1,3 +1,6 @@
+[workspace]
+members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi"]
+
 [package]
 name = "turtl_core"
 version = "0.1.0"
