@@ -47,17 +47,14 @@ pub trait Emitter {
     fn bindings(&mut self) -> &mut Bindings;
 
     /// Binds a callback to an event name.
-    fn do_bind(&mut self, name: &str, cb: Callback) {
+    fn do_bind(&mut self, event_name: &str, cb: Callback) {
+        // make sure we unbind ANY callbacks with the same event name/ref name
+        // as this one, effectively making it so the same name/name pair will
+        // *replace* existing bindings.
+        self.unbind(event_name, cb.name.as_str());
         let mut bindings = self.bindings();
-        if bindings.contains_key(name) {
-            match bindings.get_mut(name) {
-                Some(x) => x.push(cb),
-                None => (),
-            }
-        } else {
-            let events = vec![cb];
-            bindings.insert(String::from(name), events);
-        }
+        let events = bindings.entry(String::from(event_name)).or_insert(Vec::with_capacity(3));
+        events.push(cb);
     }
 
     /// Bind a callback to an event name. The binding takes a name, which makes
@@ -205,6 +202,28 @@ mod tests {
             emitter.trigger("fire", &jval);
             assert_eq!(rdata.read().unwrap()[0], 1);
             emitter.trigger("fire", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 1);
+        }
+    }
+
+    #[test]
+    fn replace() {
+        let data = Arc::new(RwLock::new(vec![0]));
+        let jval = jedi::obj();
+        let rdata = data.clone();
+        {
+            let data1 = data.clone();
+            let mut emitter = EventEmitter::new();
+            emitter.bind("fire", move |_| {
+                data1.write().unwrap()[0] += 1;
+            }, "omglolwtf");
+            assert_eq!(rdata.read().unwrap()[0], 0);
+            emitter.trigger("fire", &jval);
+            assert_eq!(rdata.read().unwrap()[0], 1);
+            // replace with cb that does nothing. NO-THING.
+            emitter.bind("fire", move |_| { }, "omglolwtf");
+            emitter.trigger("fire", &jval);
+            // should still be 1
             assert_eq!(rdata.read().unwrap()[0], 1);
         }
     }
