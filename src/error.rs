@@ -94,6 +94,11 @@ impl From<JSONError> for TError {
         }
     }
 }
+impl From<Box<::std::any::Any + Send>> for TError {
+    fn from(err: Box<::std::any::Any + Send>) -> TError {
+        TError::Msg(format!("{:?}", err))
+    }
+}
 from_err!(::std::io::Error);
 from_err!(::fern::InitError);
 from_err!(::carrier::CError);
