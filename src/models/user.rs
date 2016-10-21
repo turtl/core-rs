@@ -178,7 +178,7 @@ impl User {
     pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
         self.key = Some(key);
         self.auth = Some(auth);
-        self.trigger("login", &jedi::to_val(&()));
+        self.trigger("login", &jedi::obj());
     }
 }
 
