@@ -125,26 +125,28 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 }
             }
 
-            let queue_main = Arc::new(MsQueue::new());
+            let tx_main = Arc::new(MsQueue::new());
 
             // start our messaging thread
-            let (handle, msg_shutdown) = messaging::start(queue_main.clone());
+            let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone());
 
             let api = Arc::new(Api::new());
             let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
             let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
 
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(queue_main.clone(), api.clone(), kv.clone(), sync_config.clone()));
+            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone(), api.clone(), kv.clone(), sync_config.clone()));
 
             // bind turtl.events "app:shutdown" to close everything
             {
                 let ref mut events = turtl.write().unwrap().events;
-                let tx_main_shutdown = queue_main.clone();
+                let tx_main_shutdown = tx_main.clone();
                 events.bind("app:shutdown", move |_| {
                     stop(tx_main_shutdown.clone());
                 }, "app:shutdown");
             }
+
+            let (handle_sync_out, handle_sync_in, sync_shutdown) = sync::start(tx_main.clone(), sync_config.clone(), kv.clone());
 
             // run our main loop. all threads pipe their data/responses into this
             // loop, meaning <main> only has to check one place to grab messages.
@@ -152,18 +154,16 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             info!("main::start() -- main loop");
             while (*RUN).running() {
                 debug!("turtl: main thread message loop");
-                let handler = queue_main.pop();
+                let handler = tx_main.pop();
                 handler.call_box(turtl.clone());
             }
             info!("main::start() -- shutting down");
             turtl.write().unwrap().shutdown();
             msg_shutdown();
-            match handle.join() {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("main::start() -- error joining messaging thread: {:?}", e);
-                }
-            }
+            sync_shutdown();
+            try!(handle_msg.join());
+            try!(handle_sync_out.join());
+            try!(handle_sync_in.join());
             Ok(())
         };
         match runner() {

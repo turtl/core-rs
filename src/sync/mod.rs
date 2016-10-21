@@ -23,9 +23,12 @@ use ::std::sync::{Arc, RwLock};
 
 use ::config;
 
+use ::sync::outgoing::SyncOutgoing;
+use ::sync::incoming::SyncIncoming;
 use ::util;
 use ::util::thredder::Pipeline;
 use ::error::TResult;
+use ::storage::Storage;
 
 /// This holds the configuration for the sync system (whether it's enabled, the
 /// current user id/api endpoint, and any other information we need to make
@@ -59,11 +62,22 @@ impl SyncConfig {
 
 /// Defines some common functions for our incoming/outgoing sync objects
 pub trait Syncer {
+    /// Get this syncer's name
+    fn get_name(&self) -> &'static str;
+
     /// Get a copy of the current sync config
     fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
 
-    /// Run the sync operation for this syncer
+    /// Run the sync operation for this syncer.
+    ///
+    /// Essentially, this is the meat of the syncer. This is the entry point for
+    /// the custom work this syncer does.
     fn run_sync(&self) -> TResult<()>;
+
+    /// Get the delay (in ms) between called to run_sync() for this Syncer
+    fn get_delay(&self) -> u64 {
+        1000
+    }
 
     /// Check to see if we should quit the thread
     fn should_quit(&self) -> bool {
@@ -89,30 +103,52 @@ pub trait Syncer {
 
     /// Runs our syncer, with some quick checks on run status.
     fn runner(&self) {
+        info!("sync::runner() -- {} main loop", self.get_name());
         while !self.should_quit() {
+            let delay = self.get_delay();
             if self.is_enabled() {
-                self.run_sync();
+                match self.run_sync() {
+                    Err(e) => error!("sync::runner() -- {}: {}", self.get_name(), e),
+                    _ => (),
+                }
+                util::sleep(delay);
             } else {
-                util::sleep(1000);
+                util::sleep(delay);
             }
         }
     }
 }
 
 /// Start our syncing system!
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>) {
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, kv: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+    // start our outging sync process
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
+    let kv_out = kv.clone();
     let handle_out = thread::spawn(move || {
-
+        let sync = SyncOutgoing::new(tx_main_out, config_out, kv_out);
+        sync.runner();
+        info!("sync::start() -- outgoing shutting down");
     });
 
+    // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
+    let kv_in = kv.clone();
     let handle_in = thread::spawn(move || {
-
+        let sync = SyncIncoming::new(tx_main_in, config_in, kv_in);
+        sync.runner();
+        info!("sync::start() -- incoming shutting down");
     });
-    (handle_out, handle_in)
+
+    let shutdown = move || {
+        let mut guard = config.write().unwrap();
+        guard.enabled = false;
+        guard.quit = true;
+    };
+
+    // send back our handles
+    (handle_out, handle_in, Box::new(shutdown))
 }
 
 #[cfg(test)]
