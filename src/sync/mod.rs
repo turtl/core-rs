@@ -120,13 +120,13 @@ pub trait Syncer {
 }
 
 /// Start our syncing system!
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, kv: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
     // start our outging sync process
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
-    let kv_out = kv.clone();
+    let db_out = db.clone();
     let handle_out = thread::spawn(move || {
-        let sync = SyncOutgoing::new(tx_main_out, config_out, kv_out);
+        let sync = SyncOutgoing::new(tx_main_out, config_out, db_out);
         sync.runner();
         info!("sync::start() -- outgoing shutting down");
     });
@@ -134,9 +134,9 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, kv: Arc<Storage
     // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
-    let kv_in = kv.clone();
+    let db_in = db.clone();
     let handle_in = thread::spawn(move || {
-        let sync = SyncIncoming::new(tx_main_in, config_in, kv_in);
+        let sync = SyncIncoming::new(tx_main_in, config_in, db_in);
         sync.runner();
         info!("sync::start() -- incoming shutting down");
     });
@@ -155,8 +155,23 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, kv: Arc<Storage
 mod tests {
     use super::*;
 
+    use ::std::sync::{Arc, RwLock};
+
+    use ::crossbeam::sync::MsQueue;
+
+    use ::jedi;
+
+    use ::storage::Storage;
+
     #[test]
-    fn make_sure_everything_works_lol() {
+    fn starts_and_quits() {
+        let tx_main = Arc::new(MsQueue::new());
+        let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
+        let db = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
+        let (hn_o, hn_i, shutdown) = start(tx_main, sync_config, db);
+        shutdown();
+        hn_o.join().unwrap();
+        hn_i.join().unwrap();
     }
 }
 

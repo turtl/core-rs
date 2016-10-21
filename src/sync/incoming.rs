@@ -20,8 +20,9 @@ pub struct SyncIncoming {
     /// and the `Turtl` object in the main thread.
     config: Arc<RwLock<SyncConfig>>,
 
-    /// Holds our key/value store for tracking our state.
-    kv: Arc<Storage>,
+    /// Holds our user-specific db. This is mainly for persisting k/v data (such
+    /// as our lsat sync_id).
+    db: Arc<Storage>,
 
     /// For each type we get back from an outgoing poll, defines a collection
     /// that is able to handle that incoming item (for instance a "note" coming
@@ -31,12 +32,12 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, kv: Arc<Storage>) -> SyncIncoming {
+    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage>) -> SyncIncoming {
         SyncIncoming {
             name: "incoming",
             tx_main: tx_main,
             config: config,
-            kv: kv,
+            db: db,
             // TODO: populate with our SyncModels...
             trackers: HashMap::new(),
         }
