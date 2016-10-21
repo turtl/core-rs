@@ -3,6 +3,9 @@ name = "jedi"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
+[lib]
+doctest = false				# these annoy me
+
 [dependencies]
 quick-error = "1.1.0"
 serde = "0.8.12"
