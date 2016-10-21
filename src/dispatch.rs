@@ -49,9 +49,6 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
-                    // TODO: init turtl.db w/ dumpy schema:
-                    //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
-                    // TODO: start sync system
                 })
                 .map_err(move |e| {
                     let turtl_inner = turtl2.write().unwrap();

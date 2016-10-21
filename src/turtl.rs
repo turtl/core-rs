@@ -7,13 +7,13 @@ use ::std::ops::Drop;
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TFutureResult, TError};
-use ::util::event;
+use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
-use ::sync::SyncConfig;
+use ::sync::{self, SyncConfig};
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
@@ -23,6 +23,11 @@ use ::sync::SyncConfig;
 /// lock around the entire thing. this would also greatly simplify the
 /// implementation app-wide.
 pub struct Turtl {
+    /// Our phone channel to the main thread. Although not generally used
+    /// directly by the Turtl object, Turtl may spawn other processes that need
+    /// it (eg after login the sync system needs it) to it's handy to have a
+    /// copy laying around.
+    pub tx_main: Pipeline,
     /// This is our app-wide event bus.
     pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
@@ -44,7 +49,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: Option<Storage>,
+    pub db: Option<Arc<Storage>>,
     /// Sync system configuration (shared state with the sync system).
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Our external API object. Note that most things API-related go through
@@ -59,14 +64,15 @@ pub type TurtlWrap = Arc<RwLock<Turtl>>;
 
 impl Turtl {
     /// Create a new Turtl app
-    pub fn new(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<Turtl> {
+    fn new(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>) -> TResult<Turtl> {
         // TODO: match num processors - 1
         let num_workers = 3;
 
         // make sure we have a client id
         try!(storage::setup_client_id(kv.clone()));
 
-        let turtl = Turtl {
+        let mut turtl = Turtl {
+            tx_main: tx_main.clone(),
             events: event::EventEmitter::new(),
             user: User::new(),
             api: api,
@@ -75,16 +81,27 @@ impl Turtl {
             async: Thredder::new("async", tx_main.clone(), 2),
             kv: kv,
             db: None,
-            sync_config: sync_config,
+            sync_config: Arc::new(RwLock::new(SyncConfig::new())),
         };
+
+        turtl.user.bind("login", |_| {
+            // TODO: init turtl.db w/ dumpy schema:
+            //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+            // TODO: load profile into db
+            // TODO: start sync system
+        }, "turtl:user:login");
+
+        turtl.user.bind("logout", |_| {
+        }, "turtl:user:logout");
+
         Ok(turtl)
     }
 
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
-    pub fn new_wrap(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>, sync_config: Arc<RwLock<SyncConfig>>) -> TResult<TurtlWrap> {
-        let turtl = try!(Turtl::new(tx_main, api, kv, sync_config));
-        Ok(Arc::new(RwLock::new(turtl)))
+    pub fn new_wrap(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>) -> TResult<TurtlWrap> {
+        let turtl = Arc::new(RwLock::new(try!(Turtl::new(tx_main, api, kv))));
+        Ok(turtl)
     }
 
     /// Send a message to (presumably) our UI.
@@ -126,6 +143,25 @@ impl Turtl {
         self.async.run(move || {
             cb(api)
         })
+    }
+
+    /// Start our sync system. This should happen after a user is logged in, and
+    /// we definitely have a Turtl.db object available.
+    pub fn start_sync(&mut self) -> TResult<()> {
+        let db = match self.db {
+            Some(ref x) => x.clone(),
+            None => return Err(TError::MissingData(String::from("turtl.start_sync() -- missing `db` object"))),
+        };
+        let (_, _, sync_shutdown) = sync::start(self.tx_main.clone(), self.sync_config.clone(), db.clone());
+        let shutdown_clone1 = Arc::new(sync_shutdown);
+        let shutdown_clone2 = shutdown_clone1.clone();
+        self.user.bind_once("logout", move |_| {
+            shutdown_clone1();
+        }, "turtl:user:logout:sync");
+        self.events.bind_once("app:shutdown", move |_| {
+            shutdown_clone2();
+        }, "turtl:app:shutdown:sync");
+        Ok(())
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

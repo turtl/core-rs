@@ -38,7 +38,7 @@ mod turtl;
 mod sync;
 
 use ::std::thread;
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::Arc;
 use ::std::fs;
 use ::std::io::ErrorKind;
 use ::std::os::raw::c_char;
@@ -132,10 +132,9 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
             let api = Arc::new(Api::new());
             let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
-            let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
 
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone(), api.clone(), kv.clone(), sync_config.clone()));
+            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone(), api.clone(), kv.clone()));
 
             // bind turtl.events "app:shutdown" to close everything
             {
@@ -143,10 +142,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 let tx_main_shutdown = tx_main.clone();
                 events.bind("app:shutdown", move |_| {
                     stop(tx_main_shutdown.clone());
-                }, "app:shutdown");
+                }, "app:shutdown:main");
             }
-
-            let (handle_sync_out, handle_sync_in, sync_shutdown) = sync::start(tx_main.clone(), sync_config.clone(), kv.clone());
 
             // run our main loop. all threads pipe their data/responses into this
             // loop, meaning <main> only has to check one place to grab messages.
@@ -160,10 +157,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             info!("main::start() -- shutting down");
             turtl.write().unwrap().shutdown();
             msg_shutdown();
-            sync_shutdown();
+
             try!(handle_msg.join());
-            try!(handle_sync_out.join());
-            try!(handle_sync_in.join());
             Ok(())
         };
         match runner() {
