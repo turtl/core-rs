@@ -4,7 +4,7 @@
 use ::std::sync::Arc;
 
 use ::crypto;
-use ::rusqlite::Connection;
+use ::rusqlite::{self, Connection};
 use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
 use ::libc::c_int;
 use ::jedi::{self, Value};
@@ -94,10 +94,15 @@ pub struct Storage {
 impl Storage {
     /// Make a Storage lol
     pub fn new(location: &String, schema: Value) -> TResult<Storage> {
+        let flags =
+            rusqlite::SQLITE_OPEN_READ_WRITE |
+            rusqlite::SQLITE_OPEN_CREATE |
+            rusqlite::SQLITE_OPEN_FULL_MUTEX |
+            rusqlite::SQLITE_OPEN_URI;
         let conn = try!(if location == ":memory:" {
-            Connection::open_in_memory()
+            Connection::open_in_memory_with_flags(flags)
         } else {
-            Connection::open(location)
+            Connection::open_with_flags(location, flags)
         });
 
         // set up dumpy
@@ -161,6 +166,8 @@ impl Storage {
     }
 }
 
+// NOTE: since we open our db connection in full-mutex mode, we can safely pass
+// it around between threads willy-nilly.
 unsafe impl Send for Storage {}
 unsafe impl Sync for Storage {}
 
