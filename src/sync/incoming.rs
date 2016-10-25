@@ -6,6 +6,7 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::util::thredder::Pipeline;
 use ::storage::Storage;
+use ::api::Api;
 
 /// Holds the state for data going from API -> turtl (incoming sync data),
 /// including tracking which sync item's we've seen and which we haven't.
@@ -20,6 +21,9 @@ pub struct SyncIncoming {
     /// and the `Turtl` object in the main thread.
     config: Arc<RwLock<SyncConfig>>,
 
+    /// Holds our Api object. Lets us chit chat with the Turtl server.
+    api: Arc<Api>,
+
     /// Holds our user-specific db. This is mainly for persisting k/v data (such
     /// as our lsat sync_id).
     db: Arc<Storage>,
@@ -32,11 +36,12 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage>) -> SyncIncoming {
+    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
         SyncIncoming {
             name: "incoming",
             tx_main: tx_main,
             config: config,
+            api: api,
             db: db,
             // TODO: populate with our SyncModels...
             trackers: HashMap::new(),
@@ -51,6 +56,10 @@ impl Syncer for SyncIncoming {
 
     fn get_config(&self) -> Arc<RwLock<SyncConfig>> {
         self.config.clone()
+    }
+
+    fn init(&self) -> TResult<()> {
+        Ok(())
     }
 
     fn run_sync(&self) -> TResult<()> {

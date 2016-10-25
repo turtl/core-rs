@@ -16,6 +16,7 @@ extern crate libc;
 extern crate log;
 #[macro_use]
 extern crate quick_error;
+extern crate regex;
 extern crate rusqlite;
 extern crate rustc_serialize as serialize;
 extern crate serde;
@@ -52,9 +53,6 @@ use ::error::{TError, TResult};
 use ::util::event::Emitter;
 use ::util::stopper::Stopper;
 use ::util::thredder::Pipeline;
-use ::sync::SyncConfig;
-use ::storage::Storage;
-use ::api::Api;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -84,7 +82,7 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
     };
     let data_folder: String = match jedi::get(&["data_folder"], &runtime_config) {
         Ok(x) => x,
-        Err(_) => String::from("/tmp/turtl.sqlite"),
+        Err(_) => String::from("/tmp/"),
     };
     try!(config::set(&["data_folder"], &data_folder));
     Ok(())
@@ -130,11 +128,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // start our messaging thread
             let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone());
 
-            let api = Arc::new(Api::new());
-            let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
-
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone(), api.clone(), kv.clone()));
+            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone()));
 
             // bind turtl.events "app:shutdown" to close everything
             {

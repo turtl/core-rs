@@ -29,6 +29,7 @@ use ::util;
 use ::util::thredder::Pipeline;
 use ::error::TResult;
 use ::storage::Storage;
+use ::api::Api;
 
 /// This holds the configuration for the sync system (whether it's enabled, the
 /// current user id/api endpoint, and any other information we need to make
@@ -74,6 +75,11 @@ pub trait Syncer {
     /// the custom work this syncer does.
     fn run_sync(&self) -> TResult<()>;
 
+    /// Run any initialization this Syncer needs.
+    fn init(&self) -> TResult<()> {
+        Ok(())
+    }
+
     /// Get the delay (in ms) between called to run_sync() for this Syncer
     fn get_delay(&self) -> u64 {
         1000
@@ -103,12 +109,20 @@ pub trait Syncer {
 
     /// Runs our syncer, with some quick checks on run status.
     fn runner(&self) {
+        info!("sync::runner() -- {} init", self.get_name());
+        match self.init() {
+            Ok(_) => (),
+            Err(e) => {
+                error!("sync::runner() -- {}: init: {}", self.get_name(), e);
+                return;
+            }
+        }
         info!("sync::runner() -- {} main loop", self.get_name());
         while !self.should_quit() {
             let delay = self.get_delay();
             if self.is_enabled() {
                 match self.run_sync() {
-                    Err(e) => error!("sync::runner() -- {}: {}", self.get_name(), e),
+                    Err(e) => error!("sync::runner() -- {}: main loop: {}", self.get_name(), e),
                     _ => (),
                 }
                 util::sleep(delay);
@@ -120,13 +134,14 @@ pub trait Syncer {
 }
 
 /// Start our syncing system!
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
     // start our outging sync process
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
+    let api_out = api.clone();
     let db_out = db.clone();
     let handle_out = thread::spawn(move || {
-        let sync = SyncOutgoing::new(tx_main_out, config_out, db_out);
+        let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
         sync.runner();
         info!("sync::start() -- outgoing shutting down");
     });
@@ -134,9 +149,10 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage
     // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
+    let api_in = api.clone();
     let db_in = db.clone();
     let handle_in = thread::spawn(move || {
-        let sync = SyncIncoming::new(tx_main_in, config_in, db_in);
+        let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
         sync.runner();
         info!("sync::start() -- incoming shutting down");
     });
@@ -162,13 +178,15 @@ mod tests {
     use ::jedi;
 
     use ::storage::Storage;
+    use ::api::Api;
 
     #[test]
     fn starts_and_quits() {
         let tx_main = Arc::new(MsQueue::new());
         let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
+        let api = Arc::new(Api::new());
         let db = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
-        let (hn_o, hn_i, shutdown) = start(tx_main, sync_config, db);
+        let (hn_o, hn_i, shutdown) = start(tx_main, sync_config, api, db);
         shutdown();
         hn_o.join().unwrap();
         hn_i.join().unwrap();

@@ -173,7 +173,7 @@ mod tests {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
-            let mut emitter = EventEmitter::new();
+            let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind("fire", cb, "test:fire");
             //emitter.bind("omg", cb, "test:test");

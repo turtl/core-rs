@@ -4,6 +4,7 @@ use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
 use ::util::thredder::Pipeline;
 use ::storage::Storage;
+use ::api::Api;
 
 /// Holds the state for data going from turtl -> API (outgoing sync data).
 pub struct SyncOutgoing {
@@ -17,6 +18,9 @@ pub struct SyncOutgoing {
     /// and the `Turtl` object in the main thread.
     config: Arc<RwLock<SyncConfig>>,
 
+    /// Holds our Api object. Lets us chit chat with the Turtl server.
+    api: Arc<Api>,
+
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling the "outgoing" table for local changes that need to be
     /// synced to our heroic API.
@@ -25,11 +29,12 @@ pub struct SyncOutgoing {
 
 impl SyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, db: Arc<Storage>) -> SyncOutgoing {
+    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncOutgoing {
         SyncOutgoing {
             name: "outgoing",
             tx_main: tx_main,
             config: config,
+            api: api,
             db: db,
         }
     }

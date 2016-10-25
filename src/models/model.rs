@@ -1,3 +1,10 @@
+//! The Model type defines an object that maps user's data (a note, a board,
+//! etc etc) to a database table and/or a set of methods/operations that can be
+//! run on that data.
+//!
+//! The most important aspect of models is that they are (De)Serialize(able),
+//! making them easy to save/load to various data sources.
+
 use ::std::sync::RwLock;
 
 use ::time;
@@ -473,7 +480,7 @@ mod tests {
             let cb = move |_: &Value| {
                 data.write().unwrap()[0] += 1;
             };
-            let mut rabbit = Rabbit::new();
+            let rabbit = Rabbit::new();
             rabbit.bind("hop", cb, "rabbit:hop");
 
             let jval = jedi::obj();

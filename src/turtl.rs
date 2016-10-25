@@ -4,12 +4,16 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
+use ::regex::Regex;
+
 use ::jedi::{self, Value};
+use ::config;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
+use ::models::model::Model;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
@@ -44,7 +48,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: Option<Arc<Storage>>,
+    pub db: RwLock<Option<Arc<Storage>>>,
     /// Sync system configuration (shared state with the sync system).
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Our external API object. Note that most things API-related go through
@@ -59,14 +63,18 @@ pub type TurtlWrap = Arc<Turtl>;
 
 impl Turtl {
     /// Create a new Turtl app
-    fn new(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>) -> TResult<Turtl> {
+    fn new(tx_main: Pipeline) -> TResult<Turtl> {
         // TODO: match num processors - 1
         let num_workers = 3;
+
+        let api = Arc::new(Api::new());
+        let data_folder = try!(config::get::<String>(&["data_folder"]));
+        let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
 
         // make sure we have a client id
         try!(storage::setup_client_id(kv.clone()));
 
-        let mut turtl = Turtl {
+        let turtl = Turtl {
             tx_main: tx_main.clone(),
             events: event::EventEmitter::new(),
             user: RwLock::new(User::new()),
@@ -75,30 +83,87 @@ impl Turtl {
             work: Thredder::new("work", tx_main.clone(), num_workers),
             async: Thredder::new("async", tx_main.clone(), 2),
             kv: kv,
-            db: None,
+            db: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
         };
-
-        {
-            let user_guard = turtl.user.read().unwrap();
-            user_guard.bind("login", |_| {
-                // TODO: init turtl.db w/ dumpy schema:
-                //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
-                // TODO: load profile into db
-                // TODO: start sync system
-            }, "turtl:user:login");
-
-            user_guard.bind("logout", |_| {
-            }, "turtl:user:logout");
-        }
-
         Ok(turtl)
     }
 
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
-    pub fn new_wrap(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>) -> TResult<TurtlWrap> {
-        let turtl = Arc::new(try!(Turtl::new(tx_main, api, kv)));
+    pub fn new_wrap(tx_main: Pipeline) -> TResult<TurtlWrap> {
+        let turtl = Arc::new(try!(Turtl::new(tx_main)));
+        {
+            let user_guard = turtl.user.read().unwrap();
+
+            let turtl2 = turtl.clone();
+            user_guard.bind("login", move |_| {
+                let user_guard = turtl2.user.read().unwrap();
+
+                let dumpy_schema = match config::get::<Value>(&["schema"]) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: config.get(schema): {}", e);
+                        return;
+                    },
+                };
+                let data_folder = match config::get::<String>(&["data_folder"]) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: config.get(data_folder): {}", e);
+                        return;
+                    },
+                };
+                let api_endpoint = match config::get::<String>(&["api", "endpoint"]) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: config.get(api.endpoint): {}", e);
+                        return;
+                    },
+                };
+                let re = match Regex::new(r"(?i)[^a-z0-9]") {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: Regex::new(): {}", e);
+                        return;
+                    },
+                };
+
+                let user_id = match user_guard.id() {
+                    Some(x) => x,
+                    None => {
+                        error!("turtl.new_wrap() -- user:login: user.id() is None (can't login without an ID)");
+                        return;
+                    },
+                };
+                let server = re.replace_all(&api_endpoint, "");
+                let db = match Storage::new(&format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, server, user_id), dumpy_schema) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: Storage::new(): {}", e);
+                        return;
+                    },
+                };
+                let mut db_guard = turtl2.db.write().unwrap();
+                *db_guard = Some(Arc::new(db));
+
+                match turtl2.start_sync() {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("turtl.new_wrap() -- user:login: start_sync(): {}", e);
+                        return;
+                    }
+                }
+            }, "turtl:user:login");
+
+            let turtl3 = turtl.clone();
+            user_guard.bind("logout", move |_| {
+                // NOTE: we *don't* need to stop the sync here because
+                // start_sync() binds `logout` and does it for us.
+                let mut db_guard = turtl3.db.write().unwrap();
+                *db_guard = None;
+            }, "turtl:user:logout");
+        }
         Ok(turtl)
     }
 
@@ -145,12 +210,18 @@ impl Turtl {
 
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
-    pub fn start_sync(&mut self) -> TResult<()> {
-        let db = match self.db {
-            Some(ref x) => x.clone(),
+    pub fn start_sync(&self) -> TResult<()> {
+        let db_guard = self.db.read().unwrap();
+        let db = match db_guard.as_ref() {
+            Some(x) => x.clone(),
             None => return Err(TError::MissingData(String::from("turtl.start_sync() -- missing `db` object"))),
         };
-        let (_, _, sync_shutdown) = sync::start(self.tx_main.clone(), self.sync_config.clone(), db.clone());
+
+        // we ignore our handles. there's no easy way to join on them since they
+        // are single-use and Emitter.bind takes Fn (not FnOnce). no good way to
+        // fix this ATM, so we just don't join. oh well.
+        let (_, _, sync_shutdown) = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db.clone());
+
         let shutdown_clone1 = Arc::new(sync_shutdown);
         let shutdown_clone2 = shutdown_clone1.clone();
         let user_guard = self.user.read().unwrap();
