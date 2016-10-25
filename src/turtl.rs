@@ -17,11 +17,6 @@ use ::sync::{self, SyncConfig};
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
-///
-/// TODO: can we get rid of Turtl's RwLock? would be great to have all of its
-/// sub-objects manage their own Rw state (if needed) instead of having one big
-/// lock around the entire thing. this would also greatly simplify the
-/// implementation app-wide.
 pub struct Turtl {
     /// Our phone channel to the main thread. Although not generally used
     /// directly by the Turtl object, Turtl may spawn other processes that need
@@ -31,7 +26,7 @@ pub struct Turtl {
     /// This is our app-wide event bus.
     pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
-    pub user: User,
+    pub user: RwLock<User>,
     /// Need to do some CPU-intensive work and have a Future finished when it's
     /// done? Send it here! Great for decrypting models.
     pub work: Thredder,
@@ -60,7 +55,7 @@ pub struct Turtl {
 }
 
 /// A handy type alias for passing Turtl around
-pub type TurtlWrap = Arc<RwLock<Turtl>>;
+pub type TurtlWrap = Arc<Turtl>;
 
 impl Turtl {
     /// Create a new Turtl app
@@ -74,7 +69,7 @@ impl Turtl {
         let mut turtl = Turtl {
             tx_main: tx_main.clone(),
             events: event::EventEmitter::new(),
-            user: User::new(),
+            user: RwLock::new(User::new()),
             api: api,
             msg: Messenger::new(),
             work: Thredder::new("work", tx_main.clone(), num_workers),
@@ -84,15 +79,18 @@ impl Turtl {
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
         };
 
-        turtl.user.bind("login", |_| {
-            // TODO: init turtl.db w/ dumpy schema:
-            //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
-            // TODO: load profile into db
-            // TODO: start sync system
-        }, "turtl:user:login");
+        {
+            let user_guard = turtl.user.read().unwrap();
+            user_guard.bind("login", |_| {
+                // TODO: init turtl.db w/ dumpy schema:
+                //   let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+                // TODO: load profile into db
+                // TODO: start sync system
+            }, "turtl:user:login");
 
-        turtl.user.bind("logout", |_| {
-        }, "turtl:user:logout");
+            user_guard.bind("logout", |_| {
+            }, "turtl:user:logout");
+        }
 
         Ok(turtl)
     }
@@ -100,7 +98,7 @@ impl Turtl {
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
     pub fn new_wrap(tx_main: Pipeline, api: Arc<Api>, kv: Arc<Storage>) -> TResult<TurtlWrap> {
-        let turtl = Arc::new(RwLock::new(try!(Turtl::new(tx_main, api, kv))));
+        let turtl = Arc::new(try!(Turtl::new(tx_main, api, kv)));
         Ok(turtl)
     }
 
@@ -155,7 +153,8 @@ impl Turtl {
         let (_, _, sync_shutdown) = sync::start(self.tx_main.clone(), self.sync_config.clone(), db.clone());
         let shutdown_clone1 = Arc::new(sync_shutdown);
         let shutdown_clone2 = shutdown_clone1.clone();
-        self.user.bind_once("logout", move |_| {
+        let user_guard = self.user.read().unwrap();
+        user_guard.bind_once("logout", move |_| {
             shutdown_clone1();
         }, "turtl:user:logout:sync");
         self.events.bind_once("app:shutdown", move |_| {

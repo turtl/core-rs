@@ -44,16 +44,14 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             let mid2 = mid.clone();
             User::login(turtl.clone(), &username, &password)
                 .map(move |_| {
-                    let turtl_inner = turtl1.read().unwrap();
-                    match turtl_inner.msg_success(&mid, jedi::obj()) {
+                    match turtl1.msg_success(&mid, jedi::obj()) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
                 })
                 .map_err(move |e| {
-                    let turtl_inner = turtl2.write().unwrap();
-                    turtl_inner.api.clear_auth();
-                    match turtl_inner.msg_error(&mid2, &e) {
+                    turtl2.api.clear_auth();
+                    match turtl2.msg_error(&mid2, &e) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
                     }
@@ -64,26 +62,25 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "app:api:set_endpoint" => {
             let endpoint: String = try!(jedi::get(&["2"], &data));
             try!(config::set(&["api", "endpoint"], &endpoint));
-            turtl.read().unwrap().msg_success(&mid, jedi::obj())
+            turtl.msg_success(&mid, jedi::obj())
         },
         "app:shutdown" => {
             info!("dispatch: got shutdown signal, quitting");
-            match turtl.read().unwrap().msg_success(&mid, jedi::obj()) {
+            match turtl.msg_success(&mid, jedi::obj()) {
                 Ok(..) => (),
                 Err(..) => (),
             }
             util::sleep(10);
-            let ref mut events = turtl.write().unwrap().events;
-            events.trigger("app:shutdown", &jedi::to_val(&()));
+            turtl.events.trigger("app:shutdown", &jedi::to_val(&()));
             Ok(())
         },
         "ping" => {
             info!("ping!");
-            turtl.read().unwrap().msg_success(&mid, Value::String(String::from("pong")))
+            turtl.msg_success(&mid, Value::String(String::from("pong")))
                 .map(|_| ())
         },
         _ => {
-            match turtl.read().unwrap().msg_error(&mid, &TError::MissingCommand(cmd.clone())) {
+            match turtl.msg_error(&mid, &TError::MissingCommand(cmd.clone())) {
                 Err(e) => error!("dispatch -- problem sending error message: {}", e),
                 _ => ()
             }

@@ -279,7 +279,7 @@ macro_rules! model {
         }
 
         impl ::util::event::Emitter for $name {
-            fn bindings(&mut self) -> &mut ::util::event::Bindings {
+            fn bindings(&self) -> &::util::event::Bindings {
                 self._emitter.bindings()
             }
         }

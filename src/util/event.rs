@@ -2,7 +2,11 @@
 //! json `Value` to provide arbitrary arguments to bound functions.
 //!
 //! We also define an event struct for triggering events.
+//!
+//! Note that our bindings are wrapped in an RwLock, so an evented object can be
+//! bound/triggered from any thread.
 
+use ::std::sync::RwLock;
 use ::std::collections::HashMap;
 
 use ::jedi::Value;
@@ -31,7 +35,7 @@ pub struct Callback {
 }
 
 /// An alias to make returning the bindings object easier
-pub type Bindings = HashMap<String, Vec<Callback>>;
+pub type Bindings = RwLock<HashMap<String, Vec<Callback>>>;
 
 /// The Emitter class holds a set of event bindings. It implements the `Emitter`
 /// trait and can be used as a standalone event emitter object.
@@ -44,22 +48,23 @@ pub struct EventEmitter {
 /// to return a mutable reference to a HashMap of bindings.
 pub trait Emitter {
     /// Grab a mutable ref to this emitter's bindings
-    fn bindings(&mut self) -> &mut Bindings;
+    fn bindings(&self) -> &Bindings;
 
     /// Binds a callback to an event name.
-    fn do_bind(&mut self, event_name: &str, cb: Callback) {
+    fn do_bind(&self, event_name: &str, cb: Callback) {
         // make sure we unbind ANY callbacks with the same event name/ref name
         // as this one, effectively making it so the same name/name pair will
         // *replace* existing bindings.
         self.unbind(event_name, cb.name.as_str());
-        let mut bindings = self.bindings();
-        let events = bindings.entry(String::from(event_name)).or_insert(Vec::with_capacity(3));
+        let bindings = self.bindings();
+        let mut guard = bindings.write().unwrap();
+        let events = guard.entry(String::from(event_name)).or_insert(Vec::with_capacity(3));
         events.push(cb);
     }
 
     /// Bind a callback to an event name. The binding takes a name, which makes
     /// it easy to unbind later (by name).
-    fn bind<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
+    fn bind<F>(&self, event_name: &str, cb: F, bind_name: &str)
         where F: Fn(&Value) + Send + Sync + 'static
     {
         self.do_bind(event_name, Callback {
@@ -71,7 +76,7 @@ pub trait Emitter {
 
     /// Bind a ont-time callback to an event name. The binding takes a name,
     /// which makes it easy to unbind later (by name).
-    fn bind_once<F>(&mut self, event_name: &str, cb: F, bind_name: &str)
+    fn bind_once<F>(&self, event_name: &str, cb: F, bind_name: &str)
         where F: Fn(&Value) + Send + Sync + 'static
     {
         self.do_bind(event_name, Callback {
@@ -82,9 +87,10 @@ pub trait Emitter {
     }
 
     /// Unbind an event/listener from thie emitter.
-    fn unbind(&mut self, event_name: &str, bind_name: &str) -> bool {
-        let mut bindings = self.bindings();
-        match bindings.get_mut(event_name) {
+    fn unbind(&self, event_name: &str, bind_name: &str) -> bool {
+        let bindings = self.bindings();
+        let mut guard = bindings.write().unwrap();
+        match guard.get_mut(event_name) {
             Some(x) => {
                 let mut removed = false;
                 for idx in (0..(x.len())).rev() {
@@ -101,9 +107,10 @@ pub trait Emitter {
 
     /// Trigger an event. Any function bound to the event name gets fired, with
     /// `data` passed as the only argument.
-    fn trigger(&mut self, event_name: &str, data: &Value) -> () {
-        let mut bindings = self.bindings();
-        match bindings.get_mut(event_name) {
+    fn trigger(&self, event_name: &str, data: &Value) -> () {
+        let bindings = self.bindings();
+        let mut guard = bindings.write().unwrap();
+        match guard.get_mut(event_name) {
             Some(x) => {
                 let mut removes: Vec<usize> = Vec::new();
                 for idx in 0..(x.len()) {
@@ -133,13 +140,13 @@ pub trait Emitter {
 impl EventEmitter {
     /// Make a new Emitter.
     pub fn new() -> EventEmitter {
-        EventEmitter { _bindings: HashMap::new() }
+        EventEmitter { _bindings: RwLock::new(HashMap::new()) }
     }
 }
 
 impl Emitter for EventEmitter {
-    fn bindings(&mut self) -> &mut Bindings {
-        &mut self._bindings
+    fn bindings(&self) -> &Bindings {
+        &self._bindings
     }
 }
 
@@ -192,7 +199,7 @@ mod tests {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
-            let mut emitter = EventEmitter::new();
+            let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind_once("fire", cb, "test:fire");
 
@@ -213,7 +220,7 @@ mod tests {
         let rdata = data.clone();
         {
             let data1 = data.clone();
-            let mut emitter = EventEmitter::new();
+            let emitter = EventEmitter::new();
             emitter.bind("fire", move |_| {
                 data1.write().unwrap()[0] += 1;
             }, "omglolwtf");
@@ -239,7 +246,7 @@ mod tests {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
                 data.write().unwrap()[0] += 1;
             };
-            let mut emitter = EventEmitter::new();
+            let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind("fire", cb, "test:fire");
 

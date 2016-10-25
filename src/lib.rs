@@ -138,9 +138,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
             // bind turtl.events "app:shutdown" to close everything
             {
-                let ref mut events = turtl.write().unwrap().events;
                 let tx_main_shutdown = tx_main.clone();
-                events.bind("app:shutdown", move |_| {
+                turtl.events.bind("app:shutdown", move |_| {
                     stop(tx_main_shutdown.clone());
                 }, "app:shutdown:main");
             }
@@ -155,7 +154,6 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 handler.call_box(turtl.clone());
             }
             info!("main::start() -- shutting down");
-            turtl.write().unwrap().shutdown();
             msg_shutdown();
 
             try!(handle_msg.join());

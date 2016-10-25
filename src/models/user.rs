@@ -109,7 +109,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
     debug!("user::try_auth() -- trying auth version {}", &version);
     let turtl1 = turtl.clone();
     let turtl2 = turtl.clone();
-    let ref work = turtl.read().unwrap().work;
+    let ref work = turtl.work;
     let username_clone = String::from(&username[..]);
     let password_clone = String::from(&password[..]);
     work.run(move || generate_auth(&username_clone, &password_clone, version))
@@ -118,19 +118,18 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             let mut data = HashMap::new();
             data.insert("auth", String::from(&auth[..]));
             {
-                let ref api = turtl1.write().unwrap().api;
+                let ref api = turtl1.api;
                 match api.set_auth(auth.clone()) {
                     Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
                     _ => (),
                 }
             }
             let turtl4 = turtl1.clone();
-            let tguard = turtl1.read().unwrap();
-            tguard.with_api(|api| -> TResult<Value> {
+            turtl1.with_api(|api| -> TResult<Value> {
                 api.post("/auth", jedi::obj())
             }).and_then(move |_| {
-                let ref mut user = turtl4.write().unwrap().user;
-                user.do_login(key, auth);
+                let mut user_guard = turtl4.user.write().unwrap();
+                user_guard.do_login(key, auth);
                 futures::finished(()).boxed()
             }).boxed()
         })
@@ -166,8 +165,7 @@ impl User {
         // -------------------------
         // TODO: removeme
         if password == "get a job get a job get a job omgLOOOOLLLolololLOL" {
-            let ref work = turtl.read().unwrap().work;
-            work.run(|| use_code(&String::from("ass"), &String::from("butt")));
+            turtl.work.run(|| use_code(&String::from("ass"), &String::from("butt")));
         }
         // -------------------------
 
