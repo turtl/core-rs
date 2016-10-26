@@ -1,8 +1,8 @@
 ---
 loglevel: "debug"
 messaging:
-  # we no longer use nanomsg, any arbitrary string will do
-  address: "turtlapp"
+  reqres: "inproc://turtl-req"
+  events: "inproc://turtl-events"
 
 api:
   endpoint: "https://api.turtlapp.com/v2"
@@ -35,7 +35,6 @@ schema:
 # configuration for test client
 client:
   test:
-    # test account to use
-    username: turtluser
-    password: acctpassword
+    username: slappy@turtl.it
+    password: turtlesallthewaydown
 
