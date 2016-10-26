@@ -257,6 +257,20 @@ impl Dumpy {
         Ok(objects)
     }
 
+    /// Get ALL objects in a table
+    pub fn all(&self, conn: &Connection, table: &String) -> DResult<Vec<Value>> {
+        let query = "SELECT data FROM dumpy_objects WHERE table_name = ? ORDER BY id ASC";
+        let mut query = try!(conn.prepare(query));
+        let rows = try!(query.query_map(&[table], |row| {
+            row.get("data")
+        }));
+        let mut objects: Vec<Value> = Vec::new();
+        for data in rows {
+            objects.push(try!(jedi::parse(&try!(data))));
+        }
+        Ok(objects)
+    }
+
     /// Set a value into the key/val store
     pub fn kv_set(&self, conn: &Connection, key: &str, val: &String) -> DResult<()> {
         try!(conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val]));
@@ -411,6 +425,9 @@ mod tests {
         assert_eq!(jedi::get::<String>(&["id"], &notes[0]).unwrap(), "6tuns");
         assert_eq!(jedi::get::<String>(&["id"], &notes[1]).unwrap(), "h4iry");
         assert_eq!(jedi::get::<String>(&["id"], &notes[2]).unwrap(), "n0mnm");
+
+        let all_records = dumpy.all(&conn, &String::from("notes")).unwrap();
+        assert_eq!(all_records.len(), 7);
     }
 
     #[test]
