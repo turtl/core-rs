@@ -16,7 +16,7 @@
 
 mod incoming;
 mod outgoing;
-mod sync_model;
+mod models;
 
 use ::std::thread;
 use ::std::sync::{Arc, RwLock};

@@ -5,11 +5,30 @@
 //! data from the API and it's a note, we pass it through the NoteSync object
 //! which handles saving to the local disk.
 
+use ::jedi::Value;
+
+use ::error::TResult;
+
+pub mod user;
+pub mod keychain;
+pub mod persona;
+pub mod board;
+pub mod note;
+pub mod file;
+pub mod invite;
+
 pub trait SyncModel {
-    fn incoming(&self) {
+    /// Get the table we operate on when saving data
+    fn get_table(&self) -> &'static str;
+
+    /// Run an incoming sync item
+    fn incoming(&self, data: &Value) -> TResult<()> {
+        Ok(())
     }
 
-    fn outgoing(&self) {
+    /// Run an outgoing sync item
+    fn outgoing(&self, data: &Value) -> TResult<()> {
+        Ok(())
     }
 }
 

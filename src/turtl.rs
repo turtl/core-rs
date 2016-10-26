@@ -225,7 +225,6 @@ impl Turtl {
 
         let shutdown_clone1 = Arc::new(sync_shutdown);
         let shutdown_clone2 = shutdown_clone1.clone();
-        let user_guard = self.user.read().unwrap();
         self.with_next(|turtl| {
             let user_guard = turtl.user.read().unwrap();
             user_guard.bind_once("logout", move |_| {

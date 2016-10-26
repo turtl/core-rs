@@ -110,11 +110,13 @@ impl Api {
     }
 
     /// Convenience function for api.call(PUT)
+    #[allow(dead_code)]
     pub fn put(&self, resource: &str, data: Value) -> TResult<Value> {
         self.call(Method::Put, resource, data)
     }
 
     /// Convenience function for api.call(DELETE)
+    #[allow(dead_code)]
     pub fn delete(&self, resource: &str, data: Value) -> TResult<Value> {
         self.call(Method::Delete, resource, data)
     }

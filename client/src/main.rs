@@ -96,7 +96,10 @@ mod tests {
         sleep(10);
 
         let msg = event();
-        assert_eq!(msg, r#"{"e":"sync:incoming:init","d":{}}"#);
+        assert_eq!(msg, r#"{"e":"sync:incoming:init:start","d":{}}"#);
+
+        let msg = event();
+        assert_eq!(msg, r#"{"e":"sync:incoming:init:done","d":{}}"#);
 
         let msg = String::from(r#"["3","user:logout"]"#);
         send(msg.as_str());

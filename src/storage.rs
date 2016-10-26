@@ -115,13 +115,6 @@ impl Storage {
         })
     }
 
-    /// Run a query
-    pub fn run<F, T>(&self, run: F) -> TResult<T>
-        where F: FnOnce(&Connection) -> TResult<T> + Sync + Send + 'static
-    {
-        run(&self.conn)
-    }
-
     /// Save a model to our db. Make sure it's serialized before handing it in.
     pub fn save<T>(&self, model: &T) -> TResult<()>
         where T: Protected
@@ -214,10 +207,7 @@ mod tests {
     #[test]
     fn runs_queries() {
         let storage = pretest();
-        storage.run(|conn| {
-            conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name VARCHAR(16))", &[]).unwrap();
-            Ok(())
-        }).unwrap();
+        storage.conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name VARCHAR(16))", &[]).unwrap();
         storage.conn.execute("INSERT INTO test (name) VALUES ($1)", &[&String::from("bartholomew")]).unwrap();
         let then = "SELECT * FROM test LIMIT 1";
         let res = storage.conn.query_row_and_then(then, &[], |row| -> TResult<String> {
