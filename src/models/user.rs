@@ -17,10 +17,11 @@ protected!{
         (
             auth: Option<String>,
             logged_in: bool
-            //changing_password: bool
         )
     }
 }
+
+make_basic_sync_model!(User);
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Vec<u8>> {

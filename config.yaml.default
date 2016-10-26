@@ -31,6 +31,8 @@ schema:
           - synced
       - fields:
           - has_data
+  sync_outgoing:
+    indexes: []
 
 # configuration for test client
 client:

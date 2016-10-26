@@ -31,12 +31,12 @@ mod util;
 mod messaging;
 mod api;
 mod crypto;
+#[macro_use] mod sync;
 #[macro_use]
 mod models;
 mod storage;
 mod dispatch;
 mod turtl;
-mod sync;
 
 use ::std::thread;
 use ::std::sync::Arc;

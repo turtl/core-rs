@@ -1,15 +1,27 @@
-use ::std::collections::HashMap;
 use ::std::sync::{Arc, RwLock};
 
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
-use ::sync::{self, SyncConfig, Syncer};
-use ::sync::models::SyncModel;
+use ::sync::{SyncConfig, Syncer};
+use ::sync::sync_model::SyncModel;
 use ::util::thredder::Pipeline;
 use ::storage::Storage;
 use ::api::Api;
 use ::messaging::Messenger;
+use ::turtl::TurtlWrap;
+use ::util::event::Emitter;
+use ::models;
+
+struct Handlers {
+    user: models::user::User,
+    //keychain: sync::models::keychain::Keychain,
+    //persona: sync::models::persona::Persona,
+    //board: sync::models::board::Board,
+    //note: sync::models::note::Note,
+    //file: sync::models::file::File,
+    //invite: sync::models::invite::Invite,
+}
 
 /// Holds the state for data going from API -> turtl (incoming sync data),
 /// including tracking which sync item's we've seen and which we haven't.
@@ -34,20 +46,21 @@ pub struct SyncIncoming {
     /// For each type we get back from an outgoing poll, defines a collection
     /// that is able to handle that incoming item (for instance a "note" coming
     /// from the API might get handled by the NoteCollection).
-    handlers: HashMap<String, Box<SyncModel>>,
+    handlers: Handlers,
 }
 
 impl SyncIncoming {
     /// Create a new incoming syncer
     pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
-        let mut handlers: HashMap<String, Box<SyncModel>> = HashMap::new();
-        handlers.insert(String::from("user"), Box::new(sync::models::user::User::new()));
-        handlers.insert(String::from("keychain"), Box::new(sync::models::keychain::Keychain::new()));
-        handlers.insert(String::from("persona"), Box::new(sync::models::persona::Persona::new()));
-        handlers.insert(String::from("board"), Box::new(sync::models::board::Board::new()));
-        handlers.insert(String::from("note"), Box::new(sync::models::note::Note::new()));
-        handlers.insert(String::from("file"), Box::new(sync::models::file::File::new()));
-        handlers.insert(String::from("invite"), Box::new(sync::models::invite::Invite::new()));
+        let handlers = Handlers {
+            user: models::user::User::new(),
+            //keychain: sync::models::keychain::Keychain::new(),
+            //persona: sync::models::persona::Persona::new(),
+            //board: sync::models::board::Board::new(),
+            //note: sync::models::note::Note::new(),
+            //file: sync::models::file::File::new(),
+            //invite: sync::models::invite::Invite::new(),
+        };
 
         SyncIncoming {
             name: "incoming",
@@ -86,7 +99,7 @@ impl SyncIncoming {
 
         // start a transaction. we don't want to save half-data.
         try!(self.db.conn.execute("BEGIN TRANSACTION", &[]));
-        for rec in &records {
+        for rec in records {
             try!(self.run_sync_item(rec))
         }
         // make sure we save our sync_id as the LAST STEP of our transaction.
@@ -99,13 +112,19 @@ impl SyncIncoming {
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, data: &Value) -> TResult<()> {
-        let sync_type = try!(jedi::get::<String>(&["type"], data));
-        let handler = match self.handlers.get(&sync_type) {
-            Some(x) => x,
-            None => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_type))),
+    fn run_sync_item(&self, data: Value) -> TResult<()> {
+        let sync_type = try!(jedi::get::<String>(&["type"], &data));
+        let res = match sync_type.as_ref() {
+            "user" => self.handlers.user.incoming(&self.db, data),
+            //"keychain" => self.handlers.keychain.incoming(&self.db, data),
+            //"persona" => self.handlers.persona.incoming(&self.db, data),
+            //"board" => self.handlers.board.incoming(&self.db, data),
+            //"note" => self.handlers.note.incoming(&self.db, data),
+            //"file" => self.handlers.file.incoming(&self.db, data),
+            //"invite" => self.handlers.invite.incoming(&self.db, data),
+            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_type))),
         };
-        handler.incoming(data)
+        res
     }
 }
 
@@ -128,12 +147,22 @@ impl Syncer for SyncIncoming {
             None => self.load_full_profile(),
         };
         try!(Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj()));
+        self.tx_main.push(Box::new(|turtl: TurtlWrap| {
+            turtl.events.trigger("app:connected", &jedi::obj());
+        }));
         res
     }
 
     fn run_sync(&self) -> TResult<()> {
-        println!("incoming sync!");
-        Ok(())
+        let sync_id = try!(self.db.kv_get("sync_id"));
+        let res = match sync_id {
+            Some(ref x) => self.sync_from_api(x, true),
+            None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),
+        };
+        self.tx_main.push(Box::new(|turtl: TurtlWrap| {
+            turtl.events.trigger("app:connected", &jedi::obj());
+        }));
+        res
     }
 }
 

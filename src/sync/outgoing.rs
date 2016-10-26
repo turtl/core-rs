@@ -56,6 +56,7 @@ impl Syncer for SyncOutgoing {
     }
 
     fn run_sync(&self) -> TResult<()> {
+        let records = self.db.all("sync_outgoing");
         println!("outoging sync!");
         Ok(())
     }

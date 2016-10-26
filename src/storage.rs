@@ -158,6 +158,12 @@ impl Storage {
             .map_err(|e| From::from(e))
     }
 
+    /// Grab all values from a "table"
+    pub fn all(&self, table: &str) -> TResult<Vec<Value>> {
+        self.dumpy.all(&self.conn, &String::from(table))
+            .map_err(|e| From::from(e))
+    }
+
     /// Grab a value from our dumpy k/v store
     pub fn kv_get(&self, key: &str) -> TResult<Option<String>> {
         self.dumpy.kv_get(&self.conn, key)
@@ -238,6 +244,8 @@ mod tests {
         assert_eq!(shiba2.get::<String>("color").unwrap(), "sesame");
         assert_eq!(shiba2.get::<String>("name").unwrap(), "Kofi");
         assert_eq!(shiba2.get::<Vec<String>>("tags").unwrap(), &vec![String::from("serious")]);
+
+        assert_eq!(storage.all("shiba").unwrap().len(), 1);
     }
 
     #[test]

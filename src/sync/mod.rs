@@ -10,13 +10,13 @@
 //!
 //! Keep in mind that ALL data that goes through the sync system needs to be
 //! either a) public or b) encrypted. The sync system shall not ever touch
-//! plaintext private data. Keeping this in mind, the actual API object should
-//! be a separate instance from the one used in the Turtl object, and the Sync
-//! object should always be in a separate thread from the main Turtl object.
+//! plaintext private data. Keeping this in mind, the Sync object should always
+//! be in a separate thread from the main Turtl object.
 
 mod incoming;
 mod outgoing;
-mod models;
+#[macro_use]
+pub mod sync_model;
 
 use ::std::thread;
 use ::std::sync::{Arc, RwLock};
