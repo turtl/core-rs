@@ -164,6 +164,18 @@ impl Storage {
         self.dumpy.delete(&self.conn, &table, &id)
             .map_err(|e| From::from(e))
     }
+
+    /// Grab a value from our dumpy k/v store
+    pub fn kv_get(&self, key: &str) -> TResult<Option<String>> {
+        self.dumpy.kv_get(&self.conn, key)
+            .map_err(|e| From::from(e))
+    }
+
+    /// Set a value into our dumpy k/v store
+    pub fn kv_set(&self, key: &str, val: &String) -> TResult<()> {
+        self.dumpy.kv_set(&self.conn, key, val)
+            .map_err(|e| From::from(e))
+    }
 }
 
 // NOTE: since we open our db connection in full-mutex mode, we can safely pass
@@ -255,4 +267,14 @@ mod tests {
         let sheeb: Option<Shiba> = storage.get("shiba", id).unwrap();
         assert!(sheeb.is_none());
     }
+
+    #[test]
+    fn kv_stuff() {
+        // ^kv stuff? were the midterms hard?
+        let storage = pretest();
+        assert_eq!(storage.kv_get("get a job").unwrap(), None);
+        storage.kv_set("get a job", &String::from("no way")).unwrap();
+        assert_eq!(storage.kv_get("get a job").unwrap().unwrap(), "no way");
+    }
 }
+
