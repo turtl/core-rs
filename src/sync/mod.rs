@@ -135,6 +135,12 @@ pub trait Syncer {
 
 /// Start our syncing system!
 pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+    // enable syncing (set phasers to stun)
+    {
+        let mut config_guard = config.write().unwrap();
+        (*config_guard).enabled = true;
+    }
+
     // start our outging sync process
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();

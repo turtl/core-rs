@@ -1,5 +1,7 @@
 use ::std::sync::{Arc, RwLock};
 
+use ::jedi::{self, Value};
+
 use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
 use ::util::thredder::Pipeline;

@@ -15,8 +15,8 @@ protected!{
         ( storage: i64 ),
         ( settings: String ),
         (
-            auth: Option<String>
-            //logged_in: bool,
+            auth: Option<String>,
+            logged_in: bool
             //changing_password: bool
         )
     }
@@ -116,7 +116,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
         .and_then(move |key_auth: (Vec<u8>, String)| -> TFutureResult<()> {
             let (key, auth) = key_auth;
             let mut data = HashMap::new();
-            data.insert("auth", String::from(&auth[..]));
+            data.insert("auth", auth.clone());
             {
                 let ref api = turtl1.api;
                 match api.set_auth(auth.clone()) {
@@ -128,13 +128,18 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             turtl1.with_api(|api| -> TResult<Value> {
                 api.post("/auth", jedi::obj())
             }).and_then(move |_| {
-                let mut user_guard = turtl4.user.write().unwrap();
-                user_guard.do_login(key, auth);
+                let mut user_guard_w = turtl4.user.write().unwrap();
+                user_guard_w.do_login(key, auth);
+                drop(user_guard_w);
+                let user_guard_r = turtl4.user.read().unwrap();
+                user_guard_r.trigger("login", &jedi::obj());
+                drop(user_guard_r);
+                debug!("user::try_auth() -- auth success, logged in");
                 futures::finished(()).boxed()
             }).boxed()
         })
         .or_else(move |err| {
-            // return with the error value if we hav eanything other than
+            // return with the error value if we have anything other than
             // api::Status::Unauthorized
             debug!("user::try_auth() -- api error: {}", err);
             let mut test_err = match err {
@@ -172,11 +177,28 @@ impl User {
         try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 1)
     }
 
+    /// Static method to log a user out
+    pub fn logout(turtl: TurtlWrap) -> TResult<()> {
+        let mut user_guard = turtl.user.write().unwrap();
+        user_guard.do_logout();
+        drop(user_guard);
+        let user_guard = turtl.user.read().unwrap();
+        user_guard.trigger("logout", &jedi::obj());
+        Ok(())
+    }
+
     /// We have a successful key/auth pair. Log the user in.
     pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
         self.key = Some(key);
         self.auth = Some(auth);
-        self.trigger("login", &jedi::obj());
+        self.logged_in = true;
+    }
+
+    /// Logout the user
+    pub fn do_logout(&mut self) {
+        self.key = None;
+        self.auth = None;
+        self.logged_in = false;
     }
 }
 

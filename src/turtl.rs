@@ -146,6 +146,7 @@ impl Turtl {
                 };
                 let mut db_guard = turtl2.db.write().unwrap();
                 *db_guard = Some(Arc::new(db));
+                drop(db_guard);
 
                 match turtl2.start_sync() {
                     Ok(_) => (),
@@ -225,13 +226,28 @@ impl Turtl {
         let shutdown_clone1 = Arc::new(sync_shutdown);
         let shutdown_clone2 = shutdown_clone1.clone();
         let user_guard = self.user.read().unwrap();
-        user_guard.bind_once("logout", move |_| {
-            shutdown_clone1();
-        }, "turtl:user:logout:sync");
-        self.events.bind_once("app:shutdown", move |_| {
-            shutdown_clone2();
-        }, "turtl:app:shutdown:sync");
+        self.with_next(|turtl| {
+            let user_guard = turtl.user.read().unwrap();
+            user_guard.bind_once("logout", move |_| {
+                shutdown_clone1();
+            }, "turtl:user:logout:sync");
+            turtl.events.bind_once("app:shutdown", move |_| {
+                shutdown_clone2();
+            }, "turtl:app:shutdown:sync");
+        });
         Ok(())
+    }
+
+    /// Run the given callback on the next main loop. Essentially gives us a
+    /// setTimeout (if you are familiar). This means we can do something after
+    /// the stack is unwound, but get a fresh Turtl context for our callback.
+    ///
+    /// Very useful for (un)binding events and such while inside of another
+    /// triggered event (which normally deadlocks).
+    pub fn with_next<F>(&self, cb: F)
+        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
+    {
+        self.tx_main.push(Box::new(cb));
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

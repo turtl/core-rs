@@ -34,6 +34,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         Err(_) => return Err(TError::MissingField(String::from("missing cmd (1)"))),
     };
 
+    info!("dispatch({}): {}", mid, cmd);
     match cmd.as_ref() {
         "user:login" => {
             let username = try!(jedi::get(&["2", "username"], &data));
@@ -44,6 +45,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             let mid2 = mid.clone();
             User::login(turtl.clone(), &username, &password)
                 .map(move |_| {
+                    debug!("dispatch({}) -- user:login success", mid);
                     match turtl1.msg_success(&mid, jedi::obj()) {
                         Err(e) => error!("dispatch -- problem sending login message: {}", e),
                         _ => ()
@@ -57,6 +59,12 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     }
                 })
                 .forget();
+            Ok(())
+        },
+        "user:logout" => {
+            try!(User::logout(turtl.clone()));
+            util::sleep(1000);
+            try!(turtl.msg_success(&mid, jedi::obj()));
             Ok(())
         },
         "app:api:set_endpoint" => {

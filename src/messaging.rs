@@ -8,7 +8,7 @@ use ::std::thread::{self, JoinHandle};
 
 use ::serde::ser::{Serialize, Serializer};
 use ::carrier;
-use ::jedi::Value;
+use ::jedi::{self, Value};
 
 use ::config;
 use ::error::{TResult, TError};
@@ -32,8 +32,29 @@ pub struct Response {
     pub d: Value,
 }
 
+/// Defines a container for sending events to the client. See the `Response`
+/// object for notes.
+struct Event {
+    /// Our event's name
+    pub e: String,
+    /// Our event's data
+    pub d: Value,
+}
+
 // Make `Response` Serde serializable
 impl Serialize for Response {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+        where S: Serializer
+    {
+        let mut state = try!(serializer.serialize_struct("res", 2));
+        try!(serializer.serialize_struct_elt(&mut state, "e", &self.e));
+        try!(serializer.serialize_struct_elt(&mut state, "d", &self.d));
+        serializer.serialize_struct_end(state)
+    }
+}
+
+// Make `Event` Serde serializable
+impl Serialize for Event {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
@@ -68,7 +89,7 @@ impl Messenger {
     /// Create a new messenger
     pub fn new() -> Messenger {
         // grab our messaging channel name from config
-        let channel: String = match config::get(&["messaging", "address"]) {
+        let channel: String = match config::get(&["messaging", "reqres"]) {
             Ok(x) => x,
             Err(e) => {
                 error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
@@ -86,6 +107,18 @@ impl Messenger {
         messenger.channel_in = messenger.channel_out;
         messenger.channel_out = channtmp;
         messenger
+    }
+
+    /// Send an event out to our UI thread. Note that this is a static method!
+    pub fn event(name: &str, data: Value) -> TResult<()> {
+        let channel: String = try!(config::get(&["messaging", "events"]));
+        let event = Event {
+            e: String::from(name),
+            d: data,
+        };
+        let msg = try!(jedi::stringify(&event));
+        carrier::send_string(channel.as_str(), msg)
+            .map_err(|e| From::from(e))
     }
 
     /// Blocking receive
@@ -111,13 +144,13 @@ impl Messenger {
     /// Send a message out
     pub fn send(&self, msg: String) -> TResult<()> {
         debug!("messaging: send: {}", msg.len());
-        carrier::send_string(&self.channel_out[..], msg)
+        carrier::send_string(self.channel_out.as_str(), msg)
             .map_err(|e| From::from(e))
     }
 
     /// Send a message on the out channel, but suffix the channel
     pub fn send_suffix(&self, suffix: String, msg: String) -> TResult<()> {
-        debug!("messaging: send_suffix: {}", msg.len());
+        debug!("messaging: send: {}", msg.len());
         carrier::send_string(format!("{}:{}", &self.channel_out, suffix).as_str(), msg)
             .map_err(|e| From::from(e))
     }

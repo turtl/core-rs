@@ -109,10 +109,10 @@ pub trait Emitter {
     /// `data` passed as the only argument.
     fn trigger(&self, event_name: &str, data: &Value) -> () {
         let bindings = self.bindings();
-        let mut guard = bindings.write().unwrap();
-        match guard.get_mut(event_name) {
+        let guard = bindings.read().unwrap();
+        let mut removes: Vec<usize> = Vec::new();
+        match guard.get(event_name) {
             Some(x) => {
-                let mut removes: Vec<usize> = Vec::new();
                 for idx in 0..(x.len()) {
                     let callback = &x[idx];
                     let cb = &callback.cb;
@@ -125,6 +125,13 @@ pub trait Emitter {
                         _ => (),
                     }
                 }
+            }
+            None => (),
+        }
+        drop(guard);
+        let mut guard = bindings.write().unwrap();
+        match guard.get_mut(event_name) {
+            Some(x) => {
                 // we want 3,2,1 instead of 1,2,3 so our indexing is preserved
                 // as we iterate over elements
                 removes.reverse();

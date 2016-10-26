@@ -25,13 +25,18 @@ pub fn init() -> thread::JoinHandle<()> {
 }
 
 pub fn send(msg: &str) {
-    let channel: String = config::get(&["messaging", "address"]).unwrap();
+    let channel: String = config::get(&["messaging", "reqres"]).unwrap();
     carrier::send_string(&format!("{}-core-in", channel), String::from(&msg[..])).unwrap();
 }
 
 pub fn recv(mid: &str) -> String {
-    let channel: String = config::get(&["messaging", "address"]).unwrap();
+    let channel: String = config::get(&["messaging", "reqres"]).unwrap();
     String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid)).unwrap()).unwrap()
+}
+
+pub fn event() -> String {
+    let channel: String = config::get(&["messaging", "events"]).unwrap();
+    String::from_utf8(carrier::recv(channel.as_str()).unwrap()).unwrap()
 }
 
 fn main() {
@@ -55,7 +60,7 @@ mod tests {
     use super::*;
 
     fn end(handle: thread::JoinHandle<()>) {
-        send(r#"["69","app:shutdown"]"#);
+        send(r#"["4269","app:shutdown"]"#);
         handle.join().unwrap();
         carrier::wipe();
     }
@@ -79,15 +84,26 @@ mod tests {
     }
 
     #[test]
-    fn login() {
+    fn login_logout() {
         let handle = init();
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
+
         let msg = format!(r#"["2","user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
         send(msg.as_str());
         let msg = recv("2");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
+
+        let msg = event();
+        assert_eq!(msg, r#"{"e":"sync:incoming:init","d":{}}"#);
+
+        let msg = String::from(r#"["3","user:logout"]"#);
+        send(msg.as_str());
+        let msg = recv("3");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
         send(r#"["3","app:shutdown"]"#);
         end(handle);
     }

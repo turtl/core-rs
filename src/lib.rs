@@ -106,6 +106,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // load our ocnfiguration
             try!(process_runtime_config(config_str));
 
+            // std::fs, for me please, we're lookin at china. we're lookin at
+            // the UN. go ahead and create our data directory.
             let data_folder = try!(config::get::<String>(&["data_folder"]));
             match fs::create_dir(&data_folder) {
                 Ok(()) => {
@@ -123,6 +125,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 }
             }
 
+            // create our main "Pipeline" ...this is what all our threads use to
+            // send massages to the main thread.
             let tx_main = Arc::new(MsQueue::new());
 
             // start our messaging thread
@@ -149,9 +153,11 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 handler.call_box(turtl.clone());
             }
             info!("main::start() -- shutting down");
-            msg_shutdown();
 
+            // shut down the messaging system
+            msg_shutdown();
             try!(handle_msg.join());
+
             Ok(())
         };
         match runner() {
