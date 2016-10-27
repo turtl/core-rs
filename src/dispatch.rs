@@ -71,26 +71,26 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         },
         "app:start-sync" => {
             try!(turtl.start_sync());
-            let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
-            let mid2 = mid.clone();
-            turtl.events.bind_once("sync:init:success", move |_| {
-                try_or!(turtl1.msg_success(&mid, jedi::obj()), e,
-                    error!("dispatch -- app:start-sync: error sending success: {}", e));
-            }, "dispatch:sync:init:success");
-            turtl.events.bind_once("sync:init:error", move |err| {
+            turtl.events.bind_once("sync:init", move |err| {
+                // using our crude eventing system, a bool signals a success, a
+                // string is an error (containing the error message)
                 match *err {
+                    Value::Bool(_) => {
+                        try_or!(turtl2.msg_success(&mid, jedi::obj()), e,
+                            error!("dispatch -- app:start-sync: error sending success: {}", e));
+                    },
                     Value::String(ref x) => {
-                        try_or!(turtl2.msg_error(&mid2, &TError::Msg(x.clone())), e,
+                        try_or!(turtl2.msg_error(&mid, &TError::Msg(x.clone())), e,
                             error!("dispatch -- app:start-sync: error sending error: {}", e));
-                    }
+                    },
                     _ => {
                         error!("dispatch -- unknown sync error: {:?}", err);
-                        try_or!(turtl2.msg_error(&mid2, &TError::Msg(String::from("unknown error initializing syncing"))), e,
+                        try_or!(turtl2.msg_error(&mid, &TError::Msg(String::from("unknown error initializing syncing"))), e,
                             error!("dispatch -- app:start-sync: error sending error: {}", e));
-                    }
+                    },
                 }
-            }, "dispatch:sync:init:success");
+            }, "dispatch:sync:init");
             Ok(())
         },
         "app:pause-sync" => {
