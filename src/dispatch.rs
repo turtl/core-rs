@@ -71,7 +71,27 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         },
         "app:start-sync" => {
             try!(turtl.start_sync());
-            turtl.msg_success(&mid, jedi::obj())
+            let turtl1 = turtl.clone();
+            let turtl2 = turtl.clone();
+            let mid2 = mid.clone();
+            turtl.events.bind_once("sync:init:success", move |_| {
+                try_or!(turtl1.msg_success(&mid, jedi::obj()), e,
+                    error!("dispatch -- app:start-sync: error sending success: {}", e));
+            }, "dispatch:sync:init:success");
+            turtl.events.bind_once("sync:init:error", move |err| {
+                match *err {
+                    Value::String(ref x) => {
+                        try_or!(turtl2.msg_error(&mid2, &TError::Msg(x.clone())), e,
+                            error!("dispatch -- app:start-sync: error sending error: {}", e));
+                    }
+                    _ => {
+                        error!("dispatch -- unknown sync error: {:?}", err);
+                        try_or!(turtl2.msg_error(&mid2, &TError::Msg(String::from("unknown error initializing syncing"))), e,
+                            error!("dispatch -- app:start-sync: error sending error: {}", e));
+                    }
+                }
+            }, "dispatch:sync:init:success");
+            Ok(())
         },
         "app:pause-sync" => {
             turtl.events.trigger("sync:pause", &jedi::obj());

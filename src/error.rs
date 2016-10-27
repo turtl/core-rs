@@ -111,3 +111,16 @@ from_err!(::dumpy::DError);
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
 
+/// A helper to make reporting errors easier
+#[macro_export]
+macro_rules! try_or {
+    ($ex:expr, $sym:ident, $err:expr) => {
+        match $ex {
+            Ok(_) => (),
+            Err($sym) => {
+                $err;
+            },
+        }
+    }
+}
+

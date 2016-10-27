@@ -242,8 +242,9 @@ impl Turtl {
             let sync_state2 = turtl.sync_state.clone();
             let sync_state3 = turtl.sync_state.clone();
             turtl.events.bind_once("sync:shutdown", move |_| {
-                let guard = sync_state1.read().unwrap();
+                let mut guard = sync_state1.write().unwrap();
                 if guard.is_some() { (guard.as_ref().unwrap().shutdown)(); }
+                *guard = None;
             }, "turtl:sync:shutdown");
             turtl.events.bind("sync:pause", move |_| {
                 let guard = sync_state2.read().unwrap();
