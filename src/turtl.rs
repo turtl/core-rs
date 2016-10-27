@@ -227,11 +227,15 @@ impl Turtl {
             let turtl2 = turtl.clone();
             let user_guard = turtl.user.read().unwrap();
             user_guard.bind_once("logout", move |_| {
-                turtl1.events.trigger("sync:shutdown", &jedi::obj());
+                turtl1.with_next(|turtl| {
+                    turtl.events.trigger("sync:shutdown", &jedi::obj());
+                });
             }, "turtl:user:logout:sync");
             drop(user_guard);
             turtl.events.bind_once("app:shutdown", move |_| {
-                turtl2.events.trigger("sync:shutdown", &jedi::obj());
+                turtl2.with_next(|turtl| {
+                    turtl.events.trigger("sync:shutdown", &jedi::obj());
+                });
             }, "turtl:app:shutdown:sync");
 
             let sync_state1 = turtl.sync_state.clone();
@@ -271,26 +275,6 @@ impl Turtl {
 
     /// Shut down this Turtl instance and all the state/threads it manages
     pub fn shutdown(&mut self) {
-        self.events.trigger("sync:shutdown", &jedi::obj());
-        // TODO: figure out a way to get to these pesky sync JoinHandles
-        /*
-        let mut guard = self.sync_state.write().unwrap();
-        match guard.as_mut() {
-            Some(x) => {
-                for handle in x.join_handles {
-                    match handle.join() {
-                        Ok(_) => (),
-                        Err(e) => {
-                            let err: TError = From::from(e);
-                            error!("turtl.shutdown() -- problem joining on sync thread: {}", err);
-                        }
-                    }
-                }
-            },
-            None => (),
-        }
-        *guard = None;
-        */
     }
 }
 

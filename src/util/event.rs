@@ -109,9 +109,9 @@ pub trait Emitter {
     /// `data` passed as the only argument.
     fn trigger(&self, event_name: &str, data: &Value) -> () {
         let bindings = self.bindings();
-        let guard = bindings.read().unwrap();
+        let rguard = bindings.read().unwrap();
         let mut removes: Vec<usize> = Vec::new();
-        match guard.get(event_name) {
+        match rguard.get(event_name) {
             Some(x) => {
                 for idx in 0..(x.len()) {
                     let callback = &x[idx];
@@ -128,18 +128,28 @@ pub trait Emitter {
             }
             None => (),
         }
-        drop(guard);
-        let mut guard = bindings.write().unwrap();
-        match guard.get_mut(event_name) {
-            Some(x) => {
-                // we want 3,2,1 instead of 1,2,3 so our indexing is preserved
-                // as we iterate over elements
-                removes.reverse();
-                for idx in removes {
-                    x.remove(idx);
+        drop(rguard);
+        if removes.len() > 0 {
+            // instead of deadlocking, print an error and return. in this case,
+            // our bind_once may be many more times since we can't remove it.
+            let mut guard = match bindings.try_write() {
+                Ok(x) => x,
+                Err(_) => {
+                    error!("Emitter.trigger() -- {} unable to obtain write lock on bindings: your trigger() may be trying to remove a bind_once() inside of another binding.", event_name);
+                    return;
+                },
+            };
+            match guard.get_mut(event_name) {
+                Some(x) => {
+                    // we want 3,2,1 instead of 1,2,3 so our indexing is preserved
+                    // as we iterate over elements
+                    removes.reverse();
+                    for idx in removes {
+                        x.remove(idx);
+                    }
                 }
+                None => (),
             }
-            None => (),
         }
     }
 }
