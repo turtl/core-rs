@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn login_logout() {
+    fn login_sync_logout() {
         let handle = init();
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
@@ -92,6 +92,18 @@ mod tests {
         let msg = format!(r#"["2","user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
         send(msg.as_str());
         let msg = recv("2");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = String::from(r#"["4","app:start-sync"]"#);
+        send(msg.as_str());
+        let msg = recv("4");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = String::from(r#"["4","app:shutdown-sync"]"#);
+        send(msg.as_str());
+        let msg = recv("4");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
