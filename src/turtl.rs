@@ -271,7 +271,7 @@ impl Turtl {
     pub fn with_next<F>(&self, cb: F)
         where F: FnOnce(TurtlWrap) + Send + Sync + 'static
     {
-        self.tx_main.push(Box::new(cb));
+        self.tx_main.next(cb);
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

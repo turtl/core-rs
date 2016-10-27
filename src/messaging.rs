@@ -14,7 +14,6 @@ use ::config;
 use ::error::{TResult, TError};
 use ::util::thredder::Pipeline;
 use ::dispatch;
-use ::turtl::TurtlWrap;
 
 /// Defines a container for sending responses to the client. We could use a hash
 /// table, but then the elements might serialize out of order. This allows us to
@@ -204,13 +203,13 @@ pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + 
                         continue;
                     }
                     debug!("messaging: recv: {}", x.len());
-                    tx_main.push(Box::new(move |turtl: TurtlWrap| {
+                    tx_main.next(move |turtl| {
                         let msg = x;
                         match dispatch::process(turtl, &msg) {
                             Ok(..) => (),
                             Err(e) => error!("messaging: dispatch: {}", format!("{}", e)),
                         }
-                    }));
+                    });
                 },
                 Err(e) => {
                     error!("messaging: problem polling remote socket: {:?}", e);

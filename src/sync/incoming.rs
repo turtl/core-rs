@@ -9,7 +9,6 @@ use ::util::thredder::Pipeline;
 use ::storage::Storage;
 use ::api::Api;
 use ::messaging::Messenger;
-use ::turtl::TurtlWrap;
 use ::util::event::Emitter;
 use ::models;
 
@@ -147,9 +146,9 @@ impl Syncer for SyncIncoming {
             None => self.load_full_profile(),
         };
         try!(Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj()));
-        self.tx_main.push(Box::new(|turtl: TurtlWrap| {
+        self.tx_main.next(|turtl| {
             turtl.events.trigger("app:connected", &jedi::obj());
-        }));
+        });
         res
     }
 
@@ -159,9 +158,9 @@ impl Syncer for SyncIncoming {
             Some(ref x) => self.sync_from_api(x, true),
             None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),
         };
-        self.tx_main.push(Box::new(|turtl: TurtlWrap| {
+        self.tx_main.next(|turtl| {
             turtl.events.trigger("app:connected", &jedi::obj());
-        }));
+        });
         res
     }
 }

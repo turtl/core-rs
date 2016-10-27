@@ -39,14 +39,12 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
-use ::std::sync::Arc;
 use ::std::fs;
 use ::std::io::ErrorKind;
 use ::std::os::raw::c_char;
 use ::std::ffi::CStr;
 use ::std::panic;
 
-use ::crossbeam::sync::MsQueue;
 use ::jedi::Value;
 
 use ::error::{TError, TResult};
@@ -69,7 +67,7 @@ lazy_static!{
 /// Stop all threads and close down Turtl
 fn stop(tx: Pipeline) {
     (*RUN).set(false);
-    tx.push(Box::new(move |_| {}));
+    tx.next(|_| {});
 }
 
 /// This takes a JSON-encoded object, and parses out the values we care about,
@@ -127,7 +125,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
             // create our main "Pipeline" ...this is what all our threads use to
             // send massages to the main thread.
-            let tx_main = Arc::new(MsQueue::new());
+            let tx_main = Pipeline::new();
 
             // start our messaging thread
             let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone());

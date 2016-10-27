@@ -4,6 +4,7 @@
 
 use ::std::marker::Send;
 use ::std::sync::Arc;
+use ::std::ops::Deref;
 
 use ::crossbeam::sync::MsQueue;
 use ::futures::{self, Future, Canceled};
@@ -12,10 +13,46 @@ use ::futures_cpupool::CpuPool;
 use ::error::{TResult, TFutureResult, TError};
 use ::util::thunk::Thunk;
 use ::util::opdata::{OpData, OpConverter};
-use ::turtl::{TurtlWrap};
+use ::turtl::TurtlWrap;
 
 /// Abstract our tx_main type
-pub type Pipeline = Arc<MsQueue<Box<Thunk<TurtlWrap>>>>;
+pub struct Pipeline {
+    tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>,
+}
+impl Pipeline {
+    /// Create a new Pipeline
+    pub fn new() -> Pipeline {
+        Pipeline {
+            tx: Arc::new(MsQueue::new()),
+        }
+    }
+
+    /// Create a new pipeline from a tx object
+    pub fn new_tx(tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>) -> Pipeline {
+        Pipeline {
+            tx: tx,
+        }
+    }
+
+    /// Run the given function on the next main loop
+    pub fn next<F>(&self, cb: F)
+        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
+    {
+        self.tx.push(Box::new(cb));
+    }
+}
+impl Deref for Pipeline {
+    type Target = Arc<MsQueue<Box<Thunk<TurtlWrap>>>>;
+
+    fn deref(&self) -> &Arc<MsQueue<Box<Thunk<TurtlWrap>>>> {
+        &self.tx
+    }
+}
+impl Clone for Pipeline {
+    fn clone(&self) -> Self {
+        Pipeline::new_tx(self.tx.clone())
+    }
+}
 
 /// Stores state information for a thread we've spawned
 pub struct Thredder {
@@ -47,7 +84,7 @@ impl Thredder {
         let thread_name = String::from(&self.name[..]);
         self.pool.execute(|| run().map(|x| x.to_opdata()))
             .and_then(move |res: TResult<OpData>| {
-                Ok(tx_main.push(Box::new(move |_: TurtlWrap| { fut_tx.complete(res) })))
+                Ok(tx_main.next(move |_| { fut_tx.complete(res) }))
             }).forget();
         fut_rx
             .then(move |res: Result<TResult<OpData>, Canceled>| {
