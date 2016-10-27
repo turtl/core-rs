@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn set_api_endpoint() {
         let handle = init();
-        send(r#"["1","app:api:set_endpoint","https://api.turtl.it/v2"]"#);
+        send(r#"["1","app:api:set-endpoint","https://api.turtl.it/v2"]"#);
         let msg = recv("1");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         end(handle);
@@ -94,12 +94,6 @@ mod tests {
         let msg = recv("2");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
-
-        let msg = event();
-        assert_eq!(msg, r#"{"e":"sync:incoming:init:start","d":{}}"#);
-
-        let msg = event();
-        assert_eq!(msg, r#"{"e":"sync:incoming:init:done","d":{}}"#);
 
         let msg = String::from(r#"["3","user:logout"]"#);
         send(msg.as_str());

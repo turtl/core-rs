@@ -61,6 +61,13 @@ impl SyncConfig {
     }
 }
 
+pub struct SyncState {
+    pub join_handles: Vec<thread::JoinHandle<()>>,
+    pub shutdown: Box<Fn() + 'static + Sync + Send>,
+    pub pause: Box<Fn() + 'static + Sync + Send>,
+    pub resume: Box<Fn() + 'static + Sync + Send>,
+}
+
 /// Defines some common functions for our incoming/outgoing sync objects
 pub trait Syncer {
     /// Get this syncer's name
@@ -134,11 +141,12 @@ pub trait Syncer {
 }
 
 /// Start our syncing system!
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> (thread::JoinHandle<()>, thread::JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = config.write().unwrap();
         (*config_guard).enabled = true;
+        (*config_guard).quit = false;
     }
 
     // start our outging sync process
@@ -163,14 +171,29 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
         info!("sync::start() -- incoming shutting down");
     });
 
+    let config1 = config.clone();
     let shutdown = move || {
-        let mut guard = config.write().unwrap();
+        let mut guard = config1.write().unwrap();
         guard.enabled = false;
         guard.quit = true;
     };
+    let config2 = config.clone();
+    let pause = move || {
+        let mut guard = config2.write().unwrap();
+        guard.enabled = false;
+    };
+    let config3 = config.clone();
+    let resume = move || {
+        let mut guard = config3.write().unwrap();
+        guard.enabled = true;
+    };
 
-    // send back our handles
-    (handle_out, handle_in, Box::new(shutdown))
+    Ok(SyncState {
+        join_handles: vec![handle_out, handle_in],
+        shutdown: Box::new(shutdown),
+        pause: Box::new(pause),
+        resume: Box::new(resume),
+    })
 }
 
 #[cfg(test)]

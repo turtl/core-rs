@@ -17,7 +17,7 @@ use ::models::model::Model;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
-use ::sync::{self, SyncConfig};
+use ::sync::{self, SyncConfig, SyncState};
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
@@ -49,13 +49,15 @@ pub struct Turtl {
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
     pub db: RwLock<Option<Arc<Storage>>>,
-    /// Sync system configuration (shared state with the sync system).
-    pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (Personas (soon to be deprecated) and
     /// invites come to mind). Use sparingly.
     pub api: Arc<Api>,
+    /// Sync system configuration (shared state with the sync system).
+    pub sync_config: Arc<RwLock<SyncConfig>>,
+    /// Holds our sync state data
+    sync_state: Arc<RwLock<Option<SyncState>>>,
 }
 
 /// A handy type alias for passing Turtl around
@@ -85,6 +87,7 @@ impl Turtl {
             kv: kv,
             db: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
+            sync_state: Arc::new(RwLock::new(None)),
         };
         Ok(turtl)
     }
@@ -97,6 +100,8 @@ impl Turtl {
             let user_guard = turtl.user.read().unwrap();
 
             let turtl2 = turtl.clone();
+            // when the user logs in, we're going to create a user-specific db
+            // and save it back into turtl.
             user_guard.bind("login", move |_| {
                 let user_guard = turtl2.user.read().unwrap();
 
@@ -147,20 +152,11 @@ impl Turtl {
                 let mut db_guard = turtl2.db.write().unwrap();
                 *db_guard = Some(Arc::new(db));
                 drop(db_guard);
-
-                match turtl2.start_sync() {
-                    Ok(_) => (),
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: start_sync(): {}", e);
-                        return;
-                    }
-                }
             }, "turtl:user:login");
 
             let turtl3 = turtl.clone();
             user_guard.bind("logout", move |_| {
-                // NOTE: we *don't* need to stop the sync here because
-                // start_sync() binds `logout` and does it for us.
+                // wipe the user db
                 let mut db_guard = turtl3.db.write().unwrap();
                 *db_guard = None;
             }, "turtl:user:logout");
@@ -218,21 +214,41 @@ impl Turtl {
             None => return Err(TError::MissingData(String::from("turtl.start_sync() -- missing `db` object"))),
         };
 
-        // we ignore our handles. there's no easy way to join on them since they
-        // are single-use and Emitter.bind takes Fn (not FnOnce). no good way to
-        // fix this ATM, so we just don't join. oh well.
-        let (_, _, sync_shutdown) = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db.clone());
+        // start the sync, and save the resulting state into Turtl
+        let sync_state = try!(sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db.clone()));
+        {
+            let mut state_guard = self.sync_state.write().unwrap();
+            *state_guard = Some(sync_state);
+        }
 
-        let shutdown_clone1 = Arc::new(sync_shutdown);
-        let shutdown_clone2 = shutdown_clone1.clone();
+        // set up some bindings to manage the sync system easier
         self.with_next(|turtl| {
+            let turtl1 = turtl.clone();
+            let turtl2 = turtl.clone();
             let user_guard = turtl.user.read().unwrap();
             user_guard.bind_once("logout", move |_| {
-                shutdown_clone1();
+                turtl1.events.trigger("sync:shutdown", &jedi::obj());
             }, "turtl:user:logout:sync");
+            drop(user_guard);
             turtl.events.bind_once("app:shutdown", move |_| {
-                shutdown_clone2();
+                turtl2.events.trigger("sync:shutdown", &jedi::obj());
             }, "turtl:app:shutdown:sync");
+
+            let sync_state1 = turtl.sync_state.clone();
+            let sync_state2 = turtl.sync_state.clone();
+            let sync_state3 = turtl.sync_state.clone();
+            turtl.events.bind_once("sync:shutdown", move |_| {
+                let guard = sync_state1.read().unwrap();
+                if guard.is_some() { (guard.as_ref().unwrap().shutdown)(); }
+            }, "turtl:sync:shutdown");
+            turtl.events.bind("sync:pause", move |_| {
+                let guard = sync_state2.read().unwrap();
+                if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
+            }, "turtl:sync:pause");
+            turtl.events.bind("sync:resume", move |_| {
+                let guard = sync_state3.read().unwrap();
+                if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
+            }, "turtl:sync:resume");
         });
         Ok(())
     }
@@ -243,6 +259,10 @@ impl Turtl {
     ///
     /// Very useful for (un)binding events and such while inside of another
     /// triggered event (which normally deadlocks).
+    ///
+    /// Also note that this doesn't call the `cb` with `Turtl`, but instead
+    /// `TurtlWrap` which is also nice because we can `.clone()` it and use it
+    /// in multiple callbacks.
     pub fn with_next<F>(&self, cb: F)
         where F: FnOnce(TurtlWrap) + Send + Sync + 'static
     {
@@ -251,6 +271,26 @@ impl Turtl {
 
     /// Shut down this Turtl instance and all the state/threads it manages
     pub fn shutdown(&mut self) {
+        self.events.trigger("sync:shutdown", &jedi::obj());
+        // TODO: figure out a way to get to these pesky sync JoinHandles
+        /*
+        let mut guard = self.sync_state.write().unwrap();
+        match guard.as_mut() {
+            Some(x) => {
+                for handle in x.join_handles {
+                    match handle.join() {
+                        Ok(_) => (),
+                        Err(e) => {
+                            let err: TError = From::from(e);
+                            error!("turtl.shutdown() -- problem joining on sync thread: {}", err);
+                        }
+                    }
+                }
+            },
+            None => (),
+        }
+        *guard = None;
+        */
     }
 }
 

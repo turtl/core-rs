@@ -64,10 +64,28 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "user:logout" => {
             try!(User::logout(turtl.clone()));
             util::sleep(1000);
-            try!(turtl.msg_success(&mid, jedi::obj()));
-            Ok(())
+            turtl.msg_success(&mid, jedi::obj())
         },
-        "app:api:set_endpoint" => {
+        "user:join" => {
+            turtl.msg_success(&mid, jedi::obj())
+        },
+        "app:start-sync" => {
+            try!(turtl.start_sync());
+            turtl.msg_success(&mid, jedi::obj())
+        },
+        "app:pause-sync" => {
+            turtl.events.trigger("sync:pause", &jedi::obj());
+            turtl.msg_success(&mid, jedi::obj())
+        },
+        "app:resume-sync" => {
+            turtl.events.trigger("sync:resume", &jedi::obj());
+            turtl.msg_success(&mid, jedi::obj())
+        },
+        "app:shutdown-sync" => {
+            turtl.events.trigger("sync:shutdown", &jedi::obj());
+            turtl.msg_success(&mid, jedi::obj())
+        },
+        "app:api:set-endpoint" => {
             let endpoint: String = try!(jedi::get(&["2"], &data));
             try!(config::set(&["api", "endpoint"], &endpoint));
             turtl.msg_success(&mid, jedi::obj())
@@ -85,7 +103,6 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "ping" => {
             info!("ping!");
             turtl.msg_success(&mid, Value::String(String::from("pong")))
-                .map(|_| ())
         },
         _ => {
             match turtl.msg_error(&mid, &TError::MissingCommand(cmd.clone())) {
