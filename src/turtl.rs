@@ -103,49 +103,10 @@ impl Turtl {
             // when the user logs in, we're going to create a user-specific db
             // and save it back into turtl.
             user_guard.bind("login", move |_| {
-                let user_guard = turtl2.user.read().unwrap();
-
-                let dumpy_schema = match config::get::<Value>(&["schema"]) {
+                let db = match turtl2.create_user_db() {
                     Ok(x) => x,
                     Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: config.get(schema): {}", e);
-                        return;
-                    },
-                };
-                let data_folder = match config::get::<String>(&["data_folder"]) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: config.get(data_folder): {}", e);
-                        return;
-                    },
-                };
-                let api_endpoint = match config::get::<String>(&["api", "endpoint"]) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: config.get(api.endpoint): {}", e);
-                        return;
-                    },
-                };
-                let re = match Regex::new(r"(?i)[^a-z0-9]") {
-                    Ok(x) => x,
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: Regex::new(): {}", e);
-                        return;
-                    },
-                };
-
-                let user_id = match user_guard.id() {
-                    Some(x) => x,
-                    None => {
-                        error!("turtl.new_wrap() -- user:login: user.id() is None (can't login without an ID)");
-                        return;
-                    },
-                };
-                let server = re.replace_all(&api_endpoint, "");
-                let db = match Storage::new(&format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, server, user_id), dumpy_schema) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: Storage::new(): {}", e);
+                        error!("turtl.new_wrap() -- user:login: create_user_db(): {}", e);
                         return;
                     },
                 };
@@ -272,6 +233,28 @@ impl Turtl {
         where F: FnOnce(TurtlWrap) + Send + Sync + 'static
     {
         self.tx_main.next(cb);
+    }
+
+    /// Create a new per-user database for the current user.
+    fn create_user_db(&self) -> TResult<Storage> {
+        let db_location = try!(self.get_user_db_location());
+        let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+        Storage::new(&db_location, dumpy_schema)
+    }
+
+    /// Get the physical location of the per-user database file we will use for
+    /// the current logged-in user.
+    fn get_user_db_location(&self) -> TResult<String> {
+        let user_guard = self.user.read().unwrap();
+        let user_id = match user_guard.id() {
+            Some(x) => x,
+            None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
+        };
+        let data_folder = try!(config::get::<String>(&["data_folder"]));;
+        let api_endpoint = try!(config::get::<String>(&["api", "endpoint"]));
+        let re = try!(Regex::new(r"(?i)[^a-z0-9]"));
+        let server = re.replace_all(&api_endpoint, "");
+        Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, server, user_id))
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

@@ -94,10 +94,13 @@ pub struct Storage {
 impl Storage {
     /// Make a Storage lol
     pub fn new(location: &String, schema: Value) -> TResult<Storage> {
+        // open in multi-threaded mode: we can have the same db open in multiple
+        // threads as long as each thread has its own connection:
+        //   https://www.sqlite.org/threadsafe.html
         let flags =
             rusqlite::SQLITE_OPEN_READ_WRITE |
             rusqlite::SQLITE_OPEN_CREATE |
-            rusqlite::SQLITE_OPEN_FULL_MUTEX |
+            rusqlite::SQLITE_OPEN_NO_MUTEX |
             rusqlite::SQLITE_OPEN_URI;
         let conn = try!(if location == ":memory:" {
             Connection::open_in_memory_with_flags(flags)

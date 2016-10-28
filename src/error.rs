@@ -107,6 +107,7 @@ from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
 from_err!(::dumpy::DError);
+from_err!(::regex::Error);
 
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
