@@ -208,8 +208,12 @@ mod tests {
 
     #[test]
     fn reset() {
-        let mut rabbit = Rabbit::new();
+        let rabbit: Rabbit = jedi::parse(&String::from(r#"{"id":"17"}"#)).unwrap();
+        assert_eq!(rabbit.id, Some(String::from("17")));
+        assert_eq!(rabbit.name, None);
+        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, None);
 
+        let mut rabbit = Rabbit::new();
         rabbit.id = None;
         rabbit.name = Some(String::from("hoppy"));
         rabbit.city = Some(String::from("santa cruz"));

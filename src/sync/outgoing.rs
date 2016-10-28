@@ -3,7 +3,7 @@ use ::std::sync::{Arc, RwLock};
 use ::jedi::{self, Value};
 
 use ::error::TResult;
-use ::sync::{SyncConfig, Syncer};
+use ::sync::{SyncConfig, Syncer, SyncRecord};
 use ::util::thredder::Pipeline;
 use ::storage::Storage;
 use ::api::Api;
@@ -60,8 +60,24 @@ impl Syncer for SyncOutgoing {
     }
 
     fn run_sync(&self) -> TResult<()> {
-        let records = self.db.all("sync_outgoing");
-        println!("outoging sync! {}", records.unwrap().len());
+        let records = try!(self.db.all("sync_outgoing"));
+        if records.len() == 0 { return Ok(()); }
+
+        // convert to SyncRecord
+        let mut sync: Vec<SyncRecord> = try!(jedi::from_val(Value::Array(records)));
+
+        debug!("sync: outgoing: {:?}", sync);
+        let mut syncs: Vec<SyncRecord> = Vec::new();
+        let mut file_syncs: Vec<SyncRecord> = Vec::new();
+        sync.sort_by(|a, b| (&a.id).cmp(&b.id));
+        for rec in sync {
+            if rec.type_ == "file" && rec.action == "add" {
+                file_syncs.push(rec);
+            } else {
+                syncs.push(rec);
+            }
+        }
+
         Ok(())
     }
 }

@@ -70,6 +70,18 @@ pub struct SyncState {
     pub resume: Box<Fn() + 'static + Sync + Send>,
 }
 
+serializable!{
+    /// Define a container for our sync records
+    #[derive(Debug)]
+    pub struct SyncRecord {
+        id: String,
+        action: String,
+        sync_ids: Option<Vec<String>>,
+        type_: String,
+        data: Value,
+    }
+}
+
 /// Defines some common functions for our incoming/outgoing sync objects
 pub trait Syncer {
     /// Get this syncer's name
@@ -222,9 +234,22 @@ mod tests {
 
     use ::jedi;
 
+    use ::error::TResult;
     use ::storage::Storage;
     use ::util::thredder::Pipeline;
     use ::api::Api;
+
+    #[test]
+    fn serializes_sync_record() {
+        let sync: TResult<SyncRecord> = jedi::parse(&String::from(r#"{"id":"1234"}"#)).map_err(|e| From::from(e));
+        assert!(sync.is_err());
+        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":"1234","action":"add","type":"note","data":{"id":"6969","body":"omglolwtf"}}"#)).unwrap();
+        assert_eq!(sync.id, String::from("1234"));
+        assert_eq!(sync.action, String::from("add"));
+        assert_eq!(sync.sync_ids, None);
+        assert_eq!(sync.type_, String::from("note"));
+        assert_eq!(jedi::get::<String>(&["id"], &sync.data).unwrap(), String::from(r#"6969"#));
+    }
 
     #[test]
     fn starts_and_quits() {

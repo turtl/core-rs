@@ -90,7 +90,6 @@ macro_rules! serializable {
             $( $field:ident: $type_:ty, )*
         }
     ) => {
-        $(#[$struct_meta])*
         serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
             ($(#[$struct_meta])*)
             pub struct $name {
@@ -215,8 +214,8 @@ macro_rules! serializable {
                 $(
                     let $field: $type_ = match $field {
                         Some(x) => x,
-                        None => Default::default(),
-                        //None => try!(visitor.missing_field(stringify!($field))),
+                        //None => Default::default(),
+                        None => try!(visitor.missing_field(stringify!($field))),
                     };
                 )*
 
