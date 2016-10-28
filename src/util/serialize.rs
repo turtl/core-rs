@@ -214,8 +214,8 @@ macro_rules! serializable {
                 $(
                     let $field: $type_ = match $field {
                         Some(x) => x,
-                        //None => Default::default(),
-                        None => try!(visitor.missing_field(stringify!($field))),
+                        None => Default::default(),
+                        //None => try!(visitor.missing_field(stringify!($field))),
                     };
                 )*
 
