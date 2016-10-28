@@ -8,7 +8,7 @@
 //! where the arg\* can be any valid JSON object. The Message ID is passed in
 //! when responding so the client knows which request we are responding to.
 
-use ::futures::Future;
+use ::futures::{self, Future};
 use ::jedi::{self, Value};
 use ::config;
 
@@ -16,7 +16,6 @@ use ::error::{TResult, TError};
 use ::util;
 use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
-use ::models::user::User;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
@@ -43,7 +42,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             let turtl2 = turtl.clone();
             let mid = mid.clone();
             let mid2 = mid.clone();
-            User::login(turtl.clone(), &username, &password)
+            turtl.login(username, password)
                 .map(move |_| {
                     debug!("dispatch({}) -- user:login success", mid);
                     match turtl1.msg_success(&mid, jedi::obj()) {
@@ -62,9 +61,30 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             Ok(())
         },
         "user:logout" => {
-            try!(User::logout(turtl.clone()));
-            util::sleep(1000);
-            turtl.msg_success(&mid, jedi::obj())
+            let turtl1 = turtl.clone();
+            let turtl2 = turtl.clone();
+            let mid1 = mid.clone();
+            let mid2 = mid.clone();
+            turtl.logout()
+                .then(|res| {
+                    util::sleep(1000);
+                    futures::done(res)
+                })
+                .map(move |_| {
+                    debug!("dispatch({}) -- user:login success", mid);
+                    match turtl1.msg_success(&mid1, jedi::obj()) {
+                        Err(e) => error!("dispatch -- problem sending logout message: {}", e),
+                        _ => ()
+                    }
+                })
+                .map_err(move |e| {
+                    turtl2.api.clear_auth();
+                    match turtl2.msg_error(&mid2, &e) {
+                        Err(e) => error!("dispatch -- problem sending logout message: {}", e),
+                        _ => ()
+                    }
+                });
+            Ok(())
         },
         "user:join" => {
             turtl.msg_success(&mid, jedi::obj())

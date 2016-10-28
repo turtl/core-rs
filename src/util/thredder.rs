@@ -40,6 +40,15 @@ impl Pipeline {
     {
         self.tx.push(Box::new(cb));
     }
+
+    /// Return a future that resolves with a TurtlWrap object.
+    pub fn next_fut(&self) -> TFutureResult<TurtlWrap> {
+        let (fut_tx, fut_rx) = futures::oneshot::<TurtlWrap>();
+        self.next(move |turtl| { fut_tx.complete(turtl); });
+        fut_rx
+            .map_err(|_| TError::Msg(String::from("Pipeline::next_fut() -- future canceled")))
+            .boxed()
+    }
 }
 impl Deref for Pipeline {
     type Target = Arc<MsQueue<Box<Thunk<TurtlWrap>>>>;
@@ -86,7 +95,22 @@ impl Thredder {
             .and_then(move |res: TResult<OpData>| {
                 Ok(tx_main.next(move |_| { fut_tx.complete(res) }))
             }).forget();
-        fut_rx
+        Thredder::op_converter(fut_rx, thread_name)
+    }
+
+    /// A static function to handle the conversion of a Future that has an
+    /// OpData result.
+    ///
+    /// the reason behind this being separate instead of just lumped into
+    /// Thredder.run() is that I did a bunch of work to split it out because I
+    /// wanted to use this specific code in another part of Thredder, but ended
+    /// up not going forward with that change. It took enough time to convert
+    /// that I'd rather leave it split out for now.
+    pub fn op_converter<T, O>(future: T, thread_name: String) -> TFutureResult<O>
+        where T: Future<Item = TResult<OpData>, Error = Canceled> + Send + 'static,
+              O: OpConverter + Send + 'static
+    {
+        future
             .then(move |res: Result<TResult<OpData>, Canceled>| {
                 match res {
                     Ok(x) => match x {

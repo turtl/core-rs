@@ -5,6 +5,7 @@ use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 
 use ::regex::Regex;
+use ::futures::{self, Future};
 
 use ::jedi::{self, Value};
 use ::config;
@@ -96,32 +97,6 @@ impl Turtl {
     /// shareable across threads.
     pub fn new_wrap(tx_main: Pipeline) -> TResult<TurtlWrap> {
         let turtl = Arc::new(try!(Turtl::new(tx_main)));
-        {
-            let user_guard = turtl.user.read().unwrap();
-
-            let turtl2 = turtl.clone();
-            // when the user logs in, we're going to create a user-specific db
-            // and save it back into turtl.
-            user_guard.bind("login", move |_| {
-                let db = match turtl2.create_user_db() {
-                    Ok(x) => x,
-                    Err(e) => {
-                        error!("turtl.new_wrap() -- user:login: create_user_db(): {}", e);
-                        return;
-                    },
-                };
-                let mut db_guard = turtl2.db.write().unwrap();
-                *db_guard = Some(Arc::new(db));
-                drop(db_guard);
-            }, "turtl:user:login");
-
-            let turtl3 = turtl.clone();
-            user_guard.bind("logout", move |_| {
-                // wipe the user db
-                let mut db_guard = turtl3.db.write().unwrap();
-                *db_guard = None;
-            }, "turtl:user:logout");
-        }
         Ok(turtl)
     }
 
@@ -151,6 +126,38 @@ impl Turtl {
         };
         let msg = try!(jedi::stringify(&res));
         self.remote_send(Some(mid.clone()), msg)
+    }
+
+    /// Log a user in
+    pub fn login(&self, username: String, password: String) -> TFutureResult<()> {
+        self.with_next_fut()
+            .and_then(move |turtl| -> TFutureResult<()> {
+                let turtl2 = turtl.clone();
+                User::login(turtl.clone(), &username, &password)
+                    .and_then(move |_| -> TFutureResult<()> {
+                        let db = try_fut!(turtl2.create_user_db());
+                        let mut db_guard = turtl2.db.write().unwrap();
+                        *db_guard = Some(Arc::new(db));
+                        drop(db_guard);
+                        futures::finished(()).boxed()
+                    })
+                    .boxed()
+            })
+            .boxed()
+    }
+
+    pub fn logout(&self) -> TFutureResult<()> {
+        self.with_next_fut()
+            .and_then(|turtl| -> TFutureResult<()> {
+                turtl.events.trigger("sync:shutdown", &jedi::obj());
+                try_fut!(User::logout(turtl.clone()));
+
+                // wipe the user db
+                let mut db_guard = turtl.db.write().unwrap();
+                *db_guard = None;
+                futures::finished(()).boxed()
+            })
+            .boxed()
     }
 
     /// Given that our API is synchronous but we need to not block th main
@@ -185,16 +192,8 @@ impl Turtl {
         // set up some bindings to manage the sync system easier
         self.with_next(|turtl| {
             let turtl1 = turtl.clone();
-            let turtl2 = turtl.clone();
-            let user_guard = turtl.user.read().unwrap();
-            user_guard.bind_once("logout", move |_| {
-                turtl1.with_next(|turtl| {
-                    turtl.events.trigger("sync:shutdown", &jedi::obj());
-                });
-            }, "turtl:user:logout:sync");
-            drop(user_guard);
             turtl.events.bind_once("app:shutdown", move |_| {
-                turtl2.with_next(|turtl| {
+                turtl1.with_next(|turtl| {
                     turtl.events.trigger("sync:shutdown", &jedi::obj());
                 });
             }, "turtl:app:shutdown:sync");
@@ -235,8 +234,14 @@ impl Turtl {
         self.tx_main.next(cb);
     }
 
+    /// Return a future that resolves with a TurtlWrap object on the next main
+    /// loop.
+    pub fn with_next_fut(&self) -> TFutureResult<TurtlWrap> {
+        self.tx_main.next_fut()
+    }
+
     /// Create a new per-user database for the current user.
-    fn create_user_db(&self) -> TResult<Storage> {
+    pub fn create_user_db(&self) -> TResult<Storage> {
         let db_location = try!(self.get_user_db_location());
         let dumpy_schema = try!(config::get::<Value>(&["schema"]));
         Storage::new(&db_location, dumpy_schema)
@@ -244,7 +249,7 @@ impl Turtl {
 
     /// Get the physical location of the per-user database file we will use for
     /// the current logged-in user.
-    fn get_user_db_location(&self) -> TResult<String> {
+    pub fn get_user_db_location(&self) -> TResult<String> {
         let user_guard = self.user.read().unwrap();
         let user_id = match user_guard.id() {
             Some(x) => x,

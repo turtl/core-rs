@@ -125,3 +125,16 @@ macro_rules! try_or {
     }
 }
 
+/// A helper to make trying stuff in futures easier
+#[mecro_export]
+macro_rules! try_fut {
+    ($ex:expr) => {
+        match $ex {
+            Ok(x) => x,
+            Err(e) => {
+                return ::futures::failed(From::from(e)).boxed();
+            },
+        }
+    }
+}
+
