@@ -32,9 +32,9 @@ regex = "0.1.77"
 rusqlite = "0.7.3"
 rust-crypto = "0.2.36"
 rustc-serialize = "0.3.19"
-serde = "0.8.12"
-serde_json = "0.8.2"
-serde_yaml = "0.4.1"
+serde = "0.8.16"
+serde_json = "0.8.3"
+serde_yaml = "0.5.0"
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
 [features]

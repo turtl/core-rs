@@ -28,8 +28,12 @@ pub struct TurtlVisitor<'a, T: 'a> {
 /// This is useful for translating between rust structs, which don't allow a
 /// field named `type` and our JSON objects out in the wild, many of which *do*
 /// have a `type` field.
+///
+/// This now also applies to `mod`, apparently.
 #[macro_export]
 macro_rules! fix_type {
+    ( "mod" ) => { "mod_" };
+    ( "mod_" ) => { "mod" };
     ( "type" ) => { "type_" };
     ( "type_" ) => { "type" };
     ( $val:expr ) => {
@@ -38,7 +42,9 @@ macro_rules! fix_type {
             match myval {
                 "type_" => "type",
                 "type" => "type_",
-                _ => myval
+                "mod_" => "mod",
+                "mod" => "mod_",
+                _ => myval,
             }
         }
     }
@@ -188,14 +194,21 @@ macro_rules! serializable {
                     let val: Option<String> = try!(visitor.visit_key());
                     match val {
                         Some(x) => {
+                            let mut was_set = false;
                             $(
                                 let fieldname = fix_type!(stringify!($field));
                                 if x == fieldname {
                                     $field = Some(try!(visitor.visit_value()));
+                                    was_set = true;
                                 };
                             )*
+                            // serde doesn't like when you don't actually use a
+                            // value. it won't stand for it.
+                            if !was_set {
+                                drop(visitor.visit_value::<()>());
+                            }
                         },
-                        None => { break; },
+                        None => break,
                     };
                 }
 
@@ -223,6 +236,7 @@ mod tests {
 
     serializable!{
         #[allow(dead_code)]
+        #[derive(Debug)]
         /// Our little crapper. He sometimes craps his pants.
         pub struct LittleCrapper {
             (active: bool)

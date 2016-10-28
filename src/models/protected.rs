@@ -63,6 +63,12 @@ pub trait Protected: Model + fmt::Debug {
     /// Either grab the existing or generate a new key for this model
     fn generate_key(&mut self) -> TResult<&Vec<u8>>;
 
+    /// Get the model's body data
+    fn get_body<'a>(&'a self) -> Option<&'a String>;
+
+    /// Set the model's body data
+    fn set_body(&mut self, body: String);
+
     /// Grab a JSON Value representation of ALL this model's data
     fn data(&self) -> jedi::Value {
         jedi::to_val(self)
@@ -136,7 +142,7 @@ pub trait Protected: Model + fmt::Debug {
             body = try!(crypto::encrypt(&key, Vec::from(json.as_bytes()), try!(CryptoOp::new("aes", "gcm"))));
         }
         let body_base64 = try!(crypto::to_base64(&body));
-        try!(self.set("body", body_base64));
+        self.set_body(body_base64);
         Ok(self.untrusted_data())
     }
 
@@ -152,8 +158,8 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => &fakeid,
             };
-            let body = match self.get::<String>("body") {
-                Some(x) => try!(crypto::from_base64(&x)),
+            let body = match self.get_body() {
+                Some(x) => try!(crypto::from_base64(x)),
                 None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
             };
             let key = match self.key() {
@@ -163,8 +169,8 @@ pub trait Protected: Model + fmt::Debug {
             json_bytes = try!(crypto::decrypt(&key, &body));
         }
         let json_str = try!(String::from_utf8(json_bytes));
-        let parsed = try!(jedi::parse(&json_str));
-        try!(self.set_multi(parsed));
+        let mut parsed: Self = try!(jedi::parse(&json_str));
+        self.merge_in(parsed);
         Ok(self.trusted_data())
     }
 
@@ -276,11 +282,22 @@ macro_rules! protected {
                 match self.key {
                     Some(ref x) => Ok(x),
                     None => {
-                        let key = try!(crypto::random_key());
+                        let key = try!(::crypto::random_key());
                         self.key = Some(key);
                         Ok(self.key().unwrap())
                     }
                 }
+            }
+
+            fn get_body<'a>(&'a self) -> Option<&'a String> {
+                match self.body {
+                    Some(ref x) => Some(x),
+                    None => None,
+                }
+            }
+
+            fn set_body(&mut self, body: String) {
+                self.body = Some(body);
             }
         }
     }
@@ -326,9 +343,9 @@ mod tests {
     fn handles_untrusted_data() {
         let mut dog = Dog::new();
         dog.active = true;
-        dog.set("id", String::from("123")).unwrap();
-        dog.set("size", 42i64).unwrap();
-        dog.set("name", String::from("barky")).unwrap();
+        dog.id = Some(String::from("123"));
+        dog.size = Some(42i64);
+        dog.name = Some(String::from("barky"));
         assert_eq!(jedi::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
         assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
@@ -336,15 +353,15 @@ mod tests {
     #[test]
     fn can_serialize_json() {
         let mut dog = Dog::new();
-        dog.set("size", 32i64).unwrap();
-        dog.set("name", String::from("timmy")).unwrap();
-        dog.set("type", String::from("tiny")).unwrap();
-        dog.set("tags", vec![String::from("canine"), String::from("3-legged")]).unwrap();
+        dog.size = Some(32i64);
+        dog.name = Some(String::from("timmy"));
+        dog.type_ = Some(String::from("tiny"));
+        dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
         assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
-            let mut tags: &mut Vec<String> = dog.get_mut("tags").unwrap();
+            let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
         assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
@@ -366,24 +383,25 @@ mod tests {
                 _ => panic!("error while testing data returned from Protected::serialize() - {}", e),
             }
         }
-        assert_eq!(&body, dog.get::<String>("body").unwrap());
+        assert_eq!(&body, dog.body.as_ref().unwrap());
 
+        let dogtmp: Dog = jedi::from_val(dog.untrusted_data()).unwrap();
         let mut dog2 = Dog::new();
-        dog2.set_multi(dog.untrusted_data()).unwrap();
+        dog2.merge_in(dogtmp);
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
         dog2.key = Some(key.clone());
-        assert_eq!(dog2.get::<i64>("size").unwrap(), &69);
-        assert_eq!(dog2.get::<String>("name"), None);
-        assert_eq!(dog2.get::<String>("type"), None);
-        assert_eq!(dog2.get::<Vec<String>>("tags"), None);
+        assert_eq!(dog2.size.unwrap(), 69);
+        assert_eq!(dog2.name, None);
+        assert_eq!(dog2.type_, None);
+        assert_eq!(dog2.tags, None);
         let res = dog2.deserialize().unwrap();
         assert_eq!(dog.stringify_trusted().unwrap(), dog2.stringify_trusted().unwrap());
         assert_eq!(jedi::get::<String>(&["name"], &res).unwrap(), "barky");
         assert_eq!(jedi::get::<String>(&["type"], &res).unwrap(), "canadian");
-        assert_eq!(dog2.get::<i64>("size").unwrap(), &69);
-        assert_eq!(dog2.get::<String>("name").unwrap(), &String::from("barky"));
-        assert_eq!(dog2.get::<String>("type").unwrap(), &String::from("canadian"));
-        assert_eq!(dog2.get::<Vec<String>>("tags").unwrap(), &vec!["flappy", "noisy"]);
+        assert_eq!(dog2.size.unwrap(), 69);
+        assert_eq!(dog2.name.unwrap(), String::from("barky"));
+        assert_eq!(dog2.type_.unwrap(), String::from("canadian"));
+        assert_eq!(dog2.tags.unwrap(), vec!["flappy", "noisy"]);
     }
 }
 

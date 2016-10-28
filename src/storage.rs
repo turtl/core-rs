@@ -5,70 +5,15 @@ use ::std::sync::Arc;
 
 use ::crypto;
 use ::rusqlite::{self, Connection};
-use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
-use ::libc::c_int;
 use ::jedi::{self, Value};
 use ::dumpy::Dumpy;
 
-use ::models::model::{self, ModelDataRef};
+use ::models::model::{self};
 use ::models::protected::Protected;
 
 use ::error::{TResult, TError};
 
 /// Make ModelDataRef a ToSql type
-impl<'a> ToSql for ModelDataRef<'a> {
-    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
-        match *self {
-            ModelDataRef::Bool(ref x) => {
-                match *x {
-                    Some(val) => val.bind_parameter(stmt, col),
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-            ModelDataRef::I64(ref x) => {
-                match *x {
-                    Some(val) => val.bind_parameter(stmt, col),
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-            ModelDataRef::F64(ref x) => {
-                match *x {
-                    Some(val) => val.bind_parameter(stmt, col),
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-            ModelDataRef::String(ref x) => {
-                match *x {
-                    Some(val) => val.bind_parameter(stmt, col),
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-            ModelDataRef::Bin(ref x) => {
-                match *x {
-                    Some(val) => val.bind_parameter(stmt, col),
-                    /*
-                    Some(val) => {
-                        match crypto::to_base64(val) {
-                            Ok(val) => val.bind_parameter(stmt, col),
-                            Err(..) => Null.bind_parameter(stmt, col),
-                        }
-                    },
-                    */
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-            ModelDataRef::List(ref x) => {
-                match *x {
-                    Some(val) => match jedi::stringify(val) {
-                        Ok(val) => val.bind_parameter(stmt, col),
-                        Err(_) => Null.bind_parameter(stmt, col),
-                    },
-                    None => Null.bind_parameter(stmt, col),
-                }
-            },
-        }
-    }
-}
 
 /// Make sure we have a client ID, and sync it with the model system
 pub fn setup_client_id(storage: Arc<Storage>) -> TResult<()> {
@@ -232,11 +177,11 @@ mod tests {
     #[test]
     fn saves_retrieves_models() {
         let storage = pretest();
-        let mut model = Shiba::new();
+        let mut model = Shiba::new_with_id();
         let key = Vec::from(&(model.generate_key().unwrap())[..]);
-        model.set("color", String::from("sesame")).unwrap();
-        model.set("name", String::from("Kofi")).unwrap();
-        model.set("tags", vec![String::from("serious")]).unwrap();
+        model.color = Some(String::from("sesame"));
+        model.name = Some(String::from("Kofi"));
+        model.tags = Some(vec![String::from("serious")]);
         model.serialize().unwrap();
         storage.save(&model).unwrap();
 
@@ -244,9 +189,9 @@ mod tests {
         let mut shiba2: Shiba = storage.get("shiba", id).unwrap().unwrap();
         shiba2.key = Some(key);
         shiba2.deserialize().unwrap();
-        assert_eq!(shiba2.get::<String>("color").unwrap(), "sesame");
-        assert_eq!(shiba2.get::<String>("name").unwrap(), "Kofi");
-        assert_eq!(shiba2.get::<Vec<String>>("tags").unwrap(), &vec![String::from("serious")]);
+        assert_eq!(shiba2.color.unwrap(), String::from("sesame"));
+        assert_eq!(shiba2.name.unwrap(), String::from("Kofi"));
+        assert_eq!(shiba2.tags.unwrap(), vec![String::from("serious")]);
 
         assert_eq!(storage.all("shiba").unwrap().len(), 1);
     }
@@ -254,11 +199,11 @@ mod tests {
     #[test]
     fn deletes_models() {
         let storage = pretest();
-        let mut model = Shiba::new();
+        let mut model = Shiba::new_with_id();
         model.generate_key().unwrap();
-        model.set("color", String::from("sesame")).unwrap();
-        model.set("name", String::from("Kofi")).unwrap();
-        model.set("tags", vec![String::from("serious")]).unwrap();
+        model.color = Some(String::from("sesame"));
+        model.name = Some(String::from("Kofi"));
+        model.tags = Some(vec![String::from("serious")]);
         model.serialize().unwrap();
         storage.save(&model).unwrap();
 

@@ -6,4 +6,10 @@ pub mod model;
 #[macro_use]
 pub mod protected;
 pub mod user;
+pub mod keychain;
+//pub mod persona;
+//pub mod board;
+//pub mod note;
+//pub mod file;
+//pub mod invite;
 

@@ -91,8 +91,6 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
         println!("user growl...");
     }, "user:growl");
     user.unbind("growl", "user:growl");
-    user.set("logged_in", true).unwrap();
-    user.set("changing_password", false).unwrap();
     let key = try!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
     let key2 = try!(crypto::random_key());
     let auth = try!(crypto::encrypt_v0(&key, &try!(crypto::random_iv()), &String::from("message")));
@@ -128,8 +126,12 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             let turtl4 = turtl1.clone();
             turtl1.with_api(|api| -> TResult<Value> {
                 api.post("/auth", jedi::obj())
-            }).and_then(move |_| {
+            }).and_then(move |user_id| {
                 let mut user_guard_w = turtl4.user.write().unwrap();
+                user_guard_w.id = match user_id {
+                    Value::String(x) => Some(x),
+                    _ => return futures::failed(TError::BadValue(format!("user::try_auth() -- auth was successful, but API returned strange id object: {:?}", user_id))).boxed(),
+                };
                 user_guard_w.do_login(key, auth);
                 drop(user_guard_w);
                 let user_guard_r = turtl4.user.read().unwrap();

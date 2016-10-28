@@ -7,6 +7,6 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 jedi = { path = "../jedi" }
 rusqlite = "0.7.3"
 quick-error = "1.1.0"
-serde = "0.8.12"
-serde_json = "0.8.2"
+serde = "0.8.16"
+serde_json = "0.8.3"
 

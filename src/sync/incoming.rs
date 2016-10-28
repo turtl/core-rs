@@ -14,12 +14,12 @@ use ::models;
 
 struct Handlers {
     user: models::user::User,
-    //keychain: sync::models::keychain::Keychain,
-    //persona: sync::models::persona::Persona,
-    //board: sync::models::board::Board,
-    //note: sync::models::note::Note,
-    //file: sync::models::file::File,
-    //invite: sync::models::invite::Invite,
+    keychain: models::keychain::Keychain,
+    //persona: models::persona::Persona,
+    //board: models::board::Board,
+    //note: models::note::Note,
+    //file: models::file::File,
+    //invite: models::invite::Invite,
 }
 
 /// Holds the state for data going from API -> turtl (incoming sync data),
@@ -53,12 +53,12 @@ impl SyncIncoming {
     pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
-            //keychain: sync::models::keychain::Keychain::new(),
-            //persona: sync::models::persona::Persona::new(),
-            //board: sync::models::board::Board::new(),
-            //note: sync::models::note::Note::new(),
-            //file: sync::models::file::File::new(),
-            //invite: sync::models::invite::Invite::new(),
+            keychain: models::keychain::Keychain::new(),
+            //persona: models::persona::Persona::new(),
+            //board: models::board::Board::new(),
+            //note: models::note::Note::new(),
+            //file: models::file::File::new(),
+            //invite: models::invite::Invite::new(),
         };
 
         SyncIncoming {
@@ -115,7 +115,7 @@ impl SyncIncoming {
         let sync_type = try!(jedi::get::<String>(&["type"], &data));
         let res = match sync_type.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, data),
-            //"keychain" => self.handlers.keychain.incoming(&self.db, data),
+            "keychain" => self.handlers.keychain.incoming(&self.db, data),
             //"persona" => self.handlers.persona.incoming(&self.db, data),
             //"board" => self.handlers.board.incoming(&self.db, data),
             //"note" => self.handlers.note.incoming(&self.db, data),

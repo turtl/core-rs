@@ -225,18 +225,25 @@ mod tests {
     use ::jedi;
 
     use ::storage::Storage;
+    use ::util::thredder::Pipeline;
     use ::api::Api;
 
     #[test]
     fn starts_and_quits() {
-        let tx_main = Arc::new(MsQueue::new());
+        let tx_main = Pipeline::new();
         let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
         let api = Arc::new(Api::new());
-        let db = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
-        let (hn_o, hn_i, shutdown) = start(tx_main, sync_config, api, db);
-        shutdown();
-        hn_o.join().unwrap();
-        hn_i.join().unwrap();
+        let db_out = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
+        let db_in = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
+        let mut state = start(tx_main, sync_config, api, db_out, db_in).unwrap();
+        (state.shutdown)();
+        loop {
+            let hn = state.join_handles.pop();
+            match hn {
+                Some(x) => x.join().unwrap(),
+                None => break,
+            }
+        }
     }
 }
 
