@@ -136,6 +136,10 @@ impl Syncer for SyncIncoming {
         self.config.clone()
     }
 
+    fn get_tx(&self) -> Pipeline {
+        self.tx_main.clone()
+    }
+
     fn init(&self) -> TResult<()> {
         let sync_id = try!(self.db.kv_get("sync_id"));
         try!(Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj()));

@@ -128,7 +128,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             let tx_main = Pipeline::new();
 
             // start our messaging thread
-            let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone());
+            let (handle_msg, msg_shutdown) = try!(messaging::start(tx_main.clone()));
 
             // create our turtl object
             let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone()));

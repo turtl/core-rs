@@ -51,13 +51,17 @@ impl Syncer for SyncOutgoing {
         self.config.clone()
     }
 
+    fn get_tx(&self) -> Pipeline {
+        self.tx_main.clone()
+    }
+
     fn get_delay(&self) -> u64 {
         1000
     }
 
     fn run_sync(&self) -> TResult<()> {
         let records = self.db.all("sync_outgoing");
-        println!("outoging sync!");
+        println!("outoging sync! {}", records.unwrap().len());
         Ok(())
     }
 }

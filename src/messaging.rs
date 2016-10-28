@@ -189,8 +189,8 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
 /// Start a thread that handles proxying messages between main and remote.
 ///
 /// Currently, the implementation relies on polling.
-pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + Send>) {
-    let handle = thread::spawn(move || {
+pub fn start(tx_main: Pipeline) -> TResult<(JoinHandle<()>, Box<Fn() + 'static + Sync + Send>)> {
+    let handle = try!(thread::Builder::new().name(String::from("messaging")).spawn(move || {
         // create our messenger!
         let mut messenger = Messenger::new();
         info!("messaging::start() -- main loop");
@@ -217,7 +217,7 @@ pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + 
             }
         }
         info!("messaging::start() -- shutting down");
-    });
+    }));
     let shutdown_fn = || {
         let messenger = Messenger::new();
         // send out a shutdown signal on the *incoming* channel so the messaging
@@ -229,7 +229,7 @@ pub fn start(tx_main: Pipeline) -> (JoinHandle<()>, Box<Fn() + 'static + Sync + 
             }
         }
     };
-    (handle, Box::new(shutdown_fn))
+    Ok((handle, Box::new(shutdown_fn)))
 }
 
 #[cfg(test)]

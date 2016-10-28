@@ -22,10 +22,12 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock};
 
 use ::config;
+use ::jedi::Value;
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
 use ::util;
+use ::util::event::Emitter;
 use ::util::thredder::Pipeline;
 use ::error::TResult;
 use ::storage::Storage;
@@ -76,6 +78,9 @@ pub trait Syncer {
     /// Get a copy of the current sync config
     fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
 
+    /// Get the main thread messenger
+    fn get_tx(&self) -> Pipeline;
+
     /// Run the sync operation for this syncer.
     ///
     /// Essentially, this is the meat of the syncer. This is the entry point for
@@ -117,13 +122,23 @@ pub trait Syncer {
     /// Runs our syncer, with some quick checks on run status.
     fn runner(&self) {
         info!("sync::runner() -- {} init", self.get_name());
+        let evname = format!("sync:{}:init", self.get_name());
         match self.init() {
-            Ok(_) => (),
+            Ok(_) => {
+                self.get_tx().next(move |turtl| {
+                    turtl.events.trigger(evname.as_str(), &Value::Bool(true));
+                });
+            },
             Err(e) => {
                 error!("sync::runner() -- {}: init: {}", self.get_name(), e);
+                let msg = format!("{}", e);
+                self.get_tx().next(move |turtl| {
+                    turtl.events.trigger(evname.as_str(), &Value::String(msg));
+                });
                 return;
-            }
+            },
         }
+
         info!("sync::runner() -- {} main loop", self.get_name());
         while !self.should_quit() {
             let delay = self.get_delay();
@@ -154,22 +169,22 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let config_out = config.clone();
     let api_out = api.clone();
     let db_out = db.clone();
-    let handle_out = thread::spawn(move || {
+    let handle_out = try!(thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
         sync.runner();
         info!("sync::start() -- outgoing shutting down");
-    });
+    }));
 
     // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
     let api_in = api.clone();
     let db_in = db.clone();
-    let handle_in = thread::spawn(move || {
+    let handle_in = try!(thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
         let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
         sync.runner();
         info!("sync::start() -- incoming shutting down");
-    });
+    }));
 
     let config1 = config.clone();
     let shutdown = move || {

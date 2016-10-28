@@ -72,7 +72,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "app:start-sync" => {
             try!(turtl.start_sync());
             let turtl2 = turtl.clone();
-            turtl.events.bind_once("sync:init", move |err| {
+            turtl.events.bind_once("sync:incoming:init", move |err| {
                 // using our crude eventing system, a bool signals a success, a
                 // string is an error (containing the error message)
                 match *err {
