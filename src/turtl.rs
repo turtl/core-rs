@@ -200,7 +200,20 @@ impl Turtl {
             let sync_state3 = turtl.sync_state.clone();
             turtl.events.bind_once("sync:shutdown", move |_| {
                 let mut guard = sync_state1.write().unwrap();
-                if guard.is_some() { (guard.as_ref().unwrap().shutdown)(); }
+                if guard.is_some() {
+                    let state = guard.as_mut().unwrap();
+                    (state.shutdown)();
+                    loop {
+                        let hn = state.join_handles.pop();
+                        match hn {
+                            Some(x) => match x.join() {
+                                Ok(_) => (),
+                                Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
+                            },
+                            None => break,
+                        }
+                    }
+                }
                 *guard = None;
             }, "turtl:sync:shutdown");
             turtl.events.bind("sync:pause", move |_| {
