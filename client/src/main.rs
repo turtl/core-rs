@@ -101,9 +101,9 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = String::from(r#"["4","app:shutdown-sync"]"#);
+        let msg = String::from(r#"["6","app:shutdown-sync"]"#);
         send(msg.as_str());
-        let msg = recv("4");
+        let msg = recv("6");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
