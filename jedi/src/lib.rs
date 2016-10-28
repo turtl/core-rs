@@ -64,6 +64,40 @@ from_err!(::std::io::Error);
 from_err!(SerdeJsonError);
 from_err!(SerdeYamlError);
 
+/// Define a macro that makes it easy to wrap the Value type into a newtype
+/// struct. This makes it so you can have a local type you can define impls for
+/// but will (de)serialize just as a Value would.
+#[macro_export]
+macro_rules! jedi_value_wrapper {
+    ($name:ident) => {
+        #[derive(Debug)]
+        pub struct $name(::serde_json::Value);
+
+        impl $name {
+            #[allow(dead_code)]
+            fn as_val<'a>(&'a self) -> &'a Value {
+                &self.0
+            }
+        }
+
+        impl ::serde::ser::Serialize for $name {
+            fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+                where S: ::serde::ser::Serializer
+            {
+                self.0.serialize(serializer)
+            }
+        }
+
+        impl ::serde::de::Deserialize for $name {
+            fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+                where D: ::serde::de::Deserializer
+            {
+                ::serde::de::Deserialize::deserialize(deserializer).map($name)
+            }
+        }
+    }
+}
+
 /// Parse a JSON string and return a Result<Value>
 pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
@@ -250,6 +284,13 @@ mod tests {
         assert_eq!(val_int, 17);
         assert_eq!(val_float, 3.885);
         assert_eq!(val_bool, false);
+    }
+
+    #[test]
+    fn newtype() {
+        jedi_value_wrapper!(MyVal);
+        let data: MyVal = parse(&String::from(r#"{"name":"ALEX JONES","occupation":"SCREAMING ALL THE TIME"}"#)).unwrap();
+        assert_eq!(get::<String>(&["name"], data.as_val()).unwrap(), String::from("ALEX JONES"));
     }
 }
 
