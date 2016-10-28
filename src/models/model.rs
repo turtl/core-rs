@@ -10,7 +10,7 @@ use ::std::sync::RwLock;
 use ::time;
 use ::serde::ser::Serialize;
 use ::serde::de::Deserialize;
-use ::jedi;
+use ::jedi::{self, Value};
 
 use ::error::{TError, TResult};
 use ::util::event::Emitter;
@@ -64,12 +64,22 @@ pub trait Model: Emitter + Serialize + Deserialize {
     /// Get this model's ID
     fn id<'a>(&'a self) -> Option<&'a String>;
 
-    /// Merge another model of the same type into this one
+    /// Merge another model of the same type into this one.
+    ///
+    /// In most cases, you will probably want to use set_multi instead.
     fn merge_in(&mut self, model: Self);
 
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
         jedi::stringify(self).map_err(|e| toterr!(e))
+    }
+
+    /// Given a JSON object value, set all the applicable fields into this
+    /// model.
+    fn set_multi(&mut self, data: Value) -> TResult<()> {
+        let tmp_model: Self = try!(jedi::from_val(data));
+        self.merge_in(tmp_model);
+        Ok(())
     }
 }
 
@@ -190,33 +200,33 @@ mod tests {
     }
 
     #[test]
-    fn getter_setter() {
+    fn blank() {
         let mut rabbit = Rabbit::new();
         assert_eq!(rabbit.id, None);
         assert_eq!(rabbit.name, None);
         assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, None);
-
-        rabbit.id = Some(String::from("6969"));
-        rabbit.name = Some(String::from("Shredder"));
-        rabbit.chews_on_things_that_dont_belong_to_him = Some(true);
-
-        assert_eq!(rabbit.id(), Some(&String::from("6969")));
-        assert_eq!(rabbit.id, Some(String::from("6969")));
-        assert_eq!(rabbit.name, Some(String::from("Shredder")));
-        assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, Some(true));
     }
 
     #[test]
     fn reset() {
         let mut rabbit = Rabbit::new();
 
+        rabbit.id = None;
         rabbit.name = Some(String::from("hoppy"));
         rabbit.city = Some(String::from("santa cruz"));
 
-        let rabbit: Rabbit = jedi::parse(&String::from(r#"{"has_job":false,"name":"slappy","city":"duluth"}"#)).unwrap();
+        let val: Value = jedi::parse(&String::from(r#"{"id":"6969","name":"slappy","city":"duluth"}"#)).unwrap();
+        rabbit.set_multi(val).unwrap();
 
+        assert_eq!(rabbit.id, Some(String::from("6969")));
         assert_eq!(rabbit.name, Some(String::from("slappy")));
         assert_eq!(rabbit.city, Some(String::from("duluth")));
+
+        let rabbit2: Rabbit = jedi::parse(&String::from(r#"{"id":"4242","city":"santa cruz"}"#)).unwrap();
+        rabbit.merge_in(rabbit2);
+        assert_eq!(rabbit.id, Some(String::from("4242")));
+        assert_eq!(rabbit.name, Some(String::from("slappy")));
+        assert_eq!(rabbit.city, Some(String::from("santa cruz")));
     }
 
     #[test]

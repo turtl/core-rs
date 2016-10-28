@@ -169,7 +169,7 @@ pub trait Protected: Model + fmt::Debug {
             json_bytes = try!(crypto::decrypt(&key, &body));
         }
         let json_str = try!(String::from_utf8(json_bytes));
-        let mut parsed: Self = try!(jedi::parse(&json_str));
+        let parsed: Self = try!(jedi::parse(&json_str));
         self.merge_in(parsed);
         Ok(self.trusted_data())
     }
@@ -385,9 +385,8 @@ mod tests {
         }
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
-        let dogtmp: Dog = jedi::from_val(dog.untrusted_data()).unwrap();
         let mut dog2 = Dog::new();
-        dog2.merge_in(dogtmp);
+        dog2.set_multi(dog.untrusted_data()).unwrap();;
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
         dog2.key = Some(key.clone());
         assert_eq!(dog2.size.unwrap(), 69);
