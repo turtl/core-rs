@@ -22,7 +22,7 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock};
 
 use ::config;
-use ::jedi::Value;
+use ::jedi::{self, Value};
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
@@ -70,6 +70,12 @@ pub struct SyncState {
     pub resume: Box<Fn() + 'static + Sync + Send>,
 }
 
+/// Create `SyncData`, a wrapper type for Value that we can define Default on
+jedi_value_wrapper!(SyncData);
+impl Default for SyncData {
+    fn default() -> SyncData { SyncData(jedi::obj()) }
+}
+
 serializable!{
     /// Define a container for our sync records
     #[derive(Debug)]
@@ -78,7 +84,7 @@ serializable!{
         action: String,
         sync_ids: Option<Vec<String>>,
         type_: String,
-        data: Value,
+        data: SyncData,
     }
 }
 
@@ -232,23 +238,24 @@ mod tests {
 
     use ::std::sync::{Arc, RwLock};
 
-    use ::jedi;
+    use ::jedi::{self, Value};
 
-    use ::error::TResult;
     use ::storage::Storage;
     use ::util::thredder::Pipeline;
     use ::api::Api;
 
     #[test]
     fn serializes_sync_record() {
-        let sync: TResult<SyncRecord> = jedi::parse(&String::from(r#"{"id":"1234"}"#)).map_err(|e| From::from(e));
-        assert!(sync.is_err());
-        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":"1234","action":"add","type":"note","data":{"id":"6969","body":"omglolwtf"}}"#)).unwrap();
+        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":"1234","action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
         assert_eq!(sync.id, String::from("1234"));
         assert_eq!(sync.action, String::from("add"));
         assert_eq!(sync.sync_ids, None);
         assert_eq!(sync.type_, String::from("note"));
-        assert_eq!(jedi::get::<String>(&["id"], &sync.data).unwrap(), String::from(r#"6969"#));
+        let data: Value = jedi::to_val(&sync.data);
+        assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
+
+        let syncstr: String = jedi::stringify(&sync).unwrap();
+        assert_eq!(syncstr, String::from(r#"{"id":"1234","action":"add","sync_ids":null,"type":"note","data":{"id":"6969"}}"#));
     }
 
     #[test]

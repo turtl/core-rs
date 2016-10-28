@@ -8,6 +8,7 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate gcrypt;
 extern crate hyper;
+#[macro_use]
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
