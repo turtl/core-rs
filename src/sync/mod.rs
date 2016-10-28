@@ -156,7 +156,12 @@ pub trait Syncer {
 }
 
 /// Start our syncing system!
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> TResult<SyncState> {
+///
+/// Note that we have separate db objects for in/out. This is because each
+/// thread needs its own connection. We don't have the ability to create the
+/// connections in this scope (no access to Turtl by design) so we need to
+/// just have them passed in.
+pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Arc<Storage>, db_in: Arc<Storage>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = config.write().unwrap();
@@ -168,7 +173,6 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
     let api_out = api.clone();
-    let db_out = db.clone();
     let handle_out = try!(thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
         sync.runner();
@@ -179,7 +183,6 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
     let api_in = api.clone();
-    let db_in = db.clone();
     let handle_in = try!(thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
         let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
         sync.runner();

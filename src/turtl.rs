@@ -176,14 +176,11 @@ impl Turtl {
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
     pub fn start_sync(&self) -> TResult<()> {
-        let db_guard = self.db.read().unwrap();
-        let db = match db_guard.as_ref() {
-            Some(x) => x.clone(),
-            None => return Err(TError::MissingData(String::from("turtl.start_sync() -- missing `db` object"))),
-        };
-
+        // create the ol' in/out (in/out) db connections for our sync system
+        let db_out = Arc::new(try!(self.create_user_db()));
+        let db_in = Arc::new(try!(self.create_user_db()));
         // start the sync, and save the resulting state into Turtl
-        let sync_state = try!(sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db.clone()));
+        let sync_state = try!(sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in));
         {
             let mut state_guard = self.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
