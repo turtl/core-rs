@@ -386,7 +386,7 @@ mod tests {
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
         let mut dog2 = Dog::new();
-        dog2.set_multi(dog.untrusted_data()).unwrap();;
+        dog2.set_multi(dog.untrusted_data()).unwrap();
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
         dog2.key = Some(key.clone());
         assert_eq!(dog2.size.unwrap(), 69);

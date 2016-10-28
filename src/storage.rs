@@ -75,6 +75,7 @@ impl Storage {
     }
 
     /// Get a model's data by id
+    #[allow(dead_code)]
     pub fn get<T>(&self, table: &str, id: &String) -> TResult<Option<T>>
         where T: Protected
     {
@@ -140,7 +141,6 @@ mod tests {
     use ::error::TResult;
     use ::models::model::{self, Model};
     use ::models::protected::Protected;
-    use ::crypto;
 
     protected!{
         pub struct Shiba {

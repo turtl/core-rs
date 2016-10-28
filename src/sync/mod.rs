@@ -220,8 +220,6 @@ mod tests {
 
     use ::std::sync::{Arc, RwLock};
 
-    use ::crossbeam::sync::MsQueue;
-
     use ::jedi;
 
     use ::storage::Storage;

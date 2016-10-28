@@ -174,7 +174,6 @@ macro_rules! model {
 mod tests {
     use super::*;
     use ::jedi::{self, Value};
-    use std::sync::{Arc, RwLock};
 
     model! {
         pub struct Rabbit {
@@ -201,7 +200,7 @@ mod tests {
 
     #[test]
     fn blank() {
-        let mut rabbit = Rabbit::new();
+        let rabbit = Rabbit::new();
         assert_eq!(rabbit.id, None);
         assert_eq!(rabbit.name, None);
         assert_eq!(rabbit.chews_on_things_that_dont_belong_to_him, None);
