@@ -7,9 +7,9 @@ pub mod model;
 pub mod protected;
 pub mod user;
 pub mod keychain;
-//pub mod persona;
-//pub mod board;
-//pub mod note;
-//pub mod file;
-//pub mod invite;
+pub mod persona;
+pub mod board;
+pub mod note;
+pub mod file;
+pub mod invite;
 

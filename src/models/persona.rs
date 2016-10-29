@@ -11,10 +11,9 @@ protected!{
           name: String,
           settings: Value ),
         ( privkey: String ),
-        ( generating: bool )
+        ( /*generating: bool*/ )
     }
 }
 
 make_basic_sync_model!(Persona);
-
 

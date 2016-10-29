@@ -187,7 +187,7 @@ mod tests {
 
         let id = model.id().unwrap();
         let mut shiba2: Shiba = storage.get("shiba", id).unwrap().unwrap();
-        shiba2.key = Some(key);
+        shiba2.set_key(Some(key));
         shiba2.deserialize().unwrap();
         assert_eq!(shiba2.color.unwrap(), String::from("sesame"));
         assert_eq!(shiba2.name.unwrap(), String::from("Kofi"));

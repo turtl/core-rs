@@ -48,6 +48,9 @@ pub trait Protected: Model + fmt::Debug {
     /// Get the key for this model
     fn key(&self) -> Option<&Vec<u8>>;
 
+    /// Set this model's key
+    fn set_key(&mut self, key: Option<Vec<u8>>);
+
     /// Get this model's "type" (ie, "note", "board", etc).
     fn model_type(&self) -> &str;
 
@@ -214,7 +217,7 @@ macro_rules! protected {
             pub struct $name {
                 (
                     $( $extra_field: $extra_type, )*
-                    key: Option<Vec<u8>>,
+                    _key: Option<Vec<u8>>,
                     model_type: String
                 )
 
@@ -250,10 +253,14 @@ macro_rules! protected {
 
         impl Protected for $name {
             fn key(&self) -> Option<&Vec<u8>> {
-                match self.key {
+                match self._key {
                     Some(ref x) => Some(x),
                     None => None,
                 }
+            }
+
+            fn set_key(&mut self, key: Option<Vec<u8>>) {
+                self._key = key;
             }
 
             fn model_type(&self) -> &str {
@@ -279,13 +286,12 @@ macro_rules! protected {
             }
 
             fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {
-                match self.key {
-                    Some(ref x) => Ok(x),
-                    None => {
-                        let key = try!(::crypto::random_key());
-                        self.key = Some(key);
-                        Ok(self.key().unwrap())
-                    }
+                if self.key().is_some() {
+                    Ok(self.key().unwrap())
+                } else {
+                    let key = try!(::crypto::random_key());
+                    self.set_key(Some(key));
+                    Ok(self.key().unwrap())
                 }
             }
 
@@ -372,7 +378,7 @@ mod tests {
         let json = String::from(r#"{"size":69,"name":"barky","type":"canadian","tags":["flappy","noisy"]}"#);
         let mut dog: Dog = jedi::parse(&json).unwrap();
         let key = crypto::random_key().unwrap();
-        dog.key = Some(key.clone());
+        dog.set_key(Some(key.clone()));
         let serialized = dog.serialize().unwrap();
 
         let body: String = jedi::get(&["body"], &serialized).unwrap();
@@ -388,7 +394,7 @@ mod tests {
         let mut dog2 = Dog::new();
         dog2.set_multi(dog.untrusted_data()).unwrap();
         assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
-        dog2.key = Some(key.clone());
+        dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);
         assert_eq!(dog2.name, None);
         assert_eq!(dog2.type_, None);

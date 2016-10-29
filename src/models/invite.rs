@@ -1,5 +1,3 @@
-use ::jedi::Value;
-
 use ::models::model::Model;
 use ::models::protected::Protected;
 
@@ -21,5 +19,4 @@ protected!{
 }
 
 make_basic_sync_model!(Invite);
-
 

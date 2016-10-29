@@ -15,11 +15,11 @@ use ::models;
 struct Handlers {
     user: models::user::User,
     keychain: models::keychain::Keychain,
-    //persona: models::persona::Persona,
-    //board: models::board::Board,
-    //note: models::note::Note,
-    //file: models::file::File,
-    //invite: models::invite::Invite,
+    persona: models::persona::Persona,
+    board: models::board::Board,
+    note: models::note::Note,
+    file: models::file::File,
+    invite: models::invite::Invite,
 }
 
 /// Holds the state for data going from API -> turtl (incoming sync data),
@@ -51,11 +51,11 @@ impl SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::Keychain::new(),
-            //persona: models::persona::Persona::new(),
-            //board: models::board::Board::new(),
-            //note: models::note::Note::new(),
-            //file: models::file::File::new(),
-            //invite: models::invite::Invite::new(),
+            persona: models::persona::Persona::new(),
+            board: models::board::Board::new(),
+            note: models::note::Note::new(),
+            file: models::file::File::new(),
+            invite: models::invite::Invite::new(),
         };
 
         SyncIncoming {
@@ -112,11 +112,11 @@ impl SyncIncoming {
         let res = match sync_type.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, data),
             "keychain" => self.handlers.keychain.incoming(&self.db, data),
-            //"persona" => self.handlers.persona.incoming(&self.db, data),
-            //"board" => self.handlers.board.incoming(&self.db, data),
-            //"note" => self.handlers.note.incoming(&self.db, data),
-            //"file" => self.handlers.file.incoming(&self.db, data),
-            //"invite" => self.handlers.invite.incoming(&self.db, data),
+            "persona" => self.handlers.persona.incoming(&self.db, data),
+            "board" => self.handlers.board.incoming(&self.db, data),
+            "note" => self.handlers.note.incoming(&self.db, data),
+            "file" => self.handlers.file.incoming(&self.db, data),
+            "invite" => self.handlers.invite.incoming(&self.db, data),
             _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_type))),
         };
         res

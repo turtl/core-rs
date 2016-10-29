@@ -192,14 +192,14 @@ impl User {
 
     /// We have a successful key/auth pair. Log the user in.
     pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
-        self.key = Some(key);
+        self.set_key(Some(key));
         self.auth = Some(auth);
         self.logged_in = true;
     }
 
     /// Logout the user
     pub fn do_logout(&mut self) {
-        self.key = None;
+        self.set_key(None);
         self.auth = None;
         self.logged_in = false;
     }
