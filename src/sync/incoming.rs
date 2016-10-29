@@ -25,9 +25,6 @@ struct Handlers {
 /// Holds the state for data going from API -> turtl (incoming sync data),
 /// including tracking which sync item's we've seen and which we haven't.
 pub struct SyncIncoming {
-    /// The name of our syncer
-    name: &'static str,
-
     /// The message channel to our main thread.
     tx_main: Pipeline,
 
@@ -62,7 +59,6 @@ impl SyncIncoming {
         };
 
         SyncIncoming {
-            name: "incoming",
             tx_main: tx_main,
             config: config,
             api: api,
@@ -129,7 +125,7 @@ impl SyncIncoming {
 
 impl Syncer for SyncIncoming {
     fn get_name(&self) -> &'static str {
-        self.name
+        "incoming"
     }
 
     fn get_config(&self) -> Arc<RwLock<SyncConfig>> {

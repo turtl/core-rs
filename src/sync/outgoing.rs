@@ -13,9 +13,6 @@ static MAX_ALLOWED_FAILURES: u32 = 3;
 
 /// Holds the state for data going from turtl -> API (outgoing sync data).
 pub struct SyncOutgoing {
-    /// The name of our syncer
-    name: &'static str,
-
     /// The message channel to our main thread.
     tx_main: Pipeline,
 
@@ -36,7 +33,6 @@ impl SyncOutgoing {
     /// Create a new outgoing syncer
     pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncOutgoing {
         SyncOutgoing {
-            name: "outgoing",
             tx_main: tx_main,
             config: config,
             api: api,
@@ -117,7 +113,7 @@ impl SyncOutgoing {
 
 impl Syncer for SyncOutgoing {
     fn get_name(&self) -> &'static str {
-        self.name
+        "outgoing"
     }
 
     fn get_config(&self) -> Arc<RwLock<SyncConfig>> {

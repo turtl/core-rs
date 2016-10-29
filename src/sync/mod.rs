@@ -63,6 +63,7 @@ impl SyncConfig {
     }
 }
 
+/// A structure that tracks some state for a running sync system.
 pub struct SyncState {
     pub join_handles: Vec<thread::JoinHandle<()>>,
     pub shutdown: Box<Fn() + 'static + Sync + Send>,
