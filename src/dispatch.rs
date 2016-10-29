@@ -83,7 +83,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                         Err(e) => error!("dispatch -- problem sending logout message: {}", e),
                         _ => ()
                     }
-                });
+                })
+                .forget();
             Ok(())
         },
         "user:join" => {
@@ -122,7 +123,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:shutdown-sync" => {
-            turtl.events.trigger("sync:shutdown", &jedi::obj());
+            turtl.events.trigger("sync:shutdown", &Value::Bool(false));
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:api:set-endpoint" => {

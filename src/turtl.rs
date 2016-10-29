@@ -146,10 +146,11 @@ impl Turtl {
             .boxed()
     }
 
+    /// Log a user out
     pub fn logout(&self) -> TFutureResult<()> {
         self.with_next_fut()
             .and_then(|turtl| -> TFutureResult<()> {
-                turtl.events.trigger("sync:shutdown", &jedi::obj());
+                turtl.events.trigger("sync:shutdown", &Value::Bool(false));
                 try_fut!(User::logout(turtl.clone()));
 
                 // wipe the user db
@@ -160,7 +161,7 @@ impl Turtl {
             .boxed()
     }
 
-    /// Given that our API is synchronous but we need to not block th main
+    /// Given that our API is synchronous but we need to not block the main
     /// thread, we wrap it here such that we can do all the setup/teardown of
     /// handing the Api object off to a closure that runs inside of our `async`
     /// runner.
@@ -198,19 +199,25 @@ impl Turtl {
             let sync_state1 = turtl.sync_state.clone();
             let sync_state2 = turtl.sync_state.clone();
             let sync_state3 = turtl.sync_state.clone();
-            turtl.events.bind_once("sync:shutdown", move |_| {
+            turtl.events.bind_once("sync:shutdown", move |joinval| {
+                let join = match *joinval {
+                    Value::Bool(x) => x,
+                    _ => false,
+                };
                 let mut guard = sync_state1.write().unwrap();
                 if guard.is_some() {
                     let state = guard.as_mut().unwrap();
                     (state.shutdown)();
-                    loop {
-                        let hn = state.join_handles.pop();
-                        match hn {
-                            Some(x) => match x.join() {
-                                Ok(_) => (),
-                                Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
-                            },
-                            None => break,
+                    if join {
+                        loop {
+                            let hn = state.join_handles.pop();
+                            match hn {
+                                Some(x) => match x.join() {
+                                    Ok(_) => (),
+                                    Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
+                                },
+                                None => break,
+                            }
                         }
                     }
                 }
@@ -269,7 +276,7 @@ impl Turtl {
         let api_endpoint = try!(config::get::<String>(&["api", "endpoint"]));
         let re = try!(Regex::new(r"(?i)[^a-z0-9]"));
         let server = re.replace_all(&api_endpoint, "");
-        Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, server, user_id))
+        Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, user_id, server))
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

@@ -73,6 +73,7 @@ impl SyncIncoming {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
         let syncdata = try!(self.api.get(url.as_str(), jedi::obj()));
+
         self.update_local_db_from_api_sync(syncdata)
     }
 
@@ -87,6 +88,15 @@ impl SyncIncoming {
     /// Take sync data we got from the API and update our local database with
     /// it. Kewl.
     fn update_local_db_from_api_sync(&self, syncdata: Value) -> TResult<()> {
+        // sometimes the sync call takes a while, and it's possible we've quit
+        // mid-call. if this is the case, throw out our sync result.
+        if self.should_quit() { return Ok(()); }
+        // same, but with enabled
+        if !self.is_enabled() { return Ok(()); }
+        // if our sync data is blank, then alright, forget it. YOU KNOW WHAT?
+        // HEY JUST FORGET IT!
+        if syncdata == Value::Null { return Ok(()); }
+
         // the api sends back the latest sync id out of the bunch. grab it.
         let sync_id = try!(jedi::get::<String>(&["sync_id"], &syncdata));
         // also grab our sync records.
