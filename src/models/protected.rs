@@ -19,14 +19,6 @@
 //! protected. This macro also implements the `Debug` trait for the defined
 //! models so they don't go around spraying their private fields into debug
 //! logs.
-//!
-//! TODO: key searching (requires user keychain)
-//! TODO: ensure key exists
-//! TODO: generate_key
-//! TODO: detect old format
-//! TODO: clone?
-//! TODO: generate_subkeys
-//! TODO: encrypt_key / decrypt_key
 
 use std::collections::BTreeMap;
 
@@ -333,6 +325,14 @@ mod tests {
         }
     }
 
+    protected!{
+        pub struct Junkyard {
+            ( name: String ),
+            ( dog: Dog ),
+            ( )
+        }
+    }
+
     #[test]
     fn returns_correct_public_fields() {
         let dog = Dog::new();
@@ -407,6 +407,13 @@ mod tests {
         assert_eq!(dog2.name.unwrap(), String::from("barky"));
         assert_eq!(dog2.type_.unwrap(), String::from("canadian"));
         assert_eq!(dog2.tags.unwrap(), vec!["flappy", "noisy"]);
+    }
+
+    #[test]
+    fn recursive_serialization() {
+        let junkyard = Junkyard::new();
+        let stringified = junkyard.stringify_trusted().unwrap();
+        assert_eq!(stringified, "");
     }
 }
 

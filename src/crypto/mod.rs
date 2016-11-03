@@ -238,7 +238,7 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     // :i98ac08bac09a8 junk at the end was removed. Also, it was aes-cbc with no
     // authentication.
     //
-    // TODO: if we ever get above 2000 versions (not bloody likely), change
+    // NOTE: if we ever get above 2000 versions (not bloody likely), change
     // this. The lowest allowable Base64 message is '++', which translates to
     // 11,051 but for now we'll play it safe and cap at 2K
     if version > 2000 {

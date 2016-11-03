@@ -1,0 +1,27 @@
+models:
+- recursive (de)serialization (ie, Note and Note.File)
+- PGP key generation and encryption
+- key searching (keychain, board.keys, etc)
+- old key format detection
+- generate_subkeys
+- encrypt_key / decrypt_key
+
+sync:
+- outgoing file uploads
+- incoming file downloads
+- notify UI of API -> core sync
+- notify UI of sync/login status
+- dispatch handlers for UI -> core sync
+- effective way to test sync via tests or at least client?
+
+profile:
+- post-load indexing (load all notes and index in-mem via clouseau)
+- reindex on item change
+- dispatch handlers for grabbing/searching notes
+
+invites/personas:
+- anything special? or will sync+ui notifications handle all this?
+
+general:
+- binary exchange format? MessagePack? JSON requires base64 and is clunky
+
