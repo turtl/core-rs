@@ -1,4 +1,5 @@
 use ::std::sync::{Arc, RwLock};
+use ::std::io::ErrorKind;
 
 use ::jedi::{self, Value};
 
@@ -7,9 +8,8 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::util::thredder::Pipeline;
 use ::storage::Storage;
-use ::api::Api;
+use ::api::{Api, ApiReq};
 use ::messaging::Messenger;
-use ::util::event::Emitter;
 use ::models;
 
 struct Handlers {
@@ -72,8 +72,25 @@ impl SyncIncoming {
     fn sync_from_api(&self, sync_id: &String, poll: bool) -> TResult<()> {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
-        let syncdata = try!(self.api.get(url.as_str(), jedi::obj()));
+        let timeout = if poll { 60 } else { 10 };
+        let syncres = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
+        // if we have a timeout just return Ok(()) (the sync system is built to
+        // timeout if no response is received)
+        let syncdata = match syncres {
+            Ok(x) => x,
+            Err(e) => match e {
+                TError::Io(io) => {
+                    self.connected(false);
+                    match io.kind() {
+                        ErrorKind::TimedOut => return Ok(()),
+                        _ => return Err(TError::Io(io)),
+                    }
+                }
+                _ => return Err(e),
+            },
+        };
 
+        self.connected(true);
         self.update_local_db_from_api_sync(syncdata)
     }
 
@@ -81,7 +98,8 @@ impl SyncIncoming {
     /// objects, which is super handy because we can just treat them like any
     /// other sync
     fn load_full_profile(&self) -> TResult<()> {
-        let syncdata = try!(self.api.get("/sync/full", jedi::obj()));
+        let syncdata = try!(self.api.get("/sync/full", ApiReq::new()));
+        self.connected(true);
         self.update_local_db_from_api_sync(syncdata)
     }
 
@@ -156,9 +174,6 @@ impl Syncer for SyncIncoming {
             None => self.load_full_profile(),
         };
         try!(Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj()));
-        self.tx_main.next(|turtl| {
-            turtl.events.trigger("app:connected", &jedi::obj());
-        });
         res
     }
 
@@ -168,9 +183,6 @@ impl Syncer for SyncIncoming {
             Some(ref x) => self.sync_from_api(x, true),
             None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),
         };
-        self.tx_main.next(|turtl| {
-            turtl.events.trigger("app:connected", &jedi::obj());
-        });
         res
     }
 }

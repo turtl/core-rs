@@ -1,4 +1,5 @@
 use ::std::error::Error;
+use ::std::io::Error as IoError;
 use ::std::convert::From;
 
 use ::futures::BoxFuture;
@@ -35,12 +36,17 @@ quick_error! {
             description(str)
             display("unknown command: {}", str)
         }
-        CryptoError(err: CryptoError) {
+        Crypto(err: CryptoError) {
             cause(err)
             description("crypto error")
             display("crypto error: {}", err)
         }
-        ApiError(status: StatusCode) {
+        Io(err: IoError) {
+            cause(err)
+            description("io error")
+            display("io error: {}", err)
+        }
+        Api(status: StatusCode) {
             description("API error")
             display("api error: {}", status.canonical_reason().unwrap_or("unknown"))
         }
@@ -83,7 +89,12 @@ macro_rules! from_err {
 
 impl From<CryptoError> for TError {
     fn from(err: CryptoError) -> TError {
-        TError::CryptoError(err)
+        TError::Crypto(err)
+    }
+}
+impl From<IoError> for TError {
+    fn from(err: IoError) -> TError {
+        TError::Io(err)
     }
 }
 impl From<JSONError> for TError {
@@ -99,7 +110,6 @@ impl From<Box<::std::any::Any + Send>> for TError {
         TError::Msg(format!("{:?}", err))
     }
 }
-from_err!(::std::io::Error);
 from_err!(::fern::InitError);
 from_err!(::carrier::CError);
 from_err!(::std::string::FromUtf8Error);

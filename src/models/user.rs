@@ -9,6 +9,7 @@ use ::models::model::Model;
 use ::models::protected::Protected;
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
+use ::api::ApiReq;
 
 protected!{
     pub struct User {
@@ -125,7 +126,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             }
             let turtl4 = turtl1.clone();
             turtl1.with_api(|api| -> TResult<Value> {
-                api.post("/auth", jedi::obj())
+                api.post("/auth", ApiReq::new())
             }).and_then(move |user_id| {
                 let mut user_guard_w = turtl4.user.write().unwrap();
                 user_guard_w.id = match user_id {
@@ -146,7 +147,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             // api::Status::Unauthorized
             debug!("user::try_auth() -- api error: {}", err);
             let mut test_err = match err {
-                TError::ApiError(x) => {
+                TError::Api(x) => {
                     match x {
                         Status::Unauthorized => Ok(()),
                         _ => Err(()),

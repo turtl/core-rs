@@ -7,7 +7,7 @@ use ::sync::{SyncConfig, Syncer, SyncRecord};
 use ::util::thredder::Pipeline;
 use ::util::event::Emitter;
 use ::storage::Storage;
-use ::api::Api;
+use ::api::{Api, ApiReq};
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
@@ -152,7 +152,7 @@ impl Syncer for SyncOutgoing {
         // send our "normal" syncs out to the api, and remove and successful
         // records from our local db
         if syncs.len() > 0 {
-            let sync_result = try!(self.api.post("/sync", jedi::to_val(&syncs)));
+            let sync_result = try!(self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs))));
 
             // our successful syncs
             let success: Vec<SyncRecord> = try!(jedi::get(&["success"], &sync_result));
