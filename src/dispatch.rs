@@ -123,7 +123,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:shutdown-sync" => {
-            turtl.events.trigger("sync:shutdown", &Value::Bool(false));
+            turtl.events.trigger("sync:shutdown", &Value::Bool(true));
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:api:set-endpoint" => {
