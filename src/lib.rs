@@ -15,6 +15,7 @@ extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate num_cpus;
 #[macro_use]
 extern crate quick_error;
 extern crate regex;

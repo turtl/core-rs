@@ -27,6 +27,7 @@ jedi = { path = "jedi" }
 lazy_static = "0.2.1"
 libc = "0.2.15"
 log = "0.3.6"
+num_cpus = "1.1.0"
 quick-error = "1.1.0"
 regex = "0.1.77"
 rusqlite = "0.7.3"

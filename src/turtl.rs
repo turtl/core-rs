@@ -6,6 +6,7 @@ use ::std::ops::Drop;
 
 use ::regex::Regex;
 use ::futures::{self, Future};
+use ::num_cpus;
 
 use ::jedi::{self, Value};
 use ::config;
@@ -67,8 +68,7 @@ pub type TurtlWrap = Arc<Turtl>;
 impl Turtl {
     /// Create a new Turtl app
     fn new(tx_main: Pipeline) -> TResult<Turtl> {
-        // TODO: match num processors - 1
-        let num_workers = 3;
+        let num_workers = num_cpus::get() - 1;
 
         let api = Arc::new(Api::new());
         let data_folder = try!(config::get::<String>(&["data_folder"]));
@@ -291,4 +291,17 @@ impl Drop for Turtl {
         self.shutdown();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use ::num_cpus;
+
+    #[test]
+    fn num_cpus() {
+    }
+}
+
+
 
