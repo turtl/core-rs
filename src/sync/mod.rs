@@ -172,6 +172,14 @@ pub trait Syncer {
             }
         }
     }
+
+    /// Let the main thread know that we've (dis)connected to the API. Useful
+    /// for updating the UI on our connection state
+    fn connected(&self, yesno: bool) {
+        self.get_tx().next(move |turtl| {
+            turtl.events.trigger("app:connected", &Value::Bool(yesno));
+        });
+    }
 }
 
 /// Start our syncing system!
