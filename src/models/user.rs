@@ -10,6 +10,7 @@ use ::models::protected::Protected;
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
 use ::api::ApiReq;
+use ::util::event::Emitter;
 
 protected!{
     pub struct User {

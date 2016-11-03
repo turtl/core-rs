@@ -94,9 +94,6 @@ macro_rules! model {
             $( $field:ident: $field_type:ty, )*
         }
     ) => {
-        #[allow(unused_imports)]
-        use ::util::event::Emitter as PEmitter;
-
         serializable! {
             $(#[$struct_meta])*
             pub struct $name {
