@@ -1,5 +1,6 @@
 //! The Turtl module is the container for the state of the app. It provides
-//! functions/interfaces for updating or retrieving stateful info about the app.
+//! functions/interfaces for updating or retrieving stateful info, and is passed
+//! around to various pieces of the app running in the main thread.
 
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
@@ -83,7 +84,7 @@ impl Turtl {
             user: RwLock::new(User::new()),
             api: api,
             msg: Messenger::new(),
-            work: Thredder::new("work", tx_main.clone(), num_workers),
+            work: Thredder::new("work", tx_main.clone(), num_workers as u32),
             async: Thredder::new("async", tx_main.clone(), 2),
             kv: kv,
             db: RwLock::new(None),
@@ -294,14 +295,5 @@ impl Drop for Turtl {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use ::num_cpus;
-
-    #[test]
-    fn num_cpus() {
-    }
 }
-
-
 
