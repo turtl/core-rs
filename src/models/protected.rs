@@ -84,12 +84,12 @@ pub trait Protected: Model + fmt::Debug {
     }
 
     /// Grab all public fields for this model as a json Value
-    fn untrusted_data(&self) -> jedi::Value {
+    fn public_data(&self) -> jedi::Value {
         self.get_fields(&self.public_fields())
     }
 
     /// Grab all private fields for this model as a json Value
-    fn trusted_data(&self) -> jedi::Value {
+    fn private_data(&self) -> jedi::Value {
         self.get_fields(&self.private_fields())
     }
 
@@ -101,17 +101,17 @@ pub trait Protected: Model + fmt::Debug {
     ///
     /// __NEVER__ use this function to save data to disk or transmit over a
     /// network connection.
-    fn stringify_trusted(&self) -> TResult<String> {
+    fn stringify_private(&self) -> TResult<String> {
         jedi::stringify(&self.data()).map_err(|e| toterr!(e))
     }
 
     /// Return a JSON dump of all public fields. Really, this is a wrapper
-    /// around `jedi::stringify(model.untrusted_data())`.
+    /// around `jedi::stringify(model.public_data())`.
     ///
     /// Use this function for sending a model to an *untrusted* source, such as
     /// saving to disk or over a network connection.
-    fn stringify_untrusted(&self) -> TResult<String> {
-        jedi::stringify(&self.untrusted_data()).map_err(|e| toterr!(e))
+    fn stringify_public(&self) -> TResult<String> {
+        jedi::stringify(&self.public_data()).map_err(|e| toterr!(e))
     }
 
     /// "Serializes" a model...returns all public data with an *encrypted* set
@@ -127,7 +127,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => &fakeid,
             };
-            let data = self.trusted_data();
+            let data = self.private_data();
             let json = try!(jedi::stringify(&data));
 
             let key = match self.key() {
@@ -138,7 +138,7 @@ pub trait Protected: Model + fmt::Debug {
         }
         let body_base64 = try!(crypto::to_base64(&body));
         self.set_body(body_base64);
-        Ok(self.untrusted_data())
+        Ok(self.public_data())
     }
 
     /// "DeSerializes" a model...takes the `body` field, decrypts it, and sets
@@ -166,7 +166,7 @@ pub trait Protected: Model + fmt::Debug {
         let json_str = try!(String::from_utf8(json_bytes));
         let parsed: Self = try!(jedi::parse(&json_str));
         self.merge_in(parsed);
-        Ok(self.trusted_data())
+        Ok(self.private_data())
     }
 
     fn ensure_key(&mut self) -> Option<&Vec<u8>> {
@@ -346,14 +346,14 @@ mod tests {
     }
 
     #[test]
-    fn handles_untrusted_data() {
+    fn handles_public_data() {
         let mut dog = Dog::new();
         dog.active = true;
         dog.id = Some(String::from("123"));
         dog.size = Some(42i64);
         dog.name = Some(String::from("barky"));
-        assert_eq!(jedi::stringify(&dog.untrusted_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
-        assert_eq!(dog.stringify_untrusted().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(jedi::stringify(&dog.public_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(dog.stringify_public().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
 
     #[test]
@@ -365,12 +365,12 @@ mod tests {
         dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_private().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
             let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
-        assert_eq!(dog.stringify_trusted().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_private().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 
     #[test]
@@ -392,15 +392,15 @@ mod tests {
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
         let mut dog2 = Dog::new();
-        dog2.set_multi(dog.untrusted_data()).unwrap();
-        assert_eq!(dog.stringify_untrusted().unwrap(), dog2.stringify_untrusted().unwrap());
+        dog2.set_multi(dog.public_data()).unwrap();
+        assert_eq!(dog.stringify_public().unwrap(), dog2.stringify_public().unwrap());
         dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);
         assert_eq!(dog2.name, None);
         assert_eq!(dog2.type_, None);
         assert_eq!(dog2.tags, None);
         let res = dog2.deserialize().unwrap();
-        assert_eq!(dog.stringify_trusted().unwrap(), dog2.stringify_trusted().unwrap());
+        assert_eq!(dog.stringify_private().unwrap(), dog2.stringify_private().unwrap());
         assert_eq!(jedi::get::<String>(&["name"], &res).unwrap(), "barky");
         assert_eq!(jedi::get::<String>(&["type"], &res).unwrap(), "canadian");
         assert_eq!(dog2.size.unwrap(), 69);
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn recursive_serialization() {
         let junkyard = Junkyard::new();
-        let stringified = junkyard.stringify_trusted().unwrap();
+        let stringified = junkyard.stringify_private().unwrap();
         assert_eq!(stringified, "");
     }
 }

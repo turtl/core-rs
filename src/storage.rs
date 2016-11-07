@@ -67,7 +67,7 @@ impl Storage {
     pub fn save<T>(&self, model: &T) -> TResult<()>
         where T: Protected
     {
-        let modeldata = model.untrusted_data();
+        let modeldata = model.public_data();
         let table = model.table();
 
         self.dumpy.store(&self.conn, &table, &modeldata)
