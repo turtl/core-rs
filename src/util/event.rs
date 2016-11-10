@@ -58,7 +58,8 @@ pub trait Emitter {
         self.unbind(event_name, cb.name.as_str());
         let bindings = self.bindings();
         let mut guard = bindings.write().unwrap();
-        let events = guard.entry(String::from(event_name)).or_insert(Vec::with_capacity(3));
+        let events = guard.entry(String::from(event_name))
+            .or_insert(Vec::with_capacity(3));
         events.push(cb);
     }
 

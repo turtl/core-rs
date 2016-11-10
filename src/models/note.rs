@@ -21,7 +21,8 @@ protected!{
           text: String,
           embed: String,
           color: i64 ),
-        ( )
+        ( ),
+        ( file )
     }
 }
 

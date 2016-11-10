@@ -23,7 +23,7 @@
 use std::collections::BTreeMap;
 
 use ::std::fmt;
-use ::jedi;
+use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
 use ::models::model::Model;
@@ -52,6 +52,24 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab the private fields for this model
     fn private_fields(&self) -> Vec<&'static str>;
 
+    /// Grab the fields names of any child models this model has
+    fn submodel_fields(&self) -> Vec<&'static str>;
+
+    /// Get (JSON) data from one of our submodels
+    fn submodel_data(&self, field: &str, private: bool) -> TResult<Value>;
+
+    /// Sets our key into all our submodels
+    fn _set_key_on_submodels(&mut self);
+
+    /// Serializes our submodels
+    fn serialize_submodels(&mut self) -> TResult<()>;
+
+    /// Deserializes our submodels
+    fn deserialize_submodels(&mut self) -> TResult<()>;
+
+    /// Like Model::set_multi(), but sets data into submodels
+    fn set_multi_recursive(&mut self, data: ::jedi::Value) -> TResult<()>;
+
     /// Grab the name of this model's table
     fn table(&self) -> String;
 
@@ -65,12 +83,12 @@ pub trait Protected: Model + fmt::Debug {
     fn set_body(&mut self, body: String);
 
     /// Grab a JSON Value representation of ALL this model's data
-    fn data(&self) -> jedi::Value {
+    fn data(&self) -> Value {
         jedi::to_val(self)
     }
 
     /// Get a set of fields and return them as a JSON Value
-    fn get_fields(&self, fields: &Vec<&str>) -> jedi::Value {
+    fn get_fields(&self, fields: &Vec<&str>) -> BTreeMap<String, Value> {
         let mut map: BTreeMap<String, jedi::Value> = BTreeMap::new();
         let data = jedi::to_val(self);
         for field in fields {
@@ -80,17 +98,48 @@ pub trait Protected: Model + fmt::Debug {
                 Err(..) => {}
             }
         }
-        jedi::Value::Object(map)
+        map
+    }
+
+    /// Get a set of fields and return them as a JSON Value
+    fn get_serializable_data(&self, private: bool) -> Value {
+        let fields = if private {
+            self.private_fields()
+        } else {
+            self.public_fields()
+        };
+        let mut map = self.get_fields(&fields);
+        let submodels = self.submodel_fields();
+        // shove in our submodels' public/private data
+        for field in submodels {
+            let val: TResult<Value> = self.submodel_data(field, private);
+            match val {
+                Ok(v) => { map.insert(String::from(field), v); },
+                Err(..) => {},
+            }
+        }
+        Value::Object(map)
     }
 
     /// Grab all public fields for this model as a json Value
-    fn public_data(&self) -> jedi::Value {
-        self.get_fields(&self.public_fields())
+    ///
+    /// NOTE: Don't use this directly. Use `data_for_storage()` instead!
+    /// TODO: prefix with _
+    fn _public_data(&self) -> Value {
+        self.get_serializable_data(false)
     }
 
     /// Grab all private fields for this model as a json Value
-    fn private_data(&self) -> jedi::Value {
-        self.get_fields(&self.private_fields())
+    ///
+    /// NOTE: Don't use this directly. Use `data()` instead!
+    /// TODO: prefix with _
+    fn _private_data(&self) -> Value {
+        self.get_serializable_data(true)
+    }
+
+    /// Grab all public fields for this model as a JSON Value.
+    fn data_for_storage(&self) -> Value {
+        self._public_data()
     }
 
     /// Return a JSON dump of all fields. Really, this is a wrapper around
@@ -101,17 +150,17 @@ pub trait Protected: Model + fmt::Debug {
     ///
     /// __NEVER__ use this function to save data to disk or transmit over a
     /// network connection.
-    fn stringify_private(&self) -> TResult<String> {
+    fn stringify_unsafe(&self) -> TResult<String> {
         jedi::stringify(&self.data()).map_err(|e| toterr!(e))
     }
 
     /// Return a JSON dump of all public fields. Really, this is a wrapper
-    /// around `jedi::stringify(model.public_data())`.
+    /// around `jedi::stringify(model.data_for_storage())`.
     ///
     /// Use this function for sending a model to an *untrusted* source, such as
     /// saving to disk or over a network connection.
-    fn stringify_public(&self) -> TResult<String> {
-        jedi::stringify(&self.public_data()).map_err(|e| toterr!(e))
+    fn stringify_for_storage(&self) -> TResult<String> {
+        jedi::stringify(&self.data_for_storage()).map_err(|e| toterr!(e))
     }
 
     /// "Serializes" a model...returns all public data with an *encrypted* set
@@ -119,7 +168,8 @@ pub trait Protected: Model + fmt::Debug {
     ///
     /// It returns the Value of all *public* fields, but with the `body`
     /// populated with the encrypted data.
-    fn serialize(&mut self) -> TResult<jedi::Value> {
+    fn serialize(&mut self) -> TResult<Value> {
+        try!(self.serialize_submodels());
         let body;
         {
             let fakeid = String::from("<no id>");
@@ -127,7 +177,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => &fakeid,
             };
-            let data = self.private_data();
+            let data = self._private_data();
             let json = try!(jedi::stringify(&data));
 
             let key = match self.key() {
@@ -138,14 +188,15 @@ pub trait Protected: Model + fmt::Debug {
         }
         let body_base64 = try!(crypto::to_base64(&body));
         self.set_body(body_base64);
-        Ok(self.public_data())
+        Ok(self.data_for_storage())
     }
 
     /// "DeSerializes" a model...takes the `body` field, decrypts it, and sets
     /// the values in the decrypted JSON dump back into the model.
     ///
     /// It returns the Value of all public fields.
-    fn deserialize(&mut self) -> TResult<jedi::Value> {
+    fn deserialize(&mut self) -> TResult<Value> {
+        try!(self.deserialize_submodels());
         let fakeid = String::from("<no id>");
         let json_bytes;
         {
@@ -164,9 +215,9 @@ pub trait Protected: Model + fmt::Debug {
             json_bytes = try!(crypto::decrypt(&key, &body));
         }
         let json_str = try!(String::from_utf8(json_bytes));
-        let parsed: Self = try!(jedi::parse(&json_str));
-        self.merge_in(parsed);
-        Ok(self.private_data())
+        let parsed: Value = try!(jedi::parse(&json_str));
+        try!(self.set_multi_recursive(parsed));
+        Ok(self.data())
     }
 
     fn ensure_key(&mut self) -> Option<&Vec<u8>> {
@@ -203,6 +254,27 @@ macro_rules! protected {
             ( $( $extra_field:ident: $extra_type:ty ),* )
         }
     ) => {
+        protected! {
+            $(#[$struct_meta])*
+            pub struct $name {
+                ( $( $pub_field: $pub_type ),* ),
+                ( $( $priv_field: $priv_type ),* ),
+                ( $( $extra_field: $extra_type ),* ),
+                ( )
+            }
+        }
+    };
+
+    // struct implementation
+    (
+        $(#[$struct_meta:meta])*
+        pub struct $name:ident {
+            ( $( $pub_field:ident: $pub_type:ty ),* ),
+            ( $( $priv_field:ident: $priv_type:ty ),* ),
+            ( $( $extra_field:ident: $extra_type:ty ),* ),
+            ( $( $submodel_field:ident ),* )
+        }
+    ) => {
         // define the struct
         model! {
             $(#[$struct_meta])*
@@ -220,15 +292,16 @@ macro_rules! protected {
         }
 
         // run our implementations
-        protected!([IMPL ( $name ), ( $( $pub_field ),* ), ( $( $priv_field ),* ), ( $( $extra_field ),* )]);
+        protected!([IMPL ( $name ), ( $( $pub_field ),* ), ( $( $priv_field ),* ), ( $( $extra_field ),* ), ( $( $submodel_field ),* )]);
     };
 
-    // implementation
+    // protected implementation
     (
         [IMPL ( $name:ident ),
               ( $( $pub_field:ident ),* ),
               ( $( $priv_field:ident ),* ),
-              ( $( $extra_field:ident ),* )]
+              ( $( $extra_field:ident ),* ),
+              ( $( $submodel_field:ident ),* ) ]
 
     ) => {
         // make sure printing out a model doesn't leak data
@@ -245,14 +318,15 @@ macro_rules! protected {
 
         impl Protected for $name {
             fn key(&self) -> Option<&Vec<u8>> {
-                match self._key {
-                    Some(ref x) => Some(x),
+                match self._key.as_ref() {
+                    Some(x) => Some(x),
                     None => None,
                 }
             }
 
             fn set_key(&mut self, key: Option<Vec<u8>>) {
                 self._key = key;
+                self._set_key_on_submodels();
             }
 
             fn model_type(&self) -> &str {
@@ -273,18 +347,98 @@ macro_rules! protected {
                 ]
             }
 
+            fn submodel_fields(&self) -> Vec<&'static str> {
+                vec![
+                    $( fix_type!(stringify!($submodel_field)), )*
+                ]
+            }
+
+            #[allow(unused_variables)]  // required in case we have no submodels
+            fn submodel_data(&self, field: &str, private: bool) -> ::error::TResult<::jedi::Value> {
+                $(
+                    if field == fix_type!(stringify!($submodel_field)) {
+                        match self.$submodel_field.as_ref() {
+                            Some(ref x) => {
+                                return Ok(x.get_serializable_data(private));
+                            },
+                            None => return Ok(::jedi::Value::Null),
+                        }
+                    }
+                )*
+                Err(::error::TError::MissingField(format!("The field {} wasn't found in this model", field)))
+            }
+
+            fn _set_key_on_submodels(&mut self) {
+                if self.key().is_none() { return; }
+                $(
+                    {
+                        let key = self.key().unwrap().clone();
+                        match self.$submodel_field.as_mut() {
+                            Some(ref mut x) => x.set_key(Some(key)),
+                            None => {},
+                        }
+                    }
+                )*
+            }
+
+            fn serialize_submodels(&mut self) -> ::error::TResult<()> {
+                $(
+                    match self.$submodel_field.as_mut() {
+                        Some(ref mut x) => {
+                            try!(x.serialize());
+                        },
+                        None => {},
+                    }
+                )*
+                Ok(())
+            }
+
+            fn deserialize_submodels(&mut self) -> ::error::TResult<()> {
+                $(
+                    match self.$submodel_field.as_mut() {
+                        Some(ref mut x) => {
+                            try!(x.deserialize());
+                        },
+                        None => {},
+                    }
+                )*
+                Ok(())
+            }
+
+            // override model::Model to handle submodels
+            #[allow(unused_mut)]
+            fn set_multi_recursive(&mut self, data: ::jedi::Value) -> ::error::TResult<()> {
+                let mut hash = match data {
+                    ::jedi::Value::Object(x) => x,
+                    _ => return Err(::error::TError::BadValue(String::from("protected.set_multi() -- invalid JSON object"))),
+                };
+                $(
+                    match hash.remove(&String::from(stringify!($submodel_field))) {
+                        Some(x) => {
+                            if self.$submodel_field.is_none() {
+                                // a bit hacky, but honestly not sure how else to get a
+                                // new instance
+                                self.$submodel_field = Some(::jedi::parse(&String::from("{}")).unwrap());
+                            }
+                            try!(self.$submodel_field.as_mut().unwrap().set_multi(x));
+                        },
+                        None => {},
+                    }
+                )*
+                self.set_multi(::jedi::Value::Object(hash))
+            }
+
+            // TODO: change to &'static str?? why is this a string??
             fn table(&self) -> String {
                 String::from(stringify!($name)).to_lowercase()
             }
 
             fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {
-                if self.key().is_some() {
-                    Ok(self.key().unwrap())
-                } else {
+                if !self.key().is_some() {
                     let key = try!(::crypto::random_key());
                     self.set_key(Some(key));
-                    Ok(self.key().unwrap())
                 }
+                Ok(self.key().unwrap())
             }
 
             fn get_body<'a>(&'a self) -> Option<&'a String> {
@@ -328,8 +482,10 @@ mod tests {
     protected!{
         pub struct Junkyard {
             ( name: String ),
+            // Uhhh, I'm sorry. Is this not a junkyard?!
             ( dog: Dog ),
-            ( )
+            ( ),
+            ( dog )
         }
     }
 
@@ -352,8 +508,8 @@ mod tests {
         dog.id = Some(String::from("123"));
         dog.size = Some(42i64);
         dog.name = Some(String::from("barky"));
-        assert_eq!(jedi::stringify(&dog.public_data()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
-        assert_eq!(dog.stringify_public().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(jedi::stringify(&dog.data_for_storage()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(dog.stringify_for_storage().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
     }
 
     #[test]
@@ -365,12 +521,12 @@ mod tests {
         dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(dog.stringify_private().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
             let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
-        assert_eq!(dog.stringify_private().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 
     #[test]
@@ -392,15 +548,15 @@ mod tests {
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
         let mut dog2 = Dog::new();
-        dog2.set_multi(dog.public_data()).unwrap();
-        assert_eq!(dog.stringify_public().unwrap(), dog2.stringify_public().unwrap());
+        dog2.set_multi(dog.data_for_storage()).unwrap();
+        assert_eq!(dog.stringify_for_storage().unwrap(), dog2.stringify_for_storage().unwrap());
         dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);
         assert_eq!(dog2.name, None);
         assert_eq!(dog2.type_, None);
         assert_eq!(dog2.tags, None);
         let res = dog2.deserialize().unwrap();
-        assert_eq!(dog.stringify_private().unwrap(), dog2.stringify_private().unwrap());
+        assert_eq!(dog.stringify_unsafe().unwrap(), dog2.stringify_unsafe().unwrap());
         assert_eq!(jedi::get::<String>(&["name"], &res).unwrap(), "barky");
         assert_eq!(jedi::get::<String>(&["type"], &res).unwrap(), "canadian");
         assert_eq!(dog2.size.unwrap(), 69);
@@ -411,9 +567,27 @@ mod tests {
 
     #[test]
     fn recursive_serialization() {
-        let junkyard = Junkyard::new();
-        let stringified = junkyard.stringify_private().unwrap();
-        assert_eq!(stringified, "");
+        let mut junkyard: Junkyard = jedi::parse(&String::from(r#"{"name":"US political system","dog":{"size":69,"name":"Gerard","type":"chowchow","tags":["bites","stubborn","furry"]}}"#)).unwrap();
+        assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"size":69},"id":null,"name":"US political system"}"#));
+        assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"id":null,"name":"US political system"}"#));
+        junkyard.generate_key().unwrap();
+        junkyard.serialize().unwrap();
+
+        // ok, we serialized some stuff, let's see if we did it recursively AND
+        // if we can undo it
+        let storage = junkyard.stringify_for_storage().unwrap();
+
+        let mut junkyard2: Junkyard = jedi::parse(&storage).unwrap();
+        assert_eq!(junkyard2.dog.as_ref().unwrap().size.as_ref().unwrap(), &69);
+        junkyard2.set_key(Some(junkyard.key().unwrap().clone()));
+        junkyard2.deserialize().unwrap();
+        assert_eq!(junkyard2.dog.as_ref().unwrap().size.as_ref().unwrap(), &69);
+        let mut dog = junkyard2.dog.as_mut().unwrap();
+        assert_eq!(dog.name.as_ref().unwrap(), &String::from("Gerard"));
+        assert_eq!(dog.type_.as_ref().unwrap(), &String::from("chowchow"));
+        assert_eq!(dog.size.as_ref().unwrap(), &69);
+        dog.body = None;
+        assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"id":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
     }
 }
 
