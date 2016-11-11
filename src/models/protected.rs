@@ -171,7 +171,7 @@ pub trait Protected: Model + fmt::Debug {
         if self.key().is_none() {
             return Err(TError::MissingData(format!("protected.serialize() -- model {:?} missing key", self.id())));
         }
-        try!(self.serialize_submodels());
+        self.serialize_submodels()?;
         let body;
         {
             let fakeid = String::from("<no id>");
@@ -180,15 +180,15 @@ pub trait Protected: Model + fmt::Debug {
                 None => &fakeid,
             };
             let data = self._private_data();
-            let json = try!(jedi::stringify(&data));
+            let json = jedi::stringify(&data)?;
 
             let key = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::serialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            body = try!(crypto::encrypt(&key, Vec::from(json.as_bytes()), try!(CryptoOp::new("aes", "gcm"))));
+            body = crypto::encrypt(&key, Vec::from(json.as_bytes()), CryptoOp::new("aes", "gcm")?)?;
         }
-        let body_base64 = try!(crypto::to_base64(&body));
+        let body_base64 = crypto::to_base64(&body)?;
         self.set_body(body_base64);
         Ok(self.data_for_storage())
     }
@@ -201,7 +201,7 @@ pub trait Protected: Model + fmt::Debug {
         if self.key().is_none() {
             return Err(TError::MissingData(format!("protected.deserialize() -- model {:?} missing key", self.id())));
         }
-        try!(self.deserialize_submodels());
+        self.deserialize_submodels()?;
         let fakeid = String::from("<no id>");
         let json_bytes;
         {
@@ -210,18 +210,18 @@ pub trait Protected: Model + fmt::Debug {
                 None => &fakeid,
             };
             let body = match self.get_body() {
-                Some(x) => try!(crypto::from_base64(x)),
+                Some(x) => crypto::from_base64(x)?,
                 None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
             };
             let key = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            json_bytes = try!(crypto::decrypt(&key, &body));
+            json_bytes = crypto::decrypt(&key, &body)?;
         }
-        let json_str = try!(String::from_utf8(json_bytes));
-        let parsed: Value = try!(jedi::parse(&json_str));
-        try!(self.set_multi_recursive(parsed));
+        let json_str = String::from_utf8(json_bytes)?;
+        let parsed: Value = jedi::parse(&json_str)?;
+        self.set_multi_recursive(parsed)?;
         Ok(self.data())
     }
 

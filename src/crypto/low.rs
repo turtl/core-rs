@@ -134,7 +134,7 @@ pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
 
 /// Convert a hex string to a u8 vector.
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
-    Ok(try!(data.from_hex()))
+    Ok(data.from_hex()?)
 }
 
 /// Convert a u8 vector of binary data inot a base64 string.
@@ -157,10 +157,10 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
         Hasher::SHA512 => gcrypt::mac::HMAC_SHA512,
     };
     let mut result: Vec<u8> = vec![0; hashtype.mac_len()];
-    let mut maccer = try!(gcrypt::mac::Mac::new(*TOKEN, hashtype, GCRYPT_MAC_FLAGS));
-    try!(maccer.set_key(key));
-    try!(maccer.write(data));
-    try!(maccer.read(&mut result[..]));
+    let mut maccer = gcrypt::mac::Mac::new(*TOKEN, hashtype, GCRYPT_MAC_FLAGS)?;
+    maccer.set_key(key)?;
+    maccer.write(data)?;
+    maccer.read(&mut result[..])?;
     Ok(result)
 }
 
@@ -173,9 +173,9 @@ pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
 /// This takes a bit more legwork, but is able to securely compare two values
 /// without leaking information about either.
 pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
-    let key = try!(rand_bytes(16));
-    let hash1 = try!(hmac(Hasher::SHA256, key.as_slice(), arr1));
-    let hash2 = try!(hmac(Hasher::SHA256, key.as_slice(), arr2));
+    let key = rand_bytes(16)?;
+    let hash1 = hmac(Hasher::SHA256, key.as_slice(), arr1)?;
+    let hash2 = hmac(Hasher::SHA256, key.as_slice(), arr2)?;
     Ok(hash1 == hash2)
 }
 
@@ -188,7 +188,7 @@ pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
 
 /// Generate a random u64. Uses rand_bytes() and bit shifting to build a u64.
 pub fn rand_int() -> CResult<u64> {
-    let bytes = try!(rand_bytes(8));
+    let bytes = rand_bytes(8)?;
     let mut val: u64 = 0;
     for &x in &bytes {
         val = val << 8;
@@ -201,7 +201,7 @@ pub fn rand_int() -> CResult<u64> {
 /// and divides it by u64::MAX to get the value.
 #[allow(dead_code)]
 pub fn rand_float() -> CResult<f64> {
-    Ok((try!(rand_int()) as f64) / (::std::u64::MAX as f64))
+    Ok((rand_int()? as f64) / (::std::u64::MAX as f64))
 }
 
 /*
@@ -326,20 +326,20 @@ pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) ->
     let mut data = Vec::from(data);
     pad(&mut data, pad_mode);
     let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
-    try!(cipher.set_key(key));
-    try!(cipher.set_iv(iv));
-    try!(cipher.encrypt(&data[..], &mut enc[..]));
+    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS)?;
+    cipher.set_key(key)?;
+    cipher.set_iv(iv)?;
+    cipher.encrypt(&data[..], &mut enc[..])?;
     Ok(enc)
 }
 
 /// Decrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS));
-    try!(cipher.set_key(key));
-    try!(cipher.set_iv(iv));
-    try!(cipher.decrypt(&data[..], &mut dec[..]));
+    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS)?;
+    cipher.set_key(key)?;
+    cipher.set_iv(iv)?;
+    cipher.decrypt(&data[..], &mut dec[..])?;
     unpad(&mut dec);
     Ok(dec)
 }
@@ -348,12 +348,12 @@ pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
 pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
     let mut tag: Vec<u8> = vec![0; GCM_TAG_LENGTH];
     let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
-    try!(cipher.set_key(key));
-    try!(cipher.set_iv(iv));
-    try!(cipher.authenticate(auth));
-    try!(cipher.encrypt(data, &mut enc[..]));
-    try!(cipher.get_tag(&mut tag[..]));
+    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS)?;
+    cipher.set_key(key)?;
+    cipher.set_iv(iv)?;
+    cipher.authenticate(auth)?;
+    cipher.encrypt(data, &mut enc[..])?;
+    cipher.get_tag(&mut tag[..])?;
     enc.append(&mut tag);
     Ok(enc)
 }
@@ -364,11 +364,11 @@ pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResu
     let tag = &data[tag_cutoff..];
     let data = &data[0..tag_cutoff];
     let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = try!(gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS));
-    try!(cipher.set_key(key));
-    try!(cipher.set_iv(iv));
-    try!(cipher.authenticate(auth));
-    try!(cipher.decrypt(data, &mut dec[..]));
+    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS)?;
+    cipher.set_key(key)?;
+    cipher.set_iv(iv)?;
+    cipher.authenticate(auth)?;
+    cipher.decrypt(data, &mut dec[..])?;
     match cipher.check_tag(&tag[..]) {
         Ok(..) => {},
         Err(e) => return Err(CryptoError::Authentication(format!("{}", e))),

@@ -20,7 +20,7 @@ use ::turtl::TurtlWrap;
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
-    let data: Value = try!(jedi::parse(msg));
+    let data: Value = jedi::parse(msg)?;
 
     // grab the request id from the data
     let mid: String = match jedi::get(&["0"], &data) {
@@ -36,8 +36,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
     info!("dispatch({}): {}", mid, cmd);
     match cmd.as_ref() {
         "user:login" => {
-            let username = try!(jedi::get(&["2", "username"], &data));
-            let password = try!(jedi::get(&["2", "password"], &data));
+            let username = jedi::get(&["2", "username"], &data)?;
+            let password = jedi::get(&["2", "password"], &data)?;
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
             let mid = mid.clone();
@@ -91,7 +91,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:start-sync" => {
-            try!(turtl.start_sync());
+            turtl.start_sync()?;
             let turtl2 = turtl.clone();
             turtl.events.bind_once("sync:incoming:init", move |err| {
                 // using our crude eventing system, a bool signals a success, a
@@ -127,8 +127,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:api:set-endpoint" => {
-            let endpoint: String = try!(jedi::get(&["2"], &data));
-            try!(config::set(&["api", "endpoint"], &endpoint));
+            let endpoint: String = jedi::get(&["2"], &data)?;
+            config::set(&["api", "endpoint"], &endpoint)?;
             turtl.msg_success(&mid, jedi::obj())
         },
         "app:shutdown" => {

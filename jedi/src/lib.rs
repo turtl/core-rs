@@ -105,7 +105,7 @@ pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
 
 /// Parse a YAML string and return a Value type
 pub fn parse_yaml(string: &String) -> JResult<Value> {
-    let data: Value = try!(serde_yaml::from_str(string));
+    let data: Value = serde_yaml::from_str(string)?;
     Ok(data)
 }
 
@@ -233,7 +233,7 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
     let butlast = &keys[0..(keys.len() - 1)];
     let last = (keys[(keys.len() - 1)..])[0];
 
-    let mut val = try!(walk_mut(butlast, container));
+    let mut val = walk_mut(butlast, container)?;
     match *val {
         Value::Object(ref mut x) => {
             x.insert(String::from(last), to_val(to));

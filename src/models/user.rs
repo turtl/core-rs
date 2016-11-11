@@ -31,11 +31,11 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
         0 => {
             let mut salt = String::from(&username[..]);
             salt.push_str(":a_pinch_of_salt");  // and laughter too
-            try!(crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400))
+            crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400)?
         },
         1 => {
-            let salt = try!(crypto::to_hex(&try!(crypto::sha256(username.as_bytes()))));
-            try!(crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations))
+            let salt = crypto::to_hex(&crypto::sha256(username.as_bytes())?)?;
+            crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations)?
         },
         _ => return Err(TError::NotImplemented),
     };
@@ -46,34 +46,34 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
 fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
     let key_auth = match version {
         0 => {
-            let key = try!(generate_key(&username, &password, version, 0));
+            let key = generate_key(&username, &password, version, 0)?;
             let iv_str = String::from(&username[..]) + "4c281987249be78a";
             let mut iv = Vec::from(iv_str.as_bytes());
             iv.truncate(16);
-            let mut user_record = try!(crypto::to_hex(&try!(crypto::sha256(&password.as_bytes()))));
+            let mut user_record = crypto::to_hex(&crypto::sha256(&password.as_bytes())?)?;
             user_record.push_str(":");
             user_record.push_str(&username[..]);
-            let auth = try!(crypto::encrypt_v0(&key, &iv, &user_record));
+            let auth = crypto::encrypt_v0(&key, &iv, &user_record)?;
             (key, auth)
         },
         1 => {
-            let key = try!(generate_key(&username, &password, version, 100000));
+            let key = generate_key(&username, &password, version, 100000)?;
             let concat = String::from(&password[..]) + &username;
-            let iv_bytes = try!(crypto::sha256(concat.as_bytes()));
-            let iv_str = try!(crypto::to_hex(&iv_bytes));
+            let iv_bytes = crypto::sha256(concat.as_bytes())?;
+            let iv_str = crypto::to_hex(&iv_bytes)?;
             let iv = Vec::from(&iv_str.as_bytes()[0..16]);
-            let pw_hash = try!(crypto::to_hex(&try!(crypto::sha256(&password.as_bytes()))));
-            let un_hash = try!(crypto::to_hex(&try!(crypto::sha256(&username.as_bytes()))));
+            let pw_hash = crypto::to_hex(&crypto::sha256(&password.as_bytes())?)?;
+            let un_hash = crypto::to_hex(&crypto::sha256(&username.as_bytes())?)?;
             let mut user_record = String::from(&pw_hash[..]);
             user_record.push_str(":");
             user_record.push_str(&un_hash[..]);
-            let utf8_byte: u8 = try!(u8::from_str_radix(&user_record[18..20], 16));
+            let utf8_byte: u8 = u8::from_str_radix(&user_record[18..20], 16)?;
             // have to do a stupid conversion here because of stupidity in the
             // original turtl code. luckily there will be a v2 gen_auth...
             let utf8_random: u8 = (((utf8_byte as f64) / 256.0) * 128.0).floor() as u8;
-            let op = try!(crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random));
-            let auth_bin = try!(crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op));
-            let auth = try!(crypto::to_base64(&auth_bin));
+            let op = crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random)?;
+            let auth_bin = crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op)?;
+            let auth = crypto::to_base64(&auth_bin)?;
             (key, auth)
 
         },
@@ -93,12 +93,12 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
         println!("user growl...");
     }, "user:growl");
     user.unbind("growl", "user:growl");
-    let key = try!(crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000));
-    let key2 = try!(crypto::random_key());
-    let auth = try!(crypto::encrypt_v0(&key, &try!(crypto::random_iv()), &String::from("message")));
+    let key = crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000)?;
+    let key2 = crypto::random_key()?;
+    let auth = crypto::encrypt_v0(&key, &crypto::random_iv()?, &String::from("message"))?;
     user.auth = Some(auth);
-    let auth2 = try!(crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), try!(crypto::CryptoOp::new("aes", "gcm"))));
-    let test = String::from_utf8(try!(crypto::decrypt(&key2, &auth2.clone())));
+    let auth2 = crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), crypto::CryptoOp::new("aes", "gcm")?)?;
+    let test = String::from_utf8(crypto::decrypt(&key2, &auth2.clone())?);
     trace!("debug stuff: {:?}", (auth2, test));
     Ok(())
 }

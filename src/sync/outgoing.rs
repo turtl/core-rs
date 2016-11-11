@@ -43,31 +43,31 @@ impl SyncOutgoing {
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
         let query = "SELECT id, data FROM sync_outgoing ORDER BY id ASC";
-        let mut query = try!(self.db.conn.prepare(query));
-        let rows = try!(query.query_map(&[], |row| {
+        let mut query = self.db.conn.prepare(query)?;
+        let rows = query.query_map(&[], |row| {
             row.get("data")
-        }));
+        })?;
         let mut objects: Vec<SyncRecord> = Vec::new();
         for data in rows {
-            objects.push(try!(jedi::parse(&try!(data))));
+            objects.push(jedi::parse(&data?)?);
         }
         Ok(objects)
     }
 
     /// Delete a sync record
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
-        try!(self.db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id]));
+        self.db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
         Ok(())
     }
 
     /// Get how many times a sync record has failed
     fn get_errcount(&self, sync: &SyncRecord) -> TResult<u32> {
         let query = "SELECT errcount FROM sync_outgoing WHERE id = $1 LIMIT 1";
-        let mut query = try!(self.db.conn.prepare(query));
-        let rows = try!(query.query_map(&[&sync.id], |row| {
+        let mut query = self.db.conn.prepare(query)?;
+        let rows = query.query_map(&[&sync.id], |row| {
             let count: i64 = row.get("errcount");
             count
-        }));
+        })?;
         let mut errcount: u32 = 0;
         for data in rows {
             match data {
@@ -81,14 +81,14 @@ impl SyncOutgoing {
 
     /// Set errcount += 1 to the given sync record
     fn increment_errcount(&self, sync: &SyncRecord) -> TResult<()> {
-        try!(self.db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id]));
+        self.db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id])?;
         Ok(())
     }
 
     /// Increment this SyncRecord's errcount. If it's above a magic number, we
     /// delete the record.
     fn handle_failed_record(&self, failure: &SyncRecord) -> TResult<()> {
-        let errcount = try!(self.get_errcount(failure));
+        let errcount = self.get_errcount(failure)?;
         if errcount > MAX_ALLOWED_FAILURES {
             self.delete_sync_record(failure)
         } else {
@@ -100,7 +100,7 @@ impl SyncOutgoing {
     /// count on those records.
     fn notify_sync_failure(&self, fail: Vec<SyncRecord>, error: Value) -> TResult<()> {
         for failure in &fail {
-            try!(self.handle_failed_record(failure));
+            self.handle_failed_record(failure)?;
         }
         self.tx_main.next(move |turtl| {
             let fail = jedi::to_val(&fail);
@@ -129,12 +129,12 @@ impl Syncer for SyncOutgoing {
     }
 
     fn init(&self) -> TResult<()> {
-        try!(self.db.conn.execute("CREATE TABLE IF NOT EXISTS sync_outgoing (id, data, errcount)", &[]));
+        self.db.conn.execute("CREATE TABLE IF NOT EXISTS sync_outgoing (id, data, errcount)", &[])?;
         Ok(())
     }
 
     fn run_sync(&self) -> TResult<()> {
-        let sync = try!(self.get_outgoing_syncs());
+        let sync = self.get_outgoing_syncs()?;
         if sync.len() == 0 { return Ok(()); }
 
         // create two collections: one for normal data syncs, and one for files
@@ -152,14 +152,14 @@ impl Syncer for SyncOutgoing {
         // send our "normal" syncs out to the api, and remove and successful
         // records from our local db
         if syncs.len() > 0 {
-            let sync_result = try!(self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs))));
+            let sync_result = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)))?;
 
             // our successful syncs
-            let success: Vec<SyncRecord> = try!(jedi::get(&["success"], &sync_result));
+            let success: Vec<SyncRecord> = jedi::get(&["success"], &sync_result)?;
             // our failed syncs
-            let fails: Vec<SyncRecord> = try!(jedi::get(&["fail"], &sync_result));
+            let fails: Vec<SyncRecord> = jedi::get(&["fail"], &sync_result)?;
             // the error (if any) we got while syncing
-            let error: Value = try!(jedi::get(&["error"], &sync_result));
+            let error: Value = jedi::get(&["error"], &sync_result)?;
 
             // clear out the successful syncs
             let mut err: TResult<()> = Ok(());
@@ -175,13 +175,13 @@ impl Syncer for SyncOutgoing {
             }
 
             if fails.len() > 0 || error != Value::Null {
-                try!(self.notify_sync_failure(fails, error));
+                self.notify_sync_failure(fails, error)?;
             }
 
             // if we did indeed get an error while deleting our sync records,
             // send the first error we got back. obviously there may be more
             // than one, but we can only do so much here to maintain resilience.
-            try!(err);
+            err?;
         }
 
         if file_syncs.len() > 0 {

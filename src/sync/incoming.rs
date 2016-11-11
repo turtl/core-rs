@@ -98,7 +98,7 @@ impl SyncIncoming {
     /// objects, which is super handy because we can just treat them like any
     /// other sync
     fn load_full_profile(&self) -> TResult<()> {
-        let syncdata = try!(self.api.get("/sync/full", ApiReq::new()));
+        let syncdata = self.api.get("/sync/full", ApiReq::new())?;
         self.connected(true);
         self.update_local_db_from_api_sync(syncdata)
     }
@@ -116,27 +116,27 @@ impl SyncIncoming {
         if syncdata == Value::Null { return Ok(()); }
 
         // the api sends back the latest sync id out of the bunch. grab it.
-        let sync_id = try!(jedi::get::<String>(&["sync_id"], &syncdata));
+        let sync_id = jedi::get::<String>(&["sync_id"], &syncdata)?;
         // also grab our sync records.
-        let records = try!(jedi::get::<Vec<Value>>(&["records"], &syncdata));
+        let records = jedi::get::<Vec<Value>>(&["records"], &syncdata)?;
 
         // start a transaction. we don't want to save half-data.
-        try!(self.db.conn.execute("BEGIN TRANSACTION", &[]));
+        self.db.conn.execute("BEGIN TRANSACTION", &[])?;
         for rec in records {
-            try!(self.run_sync_item(rec))
+            self.run_sync_item(rec)?
         }
         // make sure we save our sync_id as the LAST STEP of our transaction.
         // if this fails, then next time we load we just start from the same
         // spot we were at before
-        try!(self.db.kv_set("sync_id", &sync_id));
+        self.db.kv_set("sync_id", &sync_id)?;
         // ok, commit
-        try!(self.db.conn.execute("COMMIT TRANSACTION", &[]));
+        self.db.conn.execute("COMMIT TRANSACTION", &[])?;
         Ok(())
     }
 
     /// Sync an individual incoming sync item to our DB.
     fn run_sync_item(&self, data: Value) -> TResult<()> {
-        let sync_type = try!(jedi::get::<String>(&["type"], &data));
+        let sync_type = jedi::get::<String>(&["type"], &data)?;
         let res = match sync_type.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, data),
             "keychain" => self.handlers.keychain.incoming(&self.db, data),
@@ -165,20 +165,20 @@ impl Syncer for SyncIncoming {
     }
 
     fn init(&self) -> TResult<()> {
-        let sync_id = try!(self.db.kv_get("sync_id"));
-        try!(Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj()));
+        let sync_id = self.db.kv_get("sync_id")?;
+        Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj())?;
         let res = match sync_id {
             // we have a sync id! grab the latest changes from the API
             Some(ref x) => self.sync_from_api(x, false),
             // no sync id ='[ ='[ ='[ ...instead grab the full profile
             None => self.load_full_profile(),
         };
-        try!(Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj()));
+        Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj())?;
         res
     }
 
     fn run_sync(&self) -> TResult<()> {
-        let sync_id = try!(self.db.kv_get("sync_id"));
+        let sync_id = self.db.kv_get("sync_id")?;
         let res = match sync_id {
             Some(ref x) => self.sync_from_api(x, true),
             None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),

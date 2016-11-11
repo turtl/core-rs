@@ -83,7 +83,7 @@ impl Api {
     /// Set the API's authentication
     pub fn set_auth(&self, auth: String) -> TResult<()> {
         let auth_str = String::from("user:") + &auth;
-        let base_auth = try!(crypto::to_base64(&Vec::from(auth_str.as_bytes())));
+        let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
         let ref mut config_guard = self.config.write().unwrap();
         config_guard.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())
@@ -99,7 +99,7 @@ impl Api {
     pub fn call(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<Value> {
         info!("api::call() -- req: {} {}", method, resource);
         let ApiReq {mut headers, timeout, data} = builder;
-        let endpoint = try!(config::get::<String>(&["api", "endpoint"]));
+        let endpoint = config::get::<String>(&["api", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
         url.push_str(&endpoint[..]);
         url.push_str(resource);
@@ -107,7 +107,7 @@ impl Api {
         let method2 = method.clone();
 
         let mut client = hyper::Client::new();
-        let body = try!(jedi::stringify(&data));
+        let body = jedi::stringify(&data)?;
         let auth = {
             let ref guard = self.config.read().unwrap();
             guard.auth.clone()

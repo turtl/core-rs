@@ -85,7 +85,7 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
         Ok(x) => x,
         Err(_) => String::from("/tmp/"),
     };
-    try!(config::set(&["data_folder"], &data_folder));
+    config::set(&["data_folder"], &data_folder)?;
     Ok(())
 }
 
@@ -105,11 +105,11 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
     thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
             // load our ocnfiguration
-            try!(process_runtime_config(config_str));
+            process_runtime_config(config_str)?;
 
             // std::fs, for me please, we're lookin at china. we're lookin at
             // the UN. go ahead and create our data directory.
-            let data_folder = try!(config::get::<String>(&["data_folder"]));
+            let data_folder = config::get::<String>(&["data_folder"])?;
             match fs::create_dir(&data_folder) {
                 Ok(()) => {
                     info!("main::start() -- created data folder: {}", data_folder);
@@ -131,10 +131,10 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             let tx_main = Pipeline::new();
 
             // start our messaging thread
-            let (handle_msg, msg_shutdown) = try!(messaging::start(tx_main.clone()));
+            let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone())?;
 
             // create our turtl object
-            let turtl = try!(turtl::Turtl::new_wrap(tx_main.clone()));
+            let turtl = turtl::Turtl::new_wrap(tx_main.clone())?;
 
             // bind turtl.events "app:shutdown" to close everything
             {
@@ -157,7 +157,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
             // shut down the messaging system
             msg_shutdown();
-            try!(handle_msg.join());
+            handle_msg.join()?;
 
             Ok(())
         };

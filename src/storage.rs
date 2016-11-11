@@ -19,11 +19,11 @@ use ::error::{TResult, TError};
 pub fn setup_client_id(storage: Arc<Storage>) -> TResult<()> {
     let conn = &storage.conn;
     let dumpy = &storage.dumpy;
-    let id = match try!(dumpy.kv_get(conn, "client_id")) {
+    let id = match dumpy.kv_get(conn, "client_id")? {
         Some(x) => x,
         None => {
-            let client_id = try!(crypto::random_hash());
-            try!(dumpy.kv_set(conn, "client_id", &client_id));
+            let client_id = crypto::random_hash()?;
+            dumpy.kv_set(conn, "client_id", &client_id)?;
             client_id
         },
     };
@@ -47,15 +47,15 @@ impl Storage {
             rusqlite::SQLITE_OPEN_CREATE |
             rusqlite::SQLITE_OPEN_NO_MUTEX |
             rusqlite::SQLITE_OPEN_URI;
-        let conn = try!(if location == ":memory:" {
+        let conn = if location == ":memory:" {
             Connection::open_in_memory_with_flags(flags)
         } else {
             Connection::open_with_flags(location, flags)
-        });
+        }?;
 
         // set up dumpy
         let dumpy = Arc::new(Dumpy::new(schema));
-        try!(dumpy.init(&conn));
+        dumpy.init(&conn)?;
 
         Ok(Storage {
             conn: conn,

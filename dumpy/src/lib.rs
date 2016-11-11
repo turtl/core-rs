@@ -51,24 +51,24 @@ impl Dumpy {
 
     /// Init our dumpy store on an existing connection.
     pub fn init(&self, conn: &Connection) -> DResult<()> {
-        try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_objects (id VARCHAR(64) PRIMARY KEY, table_name VARCHAR(32), data TEXT)", &[]));
-        try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id INTEGER PRIMARY KEY, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", &[]));
-        try!(conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", &[]));
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_objects (id VARCHAR(64) PRIMARY KEY, table_name VARCHAR(32), data TEXT)", &[])?;
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id INTEGER PRIMARY KEY, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", &[])?;
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", &[])?;
 
-        try!(conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", &[]));
-        try!(conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index_obj ON dumpy_index (table_name, object_id)", &[]));
-        try!(conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS dumpy_idx_kv ON dumpy_kv (key)", &[]));
+        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", &[])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index_obj ON dumpy_index (table_name, object_id)", &[])?;
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS dumpy_idx_kv ON dumpy_kv (key)", &[])?;
         Ok(())
     }
 
     /// Store an object!
     pub fn store(&self, conn: &Connection, table: &String, obj: &Value) -> DResult<()> {
-        let id = try!(jedi::get::<String>(&["id"], obj));
-        let json = try!(jedi::stringify(obj));
+        let id = jedi::get::<String>(&["id"], obj)?;
+        let json = jedi::stringify(obj)?;
         // "upsert" the object
-        try!(conn.execute("INSERT OR REPLACE INTO dumpy_objects (id, table_name, data) VALUES ($1, $2, $3)", &[&id, table, &json]));
+        conn.execute("INSERT OR REPLACE INTO dumpy_objects (id, table_name, data) VALUES ($1, $2, $3)", &[&id, table, &json])?;
         // wipte out all indexes for this object
-        try!(conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, &id]));
+        conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, &id])?;
 
         let indexes = match jedi::get::<Vec<Value>>(&[table, "indexes"], &self.schema) {
             Ok(x) => x,
@@ -80,7 +80,7 @@ impl Dumpy {
             }
         };
         for index in &indexes {
-            let fields = try!(jedi::get::<Vec<String>>(&["fields"], index));
+            let fields = jedi::get::<Vec<String>>(&["fields"], index)?;
             let idx_name: String = match jedi::get::<String>(&["name"], index) {
                 Ok(x) => x,
                 Err(e) => match e {
@@ -175,12 +175,12 @@ impl Dumpy {
             let mut vals: Vec<String> = Vec::new();
             combine(String::from(""), &val_vec, &mut vals);
             for val in &vals {
-                try!(conn.execute("INSERT INTO dumpy_index (table_name, index_name, vals, object_id) VALUES ($1, $2, $3, $4)", &[
+                conn.execute("INSERT INTO dumpy_index (table_name, index_name, vals, object_id) VALUES ($1, $2, $3, $4)", &[
                     table,
                     &idx_name,
                     val,
                     &id,
-                ]));
+                ])?;
             }
         }
         Ok(())
@@ -188,8 +188,8 @@ impl Dumpy {
 
     /// Remove all traces of an object.
     pub fn delete(&self, conn: &Connection, table: &String, id: &String) -> DResult<()> {
-        try!(conn.execute("DELETE FROM dumpy_objects WHERE table_name = $1 AND id = $2", &[table, id]));
-        try!(conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, id]));
+        conn.execute("DELETE FROM dumpy_objects WHERE table_name = $1 AND id = $2", &[table, id])?;
+        conn.execute("DELETE FROM dumpy_index WHERE table_name = $1 AND object_id = $2", &[table, id])?;
         Ok(())
     }
 
@@ -197,10 +197,10 @@ impl Dumpy {
     pub fn get(&self, conn: &Connection, table: &String, id: &String) -> DResult<Option<Value>> {
         let query = "SELECT data FROM dumpy_objects WHERE id = $1 AND table_name = $2";
         let res = conn.query_row_and_then(query, &[id, table], |row| -> DResult<Value> {
-            let data: SqlValue = try!(row.get_checked("data"));
+            let data: SqlValue = row.get_checked("data")?;
             match data {
                 SqlValue::Text(ref x) => {
-                    Ok(try!(jedi::parse(x)))
+                    Ok(jedi::parse(x)?)
                 },
                 _ => Err(DError::Msg(format!("dumpy: {}: {}: `data` field is not a string", table, id))),
             }
@@ -219,7 +219,7 @@ impl Dumpy {
 
     /// Find objects using a given index/values
     pub fn find(&self, conn: &Connection, table: &String, index: &String, vals: &Vec<String>) -> DResult<Vec<Value>> {
-        let mut query = try!(conn.prepare("SELECT object_id FROM dumpy_index WHERE table_name = $1 AND index_name = $2 AND vals LIKE $3"));
+        let mut query = conn.prepare("SELECT object_id FROM dumpy_index WHERE table_name = $1 AND index_name = $2 AND vals LIKE $3")?;
         let vals_str = vals
             .into_iter()
             .fold(String::new(), |acc, x| {
@@ -230,12 +230,12 @@ impl Dumpy {
                 }
             });
         let vals_str = format!("{}%", vals_str);
-        let rows = try!(query.query_map(&[table, index, &vals_str], |row| {
+        let rows = query.query_map(&[table, index, &vals_str], |row| {
             row.get("object_id")
-        }));
+        })?;
         let mut ids: Vec<String> = Vec::new();
         for oid in rows {
-            ids.push(try!(oid));
+            ids.push(oid?);
         }
 
         let oids = ids.into_iter().fold(String::new(), |acc, x| {
@@ -246,13 +246,13 @@ impl Dumpy {
             }
         });
         let query = format!("SELECT data FROM dumpy_objects WHERE id IN ({}) ORDER BY id ASC", oids);
-        let mut query = try!(conn.prepare(&query[..]));
-        let rows = try!(query.query_map(&[], |row| {
+        let mut query = conn.prepare(&query[..])?;
+        let rows = query.query_map(&[], |row| {
             row.get("data")
-        }));
+        })?;
         let mut objects: Vec<Value> = Vec::new();
         for data in rows {
-            objects.push(try!(jedi::parse(&try!(data))));
+            objects.push(jedi::parse(&data?)?);
         }
         Ok(objects)
     }
@@ -260,20 +260,20 @@ impl Dumpy {
     /// Get ALL objects in a table
     pub fn all(&self, conn: &Connection, table: &String) -> DResult<Vec<Value>> {
         let query = "SELECT data FROM dumpy_objects WHERE table_name = ? ORDER BY id ASC";
-        let mut query = try!(conn.prepare(query));
-        let rows = try!(query.query_map(&[table], |row| {
+        let mut query = conn.prepare(query)?;
+        let rows = query.query_map(&[table], |row| {
             row.get("data")
-        }));
+        })?;
         let mut objects: Vec<Value> = Vec::new();
         for data in rows {
-            objects.push(try!(jedi::parse(&try!(data))));
+            objects.push(jedi::parse(&data?)?);
         }
         Ok(objects)
     }
 
     /// Set a value into the key/val store
     pub fn kv_set(&self, conn: &Connection, key: &str, val: &String) -> DResult<()> {
-        try!(conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val]));
+        conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val])?;
         Ok(())
     }
 
@@ -281,7 +281,7 @@ impl Dumpy {
     pub fn kv_get(&self, conn: &Connection, key: &str) -> DResult<Option<String>> {
         let query = "SELECT value FROM dumpy_kv WHERE key = $1";
         let res = conn.query_row_and_then(query, &[&key], |row| -> DResult<String> {
-            let data: SqlValue = try!(row.get_checked("value"));
+            let data: SqlValue = row.get_checked("value")?;
             match data {
                 SqlValue::Text(x) => {
                     Ok(x)
@@ -303,7 +303,7 @@ impl Dumpy {
 
     /// Remove a k/v val
     pub fn kv_delete(&self, conn: &Connection, key: &str) -> DResult<()> {
-        try!(conn.execute("DELETE FROM dumpy_kv WHERE key = $1", &[&key]));
+        conn.execute("DELETE FROM dumpy_kv WHERE key = $1", &[&key])?;
         Ok(())
     }
 }
@@ -326,7 +326,7 @@ mod tests {
 
     fn index_count(conn: &Connection) -> i64 {
         conn.query_row_and_then("SELECT COUNT(*) AS count FROM dumpy_index", &[], |row| -> DResult<i64> {
-            let data: SqlValue = try!(row.get_checked("count"));
+            let data: SqlValue = row.get_checked("count")?;
             match data {
                 SqlValue::Integer(ref x) => Ok(x.clone()),
                 _ => Err(DError::Msg(format!("error grabbing count"))),

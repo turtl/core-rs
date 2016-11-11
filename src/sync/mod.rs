@@ -134,7 +134,7 @@ pub trait Syncer {
     fn sync_key(&self) -> TResult<String> {
         let config = self.get_config();
         let guard = config.read().unwrap();
-        let api_endpoint = try!(config::get::<String>(&["api", "endpoint"]));
+        let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         Ok(format!("{}:{}", guard.user_id, api_endpoint))
     }
 
@@ -200,21 +200,21 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
     let api_out = api.clone();
-    let handle_out = try!(thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
+    let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
         sync.runner();
         info!("sync::start() -- outgoing shutting down");
-    }));
+    })?;
 
     // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
     let api_in = api.clone();
-    let handle_in = try!(thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
+    let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
         let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
         sync.runner();
         info!("sync::start() -- incoming shutting down");
-    }));
+    })?;
 
     let config1 = config.clone();
     let shutdown = move || {

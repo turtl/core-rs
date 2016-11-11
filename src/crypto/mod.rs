@@ -75,15 +75,15 @@ pub struct CryptoOp {
 impl CryptoOp {
     /// Create a new crypto op with a cipher/blockmode
     pub fn new(cipher: &'static str, blockmode: &'static str) -> CResult<CryptoOp> {
-        try!(find_index(&CIPHER_INDEX, cipher));
-        try!(find_index(&BLOCK_INDEX, blockmode));
+        find_index(&CIPHER_INDEX, cipher)?;
+        find_index(&BLOCK_INDEX, blockmode)?;
         Ok(CryptoOp { cipher: cipher, blockmode: blockmode, iv: None, utf8_random: None })
     }
 
     /// Create a new crypto op with a cipher/blockmode/iv
     #[allow(dead_code)]
     pub fn new_with_iv(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>) -> CResult<CryptoOp> {
-        let mut op = try!(CryptoOp::new(cipher, blockmode));
+        let mut op = CryptoOp::new(cipher, blockmode)?;
         op.iv = Some(iv);
         Ok(op)
     }
@@ -91,7 +91,7 @@ impl CryptoOp {
     #[allow(dead_code)]
     /// Create a new crypto op with a cipher/blockmode/iv/utf8 byte
     pub fn new_with_iv_utf8(cipher: &'static str, blockmode: &'static str, iv: Vec<u8>, utf8: u8) -> CResult<CryptoOp> {
-        let mut op = try!(CryptoOp::new(cipher, blockmode));
+        let mut op = CryptoOp::new(cipher, blockmode)?;
         op.iv = Some(iv);
         op.utf8_random = Some(utf8);
         Ok(op)
@@ -114,13 +114,13 @@ impl PayloadDescription {
         if crypto_version == 0 { return Err(CryptoError::Msg(format!("PayloadDescription not implemented for version 0"))); }
 
         let mut desc: Vec<u8> = Vec::with_capacity(4);
-        desc.push(try!(find_index(&CIPHER_INDEX, cipher)) as u8);
-        desc.push(try!(find_index(&BLOCK_INDEX, block)) as u8);
+        desc.push(find_index(&CIPHER_INDEX, cipher)? as u8);
+        desc.push(find_index(&BLOCK_INDEX, block)? as u8);
         if crypto_version <= 4 {
-            if let Some(ref x) = padding { desc.push(try!(find_index(&PAD_INDEX, x)) as u8); }
-            if let Some(ref x) = kdf { desc.push(try!(find_index(&KDF_INDEX, x)) as u8); }
+            if let Some(ref x) = padding { desc.push(find_index(&PAD_INDEX, x)? as u8); }
+            if let Some(ref x) = kdf { desc.push(find_index(&KDF_INDEX, x)? as u8); }
         }
-        Ok(try!(PayloadDescription::from(desc.as_slice())))
+        Ok(PayloadDescription::from(desc.as_slice())?)
     }
 
     /// Convert a byte vector into a PayloadDescription object
@@ -252,7 +252,7 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
 
     let desc_length = serialized[idx];
     let desc = &serialized[(idx + 1)..(idx + 1 + (desc_length as usize))];
-    let desc_struct = try!(PayloadDescription::from(desc));
+    let desc_struct = PayloadDescription::from(desc)?;
     idx += (desc_length as usize) + 1;
 
     let iv = &serialized[idx..(idx + 16)];
@@ -293,7 +293,7 @@ pub fn serialize(data: &mut CryptoData) -> CResult<Vec<u8>> {
     if data.version == 0 { return serialize_version_0(data); }
 
     // grab the raw header
-    let mut ser = try!(serialize_header(data));
+    let mut ser = serialize_header(data)?;
 
     // lastly, our ciphertext
     ser.append(&mut data.ciphertext);
@@ -325,7 +325,7 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
                 }
             }
 
-            let derived = try!(low::pbkdf2(hasher, master_key, &[], iterations, keylen));
+            let derived = low::pbkdf2(hasher, master_key, &[], iterations, keylen)?;
             Ok((Vec::from(&derived[0..32]), Vec::from(&derived[32..])))
         },
         None => Err(CryptoError::Msg(format!("derive_keys: no kdf present in desc"))),
@@ -358,8 +358,8 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
     auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
-    let hmac = try!(low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice()));
-    if !(try!(low::secure_compare(hmac.as_slice(), data.hmac.as_slice()))) {
+    let hmac = low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice())?;
+    if !(low::secure_compare(hmac.as_slice(), data.hmac.as_slice())?) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }
     Ok(())
@@ -370,7 +370,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
 fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
     if key.len() == 32 { return Ok(key.clone()); }
 
-    let keystr = try!(String::from_utf8(key.clone()));
+    let keystr = String::from_utf8(key.clone())?;
     let mut fixed_key: Vec<u8> = Vec::with_capacity(32);
     for char in keystr.chars() {
         fixed_key.push(char as u8);
@@ -385,9 +385,9 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
-    let key = &try!(fix_utf8_key(&key));
+    let key = &fix_utf8_key(&key)?;
 
-    let deserialized = try!(deserialize(ciphertext));
+    let deserialized = deserialize(ciphertext)?;
     let version = deserialized.version;
     let desc = &deserialized.desc;
     let iv = &deserialized.iv;
@@ -395,14 +395,14 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     let mut decrypted: Vec<u8>;
 
     if version == 0 {
-        decrypted = try!(low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
+        decrypted = low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice())?;
     } else if version <= 4 {
-        let (crypt_key, hmac_key) = try!(derive_keys(key.as_slice(), &desc));
-        try!(authenticate(&deserialized, hmac_key.as_slice()));
-        decrypted = try!(low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice()));
+        let (crypt_key, hmac_key) = derive_keys(key.as_slice(), &desc)?;
+        authenticate(&deserialized, hmac_key.as_slice())?;
+        decrypted = low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice())?;
     } else if version >= 5 {
-        let auth: Vec<u8> = try!(serialize_header(&deserialized));
-        decrypted = try!(low::aes_gcm_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice(), auth.as_slice()));
+        let auth: Vec<u8> = serialize_header(&deserialized)?;
+        decrypted = low::aes_gcm_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice(), auth.as_slice())?;
     } else {
         return Err(CryptoError::NotImplemented(format!("version not implemented: {}", version)));
     }
@@ -431,14 +431,14 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
     // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
-    let key = &try!(fix_utf8_key(&key));
+    let key = &fix_utf8_key(&key)?;
     let version = CRYPTO_VERSION;
 
     match (op.cipher, op.blockmode) {
         ("aes", "gcm") => {
             let iv = match op.iv {
                 Some(x) => x,
-                None => try!(random_iv()),
+                None => random_iv()?,
             };
 
             let mut plaintext_utf;
@@ -455,7 +455,7 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
                 plaintext_utf = Vec::with_capacity(1 + plaintext.len());
                 let utf8_byte = match op.utf8_random {
                     Some(x) => x,
-                    None => try!(low::rand_bytes(1))[0] & 0b01111111,
+                    None => low::rand_bytes(1)?[0] & 0b01111111,
                 };
                 plaintext_utf.push(utf8_byte);
                 plaintext_utf.append(&mut plaintext);
@@ -464,11 +464,11 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
             }
             let plaintext = plaintext_utf;
 
-            let desc = try!(PayloadDescription::new(version, op.cipher, op.blockmode, None, None));
+            let desc = PayloadDescription::new(version, op.cipher, op.blockmode, None, None)?;
             let mut data = CryptoData::new(version, desc, iv, Vec::new(), Vec::new());
-            let auth = try!(serialize_header(&data));
-            data.ciphertext = try!(low::aes_gcm_encrypt(key.as_slice(), data.iv.as_slice(), plaintext.as_slice(), auth.as_slice()));
-            Ok(try!(serialize(&mut data)))
+            let auth = serialize_header(&data)?;
+            data.ciphertext = low::aes_gcm_encrypt(key.as_slice(), data.iv.as_slice(), plaintext.as_slice(), auth.as_slice())?;
+            Ok(serialize(&mut data)?)
         }
         _ =>  return Err(CryptoError::NotImplemented(format!("mode not implemented: {}-{} (try \"aes-gcm\")", op.cipher, op.blockmode))) ,
     }
@@ -506,8 +506,8 @@ pub fn uuid() -> CResult<String> {
     // generate 15 random bytes, which is exactly what we need for a 36-char
     // UUID (when factoring in the dashes, '4', and the [8,9,a,b] byte). then
     // convert the bytes to hex.
-    let rand = try!(low::to_hex(&try!(low::rand_bytes(15))));
-    let ab89_byte = try!(low::rand_bytes(1))[0];
+    let rand = low::to_hex(&low::rand_bytes(15)?)?;
+    let ab89_byte = low::rand_bytes(1)?[0];
     let yvals = ['8', '9', 'a', 'b'];
     let mut uuid = String::with_capacity(36);
     let mut i = 0;
@@ -550,7 +550,7 @@ pub fn uuid() -> CResult<String> {
 /// just generate the "hash" directly by converting 32 random bytes to a hex
 /// string?
 pub fn random_hash() -> CResult<String> {
-    low::to_hex(&try!(low::rand_bytes(32)))
+    low::to_hex(&low::rand_bytes(32)?)
 }
 
 #[allow(dead_code)]
@@ -660,11 +660,11 @@ fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
 /// Note that the ONLY reason this was included is to maintain backwards compat
 /// with the login system. *NOTHING SHOULD __EVER__ USE VERSION 0 TO ENCRYPT!*
 pub fn encrypt_v0(key: &Vec<u8>, iv: &Vec<u8>, plaintext: &String) -> CResult<String> {
-    let desc = try!(PayloadDescription::from(&[0, 0]));
-    let enc = try!(low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923));
+    let desc = PayloadDescription::from(&[0, 0])?;
+    let enc = low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923)?;
     let data = CryptoData::new(0, desc, iv.clone(), Vec::new(), enc);
-    let serialized = try!(serialize_version_0(&data));
-    Ok(try!(String::from_utf8(serialized)))
+    let serialized = serialize_version_0(&data)?;
+    Ok(String::from_utf8(serialized)?)
 }
 
 #[cfg(test)]

@@ -45,9 +45,9 @@ impl Serialize for Response {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
-        let mut state = try!(serializer.serialize_struct("res", 2));
-        try!(serializer.serialize_struct_elt(&mut state, "e", &self.e));
-        try!(serializer.serialize_struct_elt(&mut state, "d", &self.d));
+        let mut state = serializer.serialize_struct("res", 2)?;
+        serializer.serialize_struct_elt(&mut state, "e", &self.e)?;
+        serializer.serialize_struct_elt(&mut state, "d", &self.d)?;
         serializer.serialize_struct_end(state)
     }
 }
@@ -57,9 +57,9 @@ impl Serialize for Event {
     fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
         where S: Serializer
     {
-        let mut state = try!(serializer.serialize_struct("res", 2));
-        try!(serializer.serialize_struct_elt(&mut state, "e", &self.e));
-        try!(serializer.serialize_struct_elt(&mut state, "d", &self.d));
+        let mut state = serializer.serialize_struct("res", 2)?;
+        serializer.serialize_struct_elt(&mut state, "e", &self.e)?;
+        serializer.serialize_struct_elt(&mut state, "d", &self.d)?;
         serializer.serialize_struct_end(state)
     }
 }
@@ -110,19 +110,19 @@ impl Messenger {
 
     /// Send an event out to our UI thread. Note that this is a static method!
     pub fn event(name: &str, data: Value) -> TResult<()> {
-        let channel: String = try!(config::get(&["messaging", "events"]));
+        let channel: String = config::get(&["messaging", "events"])?;
         let event = Event {
             e: String::from(name),
             d: data,
         };
-        let msg = try!(jedi::stringify(&event));
+        let msg = jedi::stringify(&event)?;
         carrier::send_string(channel.as_str(), msg)
             .map_err(|e| From::from(e))
     }
 
     /// Blocking receive
     pub fn recv(&self) -> TResult<String> {
-        let bytes = try!(carrier::recv(&self.channel_in[..]));
+        let bytes = carrier::recv(&self.channel_in[..])?;
         debug!("messaging: recv: {}", bytes.len());
         String::from_utf8(bytes).map_err(|e| From::from(e))
     }
@@ -130,7 +130,7 @@ impl Messenger {
     #[allow(dead_code)]
     /// Non-blocking receive
     pub fn recv_nb(&self) -> TResult<String> {
-        let maybe_bytes = try!(carrier::recv_nb(&self.channel_in[..]));
+        let maybe_bytes = carrier::recv_nb(&self.channel_in[..])?;
         match maybe_bytes {
             Some(x) => {
                 debug!("messaging: recv: {}", x.len());
@@ -190,7 +190,7 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
 ///
 /// Currently, the implementation relies on polling.
 pub fn start(tx_main: Pipeline) -> TResult<(JoinHandle<()>, Box<Fn() + 'static + Sync + Send>)> {
-    let handle = try!(thread::Builder::new().name(String::from("messaging")).spawn(move || {
+    let handle = thread::Builder::new().name(String::from("messaging")).spawn(move || {
         // create our messenger!
         let mut messenger = Messenger::new();
         info!("messaging::start() -- main loop");
@@ -217,7 +217,7 @@ pub fn start(tx_main: Pipeline) -> TResult<(JoinHandle<()>, Box<Fn() + 'static +
             }
         }
         info!("messaging::start() -- shutting down");
-    }));
+    })?;
     let shutdown_fn = || {
         let messenger = Messenger::new();
         // send out a shutdown signal on the *incoming* channel so the messaging

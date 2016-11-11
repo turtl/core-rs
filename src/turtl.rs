@@ -75,11 +75,11 @@ impl Turtl {
         let num_workers = num_cpus::get() - 1;
 
         let api = Arc::new(Api::new());
-        let data_folder = try!(config::get::<String>(&["data_folder"]));
-        let kv = Arc::new(try!(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())));
+        let data_folder = config::get::<String>(&["data_folder"])?;
+        let kv = Arc::new(Storage::new(&format!("{}/kv.sqlite", &data_folder), jedi::obj())?);
 
         // make sure we have a client id
-        try!(storage::setup_client_id(kv.clone()));
+        storage::setup_client_id(kv.clone())?;
 
         let turtl = Turtl {
             tx_main: tx_main.clone(),
@@ -101,7 +101,7 @@ impl Turtl {
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
     pub fn new_wrap(tx_main: Pipeline) -> TResult<TurtlWrap> {
-        let turtl = Arc::new(try!(Turtl::new(tx_main)));
+        let turtl = Arc::new(Turtl::new(tx_main)?);
         Ok(turtl)
     }
 
@@ -119,7 +119,7 @@ impl Turtl {
             e: 0,
             d: data,
         };
-        let msg = try!(jedi::stringify(&res));
+        let msg = jedi::stringify(&res)?;
         self.remote_send(Some(mid.clone()), msg)
     }
 
@@ -129,7 +129,7 @@ impl Turtl {
             e: 1,
             d: Value::String(format!("{}", err)),
         };
-        let msg = try!(jedi::stringify(&res));
+        let msg = jedi::stringify(&res)?;
         self.remote_send(Some(mid.clone()), msg)
     }
 
@@ -183,10 +183,10 @@ impl Turtl {
     /// we definitely have a Turtl.db object available.
     pub fn start_sync(&self) -> TResult<()> {
         // create the ol' in/out (in/out) db connections for our sync system
-        let db_out = Arc::new(try!(self.create_user_db()));
-        let db_in = Arc::new(try!(self.create_user_db()));
+        let db_out = Arc::new(self.create_user_db()?);
+        let db_in = Arc::new(self.create_user_db()?);
         // start the sync, and save the resulting state into Turtl
-        let sync_state = try!(sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in));
+        let sync_state = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
         {
             let mut state_guard = self.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
@@ -264,8 +264,8 @@ impl Turtl {
 
     /// Create a new per-user database for the current user.
     pub fn create_user_db(&self) -> TResult<Storage> {
-        let db_location = try!(self.get_user_db_location());
-        let dumpy_schema = try!(config::get::<Value>(&["schema"]));
+        let db_location = self.get_user_db_location()?;
+        let dumpy_schema = config::get::<Value>(&["schema"])?;
         Storage::new(&db_location, dumpy_schema)
     }
 
@@ -277,9 +277,9 @@ impl Turtl {
             Some(x) => x,
             None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
         };
-        let data_folder = try!(config::get::<String>(&["data_folder"]));;
-        let api_endpoint = try!(config::get::<String>(&["api", "endpoint"]));
-        let re = try!(Regex::new(r"(?i)[^a-z0-9]"));
+        let data_folder = config::get::<String>(&["data_folder"])?;;
+        let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
+        let re = Regex::new(r"(?i)[^a-z0-9]")?;
         let server = re.replace_all(&api_endpoint, "");
         Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, user_id, server))
     }

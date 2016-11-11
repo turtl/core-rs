@@ -31,10 +31,10 @@ fn load_config() -> TResult<Value> {
         Err(_) => String::from("config.yaml"),
     };
     let path = Path::new(&path_env[..]);
-    let mut file = try!(File::open(&path));
+    let mut file = File::open(&path)?;
     let mut contents = String::new();
-    try!(file.read_to_string(&mut contents));
-    let data: Value = try!(jedi::parse_yaml(&contents));
+    file.read_to_string(&mut contents)?;
+    let data: Value = jedi::parse_yaml(&contents)?;
     Ok(data)
 }
 

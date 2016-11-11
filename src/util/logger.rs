@@ -7,7 +7,7 @@ use ::error::TResult;
 /// a simple wrapper (pretty much direct from documentation) that sets up
 /// logging to STDOUT via fern/log
 pub fn setup_logger() -> TResult<()> {
-    let levelstr: String = try!(config::get(&["loglevel"]));
+    let levelstr: String = config::get(&["loglevel"])?;
     let level = match levelstr.to_lowercase().as_ref() {
         "off" => log::LogLevelFilter::Off,
         "error" => log::LogLevelFilter::Error,
