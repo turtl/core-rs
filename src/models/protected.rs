@@ -28,6 +28,7 @@ use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::crypto::{self, CryptoOp};
+use ::profile::Profile;
 
 /// The Protected trait defines a set of functionality for our models such that
 /// they are able to be properly (de)serialized (including encryption/decryption
@@ -82,11 +83,6 @@ pub trait Protected: Model + fmt::Debug {
     /// Set the model's body data
     fn set_body(&mut self, body: String);
 
-    /// Grab a JSON Value representation of ALL this model's data
-    fn data(&self) -> Value {
-        jedi::to_val(self)
-    }
-
     /// Get a set of fields and return them as a JSON Value
     fn get_fields(&self, fields: &Vec<&str>) -> BTreeMap<String, Value> {
         let mut map: BTreeMap<String, jedi::Value> = BTreeMap::new();
@@ -124,7 +120,6 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab all public fields for this model as a json Value
     ///
     /// NOTE: Don't use this directly. Use `data_for_storage()` instead!
-    /// TODO: prefix with _
     fn _public_data(&self) -> Value {
         self.get_serializable_data(false)
     }
@@ -132,9 +127,13 @@ pub trait Protected: Model + fmt::Debug {
     /// Grab all private fields for this model as a json Value
     ///
     /// NOTE: Don't use this directly. Use `data()` instead!
-    /// TODO: prefix with _
     fn _private_data(&self) -> Value {
         self.get_serializable_data(true)
+    }
+
+    /// Grab a JSON Value representation of ALL this model's data
+    fn data(&self) -> Value {
+        jedi::to_val(self)
     }
 
     /// Grab all public fields for this model as a JSON Value.
@@ -169,6 +168,9 @@ pub trait Protected: Model + fmt::Debug {
     /// It returns the Value of all *public* fields, but with the `body`
     /// populated with the encrypted data.
     fn serialize(&mut self) -> TResult<Value> {
+        if self.key().is_none() {
+            return Err(TError::MissingData(format!("protected.serialize() -- model {:?} missing key", self.id())));
+        }
         try!(self.serialize_submodels());
         let body;
         {
@@ -194,8 +196,11 @@ pub trait Protected: Model + fmt::Debug {
     /// "DeSerializes" a model...takes the `body` field, decrypts it, and sets
     /// the values in the decrypted JSON dump back into the model.
     ///
-    /// It returns the Value of all public fields.
+    /// It returns the Value of all fields.
     fn deserialize(&mut self) -> TResult<Value> {
+        if self.key().is_none() {
+            return Err(TError::MissingData(format!("protected.deserialize() -- model {:?} missing key", self.id())));
+        }
         try!(self.deserialize_submodels());
         let fakeid = String::from("<no id>");
         let json_bytes;
@@ -220,9 +225,16 @@ pub trait Protected: Model + fmt::Debug {
         Ok(self.data())
     }
 
-    fn ensure_key(&mut self) -> Option<&Vec<u8>> {
-        let key = self.key();
-        key
+    fn ensure_key_exists<'a>(&'a mut self, profile: &Profile) -> TResult<&'a Vec<u8>> {
+        Ok(self.key().unwrap())
+        /*
+        match self.key() {
+            Some(x) => Ok(x),
+            None => {
+                Ok()
+            },
+        }
+        */
     }
 }
 

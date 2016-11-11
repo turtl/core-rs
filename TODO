@@ -1,10 +1,10 @@
 models:
-- recursive (de)serialization (ie, Note and Note.File)
-- PGP key generation and encryption
 - key searching (keychain, board.keys, etc)
 - old key format detection
 - generate_subkeys
 - encrypt_key / decrypt_key
+- PGP key generation and encryption
+- move over tests from JS
 
 sync:
 - outgoing file uploads

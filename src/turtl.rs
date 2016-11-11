@@ -16,6 +16,7 @@ use ::error::{TResult, TFutureResult, TError};
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
+use ::profile::Profile;
 use ::models::model::Model;
 use ::models::user::User;
 use ::util::thredder::{Thredder, Pipeline};
@@ -34,6 +35,8 @@ pub struct Turtl {
     pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
     pub user: RwLock<User>,
+    /// Holds the user's data profile (keychain, boards, notes, etc, etc, etc)
+    pub profile: RwLock<Profile>,
     /// Need to do some CPU-intensive work and have a Future finished when it's
     /// done? Send it here! Great for decrypting models.
     pub work: Thredder,
@@ -82,6 +85,7 @@ impl Turtl {
             tx_main: tx_main.clone(),
             events: event::EventEmitter::new(),
             user: RwLock::new(User::new()),
+            profile: RwLock::new(Profile::new()),
             api: api,
             msg: Messenger::new(),
             work: Thredder::new("work", tx_main.clone(), num_workers as u32),

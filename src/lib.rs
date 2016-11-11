@@ -36,6 +36,7 @@ mod crypto;
 #[macro_use] mod sync;
 #[macro_use]
 mod models;
+mod profile;
 mod storage;
 mod dispatch;
 mod turtl;
