@@ -1,5 +1,5 @@
-//! The Profile module exports a struct that is responsible for handling the
-//! user's data (keychain, boards, etc).
+//! The Profile module exports a struct that is responsible for handling and
+//! storing the user's data (keychain, boards, etc) in-memory.
 //!
 //! It only stores data for the keychain, persona (soon deprecated), and boards
 //! (so no note data). The reason is that keychain/boards are useful to keep in
@@ -11,7 +11,7 @@ use ::models::persona::Persona;
 use ::models::board::Board;
 
 pub struct Profile {
-    pub keychain: Vec<Keychain>,
+    pub keychain: Keychain,
     pub boards: Vec<Board>,
     pub persona: Option<Persona>,
 }
@@ -19,7 +19,7 @@ pub struct Profile {
 impl Profile {
     pub fn new() -> Profile {
         Profile {
-            keychain: Vec::new(),
+            keychain: Keychain::new(),
             boards: Vec::new(),
             persona: None,
         }

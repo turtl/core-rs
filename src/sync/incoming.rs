@@ -14,7 +14,7 @@ use ::models;
 
 struct Handlers {
     user: models::user::User,
-    keychain: models::keychain::Keychain,
+    keychain: models::keychain::KeychainEntry,
     persona: models::persona::Persona,
     board: models::board::Board,
     note: models::note::Note,
@@ -50,7 +50,7 @@ impl SyncIncoming {
     pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
-            keychain: models::keychain::Keychain::new(),
+            keychain: models::keychain::KeychainEntry::new(),
             persona: models::persona::Persona::new(),
             board: models::board::Board::new(),
             note: models::note::Note::new(),

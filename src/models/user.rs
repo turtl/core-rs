@@ -6,7 +6,7 @@ use ::error::{TResult, TFutureResult, TError};
 use ::crypto;
 use ::api::Status;
 use ::models::model::Model;
-use ::models::protected::Protected;
+use ::models::protected::{Keyfinder, Protected};
 use ::futures::{self, Future};
 use ::turtl::TurtlWrap;
 use ::api::ApiReq;
@@ -24,6 +24,8 @@ protected!{
 }
 
 make_basic_sync_model!(User);
+
+impl Keyfinder for User {}
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Vec<u8>> {
@@ -43,7 +45,7 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
 }
 
 /// Generate a user's auth token given some variables or something
-fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
+pub fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
     let key_auth = match version {
         0 => {
             let key = generate_key(&username, &password, version, 0)?;

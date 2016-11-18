@@ -1,7 +1,7 @@
 use ::jedi::Value;
 
 use ::models::model::Model;
-use ::models::protected::Protected;
+use ::models::protected::{Keyfinder, Protected};
 
 protected!{
     pub struct Persona {
@@ -16,4 +16,6 @@ protected!{
 }
 
 make_basic_sync_model!(Persona);
+
+impl Keyfinder for Persona {}
 

@@ -1,5 +1,5 @@
 use ::models::model::Model;
-use ::models::protected::Protected;
+use ::models::protected::{Keyfinder, Protected};
 
 protected!{
     pub struct Invite {
@@ -19,4 +19,6 @@ protected!{
 }
 
 make_basic_sync_model!(Invite);
+
+impl Keyfinder for Invite {}
 

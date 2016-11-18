@@ -77,8 +77,8 @@ macro_rules! serializable {
         serializable!([IMPL ($name), ($( $field: $type_ ),*), ($( $unserialized: $unserialized_type ),*), (
             ($(#[$struct_meta])*)
             pub struct $name {
-                $( $unserialized: $unserialized_type, )*
-                $( $field: $type_ ),* ,
+                $( pub $unserialized: $unserialized_type, )*
+                $( pub $field: $type_ ),* ,
             }
         )]);
     };
@@ -93,7 +93,7 @@ macro_rules! serializable {
         serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
             ($(#[$struct_meta])*)
             pub struct $name {
-                $( $field: $type_ ),* ,
+                $( pub $field: $type_ ),* ,
             }
         )]);
     };
@@ -109,8 +109,8 @@ macro_rules! serializable {
         serializable!([IMPL ($name), ($( $field: $type_ ),*), ($( $unserialized: $unserialized_type ),*), (
             ($(#[$struct_meta])*)
             struct $name {
-                $( $unserialized: $unserialized_type, )*
-                $( $field: $type_ ),* ,
+                $( pub $unserialized: $unserialized_type, )*
+                $( pub $field: $type_ ),* ,
             }
         )]);
     };
@@ -125,7 +125,7 @@ macro_rules! serializable {
         serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
             ($(#[$struct_meta])*)
             struct $name {
-                $( $field: $type_ ),* ,
+                $( pub $field: $type_ ),* ,
             }
         )]);
     };

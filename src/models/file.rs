@@ -1,7 +1,7 @@
 use ::jedi::Value;
 
 use ::models::model::Model;
-use ::models::protected::Protected;
+use ::models::protected::{Keyfinder, Protected};
 
 protected!{
     /// Defines the object we find inside of Note.File (a description of the
@@ -28,4 +28,6 @@ protected!{
 }
 
 make_basic_sync_model!(File);
+
+impl Keyfinder for FileData {}
 

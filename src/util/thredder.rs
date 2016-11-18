@@ -19,6 +19,7 @@ use ::turtl::TurtlWrap;
 pub struct Pipeline {
     tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>,
 }
+
 impl Pipeline {
     /// Create a new Pipeline
     pub fn new() -> Pipeline {

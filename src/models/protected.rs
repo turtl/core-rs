@@ -20,15 +20,65 @@
 //! models so they don't go around spraying their private fields into debug
 //! logs.
 
-use std::collections::BTreeMap;
-
+use ::std::collections::{HashMap, BTreeMap};
 use ::std::fmt;
+
 use ::jedi::{self, Value};
+use ::regex::Regex;
 
 use ::error::{TResult, TError};
+use ::turtl::Turtl;
 use ::models::model::Model;
 use ::crypto::{self, CryptoOp};
-use ::profile::Profile;
+use ::models::keychain::Keychain;
+
+/// Detect if a given string is the old v0 format
+pub fn detect_old_format(data: &String) -> TResult<Vec<u8>> {
+    lazy_static! {
+        static ref RE_OLD_FORMAT: Regex = Regex::new(r#":i[0-9a-f]{32}$"#).unwrap();
+    }
+    if RE_OLD_FORMAT.is_match(data) {
+        Ok(Vec::from(data.as_bytes()))
+    } else {
+        Ok(crypto::from_base64(&data)?)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// NOTE: [encrypt|decrypt]_key() do not use async crypto.
+//
+// the rationale behind this is that the data they operate on is predictably
+// small, and therefor has predictable performance.
+//
+// consider these functions conscientious objectors to worker crypto.
+// -----------------------------------------------------------------------------
+/// Decrypt an encrypted key, generally as part of a Protected.keys collection
+pub fn decrypt_key(decrypting_key: &Vec<u8>, encrypted_key: &String) -> TResult<Vec<u8>> {
+    let raw = detect_old_format(encrypted_key)?;
+    let decrypted = crypto::decrypt(decrypting_key, &raw)?;
+    Ok(decrypted)
+}
+
+/// Encrypt a decrypted key, mainly for storage self-decrypting keys with models
+pub fn encrypt_key(encrypting_key: &Vec<u8>, key_to_encrypt: Vec<u8>) -> TResult<String> {
+    let encrypted = crypto::encrypt(encrypting_key, key_to_encrypt, crypto::CryptoOp::new("aes", "gcm")?)?;
+    let converted = crypto::to_base64(&encrypted)?;
+    Ok(converted)
+}
+
+/// Allows a model to expose a key search
+pub trait Keyfinder {
+    /// Grabs a model's key search (if any...most models will just store their
+    /// key in the keychain or the user object). This is mainly used for things
+    /// like Note, which will often search in boards for a key.
+    ///
+    /// Note that we actually use the Keychain object for searching here, which
+    /// is distinct from the original Turtl method of building a separate search
+    /// object. Much cleaner now.
+    fn get_key_search(&self, _: &Turtl) -> Keychain {
+        Keychain::new()
+    }
+}
 
 /// The Protected trait defines a set of functionality for our models such that
 /// they are able to be properly (de)serialized (including encryption/decryption
@@ -76,6 +126,9 @@ pub trait Protected: Model + fmt::Debug {
 
     /// Either grab the existing or generate a new key for this model
     fn generate_key(&mut self) -> TResult<&Vec<u8>>;
+
+    /// Get the model's body data
+    fn get_keys<'a>(&'a self) -> Option<&'a Vec<HashMap<String, String>>>;
 
     /// Get the model's body data
     fn get_body<'a>(&'a self) -> Option<&'a String>;
@@ -224,18 +277,6 @@ pub trait Protected: Model + fmt::Debug {
         self.set_multi_recursive(parsed)?;
         Ok(self.data())
     }
-
-    fn ensure_key_exists<'a>(&'a mut self, profile: &Profile) -> TResult<&'a Vec<u8>> {
-        Ok(self.key().unwrap())
-        /*
-        match self.key() {
-            Some(x) => Ok(x),
-            None => {
-                Ok()
-            },
-        }
-        */
-    }
 }
 
 /// Defines a protected model for us. We give it a model name, a set of public
@@ -299,6 +340,7 @@ macro_rules! protected {
 
                 $( $pub_field: $pub_type, )*
                 $( $priv_field: $priv_type, )*
+                keys: Vec<::std::collections::HashMap<String, String>>,
                 body: String, 
             }
         }
@@ -453,6 +495,13 @@ macro_rules! protected {
                 Ok(self.key().unwrap())
             }
 
+            fn get_keys<'a>(&'a self) -> Option<&'a Vec<::std::collections::HashMap<String, String>>> {
+                match self.keys {
+                    Some(ref x) => Some(x),
+                    None => None,
+                }
+            }
+
             fn get_body<'a>(&'a self) -> Option<&'a String> {
                 match self.body {
                     Some(ref x) => Some(x),
@@ -533,12 +582,12 @@ mod tests {
         dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
             let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
-        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 
     #[test]
@@ -581,7 +630,7 @@ mod tests {
     fn recursive_serialization() {
         let mut junkyard: Junkyard = jedi::parse(&String::from(r#"{"name":"US political system","dog":{"size":69,"name":"Gerard","type":"chowchow","tags":["bites","stubborn","furry"]}}"#)).unwrap();
         assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"size":69},"id":null,"name":"US political system"}"#));
-        assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"id":null,"name":"US political system"}"#));
+        assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"id":null,"keys":null,"name":"US political system"}"#));
         junkyard.generate_key().unwrap();
         junkyard.serialize().unwrap();
 
@@ -599,7 +648,7 @@ mod tests {
         assert_eq!(dog.type_.as_ref().unwrap(), &String::from("chowchow"));
         assert_eq!(dog.size.as_ref().unwrap(), &69);
         dog.body = None;
-        assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"id":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
+        assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
     }
 }
 
