@@ -262,15 +262,15 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => &fakeid,
             };
-            let body = match self.get_body() {
-                Some(x) => crypto::from_base64(x)?,
+            let body: Vec<u8> = match self.get_body() {
+                Some(x) => detect_old_format(&x)?,
                 None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
             };
-            let key = match self.key() {
+            let key: &Vec<u8> = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            json_bytes = crypto::decrypt(&key, &body)?;
+            json_bytes = crypto::decrypt(key, &body)?;
         }
         let json_str = String::from_utf8(json_bytes)?;
         let parsed: Value = jedi::parse(&json_str)?;

@@ -479,7 +479,7 @@ mod tests {
         assert_eq!(profile_guard.keychain.entries.len(), 0);
         drop(profile_guard);
 
-        // emptry keychain...this basically forces the find_model_key() fn to
+        // empty keychain...this basically forces the find_model_key() fn to
         // use the model's get_key_search() function, which is custom for the
         // note type to search based on board keys
         {
