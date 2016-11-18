@@ -1,6 +1,4 @@
 models:
-- generate_subkeys
-- encrypt_key / decrypt_key
 - PGP key generation and encryption
 - move over tests from JS
 
