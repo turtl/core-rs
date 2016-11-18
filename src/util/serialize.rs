@@ -144,8 +144,8 @@ macro_rules! serializable {
             fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
                 where S: ::serde::ser::Serializer
             {
-                let mut state = try!(serializer.serialize_struct(stringify!($name), 1));
-                $( try!(serializer.serialize_struct_elt(&mut state, fix_type!(stringify!($field)), &self.$field)); )*
+                let mut state = serializer.serialize_struct(stringify!($name), 1)?;
+                $( serializer.serialize_struct_elt(&mut state, fix_type!(stringify!($field)), &self.$field)?; )*
                 serializer.serialize_struct_end(state)
             }
         }
@@ -190,14 +190,14 @@ macro_rules! serializable {
                     // just pass down the name in the macro itself, but this is
                     // unwieldy and i'd much rather take the performance hit and
                     // keep the API clean.
-                    let val: Option<String> = try!(visitor.visit_key());
+                    let val: Option<String> = visitor.visit_key()?;
                     match val {
                         Some(x) => {
                             let mut was_set = false;
                             $(
                                 let fieldname = fix_type!(stringify!($field));
                                 if x == fieldname {
-                                    $field = Some(try!(visitor.visit_value()));
+                                    $field = Some(visitor.visit_value()?);
                                     was_set = true;
                                 };
                             )*
@@ -215,11 +215,11 @@ macro_rules! serializable {
                     let $field: $type_ = match $field {
                         Some(x) => x,
                         None => Default::default(),
-                        //None => try!(visitor.missing_field(stringify!($field))),
+                        //None => visitor.missing_field(stringify!($field))$,
                     };
                 )*
 
-                try!(visitor.end());
+                visitor.end()?;
                 Ok($name{
                     $( $field: $field, )*
                     $( $unserialized: Default::default(), )*

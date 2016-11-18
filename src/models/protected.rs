@@ -30,7 +30,7 @@ use ::error::{TResult, TError};
 use ::turtl::Turtl;
 use ::models::model::Model;
 use ::crypto::{self, CryptoOp};
-use ::models::keychain::Keychain;
+use ::models::keychain::{KeyRef, Keychain};
 
 /// Detect if a given string is the old v0 format
 pub fn detect_old_format(data: &String) -> TResult<Vec<u8>> {
@@ -129,6 +129,9 @@ pub trait Protected: Model + fmt::Debug {
 
     /// Get the model's body data
     fn get_keys<'a>(&'a self) -> Option<&'a Vec<HashMap<String, String>>>;
+
+    /// Set the keys for this model
+    fn set_keys(&mut self, keydata: Vec<HashMap<String, String>>);
 
     /// Get the model's body data
     fn get_body<'a>(&'a self) -> Option<&'a String>;
@@ -276,6 +279,24 @@ pub trait Protected: Model + fmt::Debug {
         let parsed: Value = jedi::parse(&json_str)?;
         self.set_multi_recursive(parsed)?;
         Ok(self.data())
+    }
+
+    /// Given a set of keydata, replace the self.keys object
+    fn generate_subkeys(&mut self, keydata: &Vec<KeyRef<Vec<u8>>>) -> TResult<()> {
+        if self.key().is_none() {
+            return Err(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
+        }
+        let model_key = self.key().unwrap().clone();
+        let mut encrypted: Vec<HashMap<String, String>> = Vec::with_capacity(keydata.len());
+        for key in keydata {
+            let enc = encrypt_key(&key.k, model_key.clone())?;
+            let mut hash: HashMap<String, String> = HashMap::with_capacity(2);
+            hash.insert(key.ty.clone(), key.id.clone());
+            hash.insert(String::from("k"), enc);
+            encrypted.push(hash);
+        }
+        self.set_keys(encrypted);
+        Ok(())
     }
 }
 
@@ -439,7 +460,7 @@ macro_rules! protected {
                 $(
                     match self.$submodel_field.as_mut() {
                         Some(ref mut x) => {
-                            try!(x.serialize());
+                            x.serialize()?;
                         },
                         None => {},
                     }
@@ -451,7 +472,7 @@ macro_rules! protected {
                 $(
                     match self.$submodel_field.as_mut() {
                         Some(ref mut x) => {
-                            try!(x.deserialize());
+                            x.deserialize()?;
                         },
                         None => {},
                     }
@@ -474,7 +495,7 @@ macro_rules! protected {
                                 // new instance
                                 self.$submodel_field = Some(::jedi::parse(&String::from("{}")).unwrap());
                             }
-                            try!(self.$submodel_field.as_mut().unwrap().set_multi(x));
+                            self.$submodel_field.as_mut().unwrap().set_multi(x)?;
                         },
                         None => {},
                     }
@@ -488,8 +509,8 @@ macro_rules! protected {
             }
 
             fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {
-                if !self.key().is_some() {
-                    let key = try!(::crypto::random_key());
+                if self.key().is_none() {
+                    let key = ::crypto::random_key()?;
                     self.set_key(Some(key));
                 }
                 Ok(self.key().unwrap())
@@ -500,6 +521,10 @@ macro_rules! protected {
                     Some(ref x) => Some(x),
                     None => None,
                 }
+            }
+
+            fn set_keys(&mut self, keydata: Vec<::std::collections::HashMap<String, String>>) {
+                self.keys = Some(keydata);
             }
 
             fn get_body<'a>(&'a self) -> Option<&'a String> {
@@ -529,6 +554,7 @@ mod tests {
     use ::jedi;
     use ::crypto;
     use ::models::model::Model;
+    use ::models::keychain::KeyRef;
 
     protected!{
         pub struct Dog {
@@ -649,6 +675,21 @@ mod tests {
         assert_eq!(dog.size.as_ref().unwrap(), &69);
         dog.body = None;
         assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
+    }
+
+    #[test]
+    fn generate_subkeys() {
+        let mut dog: Dog = jedi::parse(&String::from(r#"{"size":30,"name":"dog","type":"shiba"}"#)).unwrap();
+        dog.generate_key().unwrap();
+        let mut subkeys: Vec<KeyRef<Vec<u8>>> = Vec::new();
+        let key1 = crypto::from_base64(&String::from("n1OBWSG3LqwqoL/Oo8nyUPJp8fl/8Wig6kWpS45YW1U=")).unwrap();
+        let key2 = crypto::from_base64(&String::from("mbYnVxRr4wJ+Zh0tK96rM9dqveW5efJligps4IHoVW4=")).unwrap();
+        subkeys.push(KeyRef::new(String::from("6969"), String::from("b"), key1));
+        subkeys.push(KeyRef::new(String::from("1234"), String::from("b"), key2));
+        dog.generate_subkeys(&subkeys).unwrap();
+        // not the best test, but whatever. i suppose i could write a base64
+        // regex. feeling lazy tonight.
+        assert_eq!(dog.keys.as_ref().unwrap().len(), 2);
     }
 }
 

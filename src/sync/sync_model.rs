@@ -18,7 +18,7 @@ macro_rules! make_basic_sync_model {
     ($n:ty) => {
         impl ::sync::sync_model::SyncModel for $n {
             fn incoming(&self, db: &::std::sync::Arc<::storage::Storage>, data: ::jedi::Value) -> ::error::TResult<()> {
-                let model: $n = try!(::jedi::from_val(data));
+                let model: $n = ::jedi::from_val(data)?;
                 self.saver(db, &model)
             }
         }

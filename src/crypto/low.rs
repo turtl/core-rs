@@ -216,7 +216,7 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
         Hasher::SHA512 => gcrypt::digest::MD_SHA512,
     };
     let mut result: Vec<u8> = vec![0; keylen];
-    try!(gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..]));
+    gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..])?;
     Ok(result)
 }
 */
