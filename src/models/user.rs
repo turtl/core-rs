@@ -123,7 +123,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             {
                 let ref api = turtl1.api;
                 match api.set_auth(auth.clone()) {
-                    Err(e) => return futures::done::<(), TError>(Err(e)).boxed(),
+                    Err(e) => return FErr!(e),
                     _ => (),
                 }
             }
