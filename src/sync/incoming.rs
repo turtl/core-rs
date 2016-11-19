@@ -7,6 +7,7 @@ use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::util::thredder::Pipeline;
+use ::util::event::Emitter;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::Messenger;
@@ -173,7 +174,10 @@ impl Syncer for SyncIncoming {
             // no sync id ='[ ='[ ='[ ...instead grab the full profile
             None => self.load_full_profile(),
         };
-        Messenger::event(String::from("sync:incoming:init:done").as_str(), jedi::obj())?;
+        // let our Turtl know we're done
+        self.get_tx().next(|turtl| {
+            turtl.events.trigger("sync:incoming:init:done", &jedi::obj());
+        });
         res
     }
 

@@ -21,7 +21,8 @@ use ::profile::Profile;
 use ::models::protected::{self, Keyfinder, Protected};
 use ::models::model::Model;
 use ::models::user::User;
-use ::models::keychain::{self, KeyRef};
+use ::models::board::Board;
+use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
@@ -152,7 +153,7 @@ impl Turtl {
                         let mut db_guard = turtl2.db.write().unwrap();
                         *db_guard = Some(Arc::new(db));
                         drop(db_guard);
-                        futures::finished(()).boxed()
+                        FOk!(())
                     })
                     .boxed()
             })
@@ -169,7 +170,7 @@ impl Turtl {
                 // wipe the user db
                 let mut db_guard = turtl.db.write().unwrap();
                 *db_guard = None;
-                futures::finished(()).boxed()
+                FOk!(())
             })
             .boxed()
     }
@@ -244,6 +245,15 @@ impl Turtl {
                 let guard = sync_state3.read().unwrap();
                 if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
             }, "turtl:sync:resume");
+            let turtl2 = turtl.clone();
+            turtl.events.bind("sync:incoming:init:done", move |_| {
+                turtl2.load_profile()
+                    .or_else(|e| -> TFutureResult<()> {
+                        error!("turtl -- sync:load-profile: problem loading profile: {}", e);
+                        FOk!(())
+                    })
+                    .forget();
+            }, "sync:incoming:init:done");
         });
         Ok(())
     }
@@ -369,6 +379,29 @@ impl Turtl {
             }
         }
         Ok(None)
+    }
+
+    /// Load the profile from disk.
+    ///
+    /// Meaning, we decrypt the keychain, boards, and personas and store them
+    /// in-memory in our `turtl.profile` object.
+    fn load_profile(&self) -> TFutureResult<()> {
+        let user_key = {
+            let user_guard = self.user.read().unwrap();
+            match user_guard.key() {
+                Some(x) => x.clone(),
+                None => return FErr!(TError::MissingData(String::from("turtl.load_profile() -- missing user key"))),
+            }
+        };
+        let db_guard = self.db.write().unwrap();
+        if db_guard.is_none() {
+            return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
+        }
+        let db = db_guard.as_ref().unwrap();
+        let keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
+        let boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
+
+        FOk!(())
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages

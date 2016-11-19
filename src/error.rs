@@ -148,3 +148,17 @@ macro_rules! try_fut {
     }
 }
 
+#[macro_export]
+macro_rules! FOk {
+    ($ex:expr) => {
+        ::futures::finished($ex).boxed();
+    }
+}
+
+#[macro_export]
+macro_rules! FErr {
+    ($ex:expr) => {
+        ::futures::failed(From::from($ex)).boxed();
+    }
+}
+

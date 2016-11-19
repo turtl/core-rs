@@ -1,23 +1,28 @@
-models:
-- PGP key generation and encryption
-- move over tests from JS
-
 sync:
-- outgoing file uploads
-- incoming file downloads
+- load profile (keychain, boards, persona) after initial sync
 - notify UI of API -> core sync
 - notify UI of sync/login status
 - dispatch handlers for UI -> core sync
 - effective way to test sync via tests or at least client?
+- outgoing file uploads
+- incoming file downloads
+
+models:
+- PGP key generation and encryption
+- move over tests from JS
 
 profile:
 - post-load indexing (load all notes and index in-mem via clouseau)
+  - http://stackoverflow.com/questions/2060718/how-do-i-efficiently-do-the-intersection-of-joins-in-sql
+  - http://stackoverflow.com/questions/2000567/sql-n-to-n-matching-multiple-values/2000642#2000642
 - reindex on item change
 - dispatch handlers for grabbing/searching notes
 
 invites/personas:
 - anything special? or will sync+ui notifications handle all this?
 
-general:
+general/future:
 - binary exchange format? MessagePack? JSON requires base64 and is clunky
+- get rid of rust-crypto/gcrypt, replace with either openssl or nettle
+- come up with strategy to deprecate personas
 

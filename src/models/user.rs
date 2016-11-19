@@ -134,7 +134,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
                 let mut user_guard_w = turtl4.user.write().unwrap();
                 user_guard_w.id = match user_id {
                     Value::String(x) => Some(x),
-                    _ => return futures::failed(TError::BadValue(format!("user::try_auth() -- auth was successful, but API returned strange id object: {:?}", user_id))).boxed(),
+                    _ => return FErr!(TError::BadValue(format!("user::try_auth() -- auth was successful, but API returned strange id object: {:?}", user_id))),
                 };
                 user_guard_w.do_login(key, auth);
                 drop(user_guard_w);
@@ -142,7 +142,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
                 user_guard_r.trigger("login", &jedi::obj());
                 drop(user_guard_r);
                 debug!("user::try_auth() -- auth success, logged in");
-                futures::finished(()).boxed()
+                FOk!(())
             }).boxed()
         })
         .or_else(move |err| {
@@ -162,7 +162,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
             if version <= 0 { test_err = Err(()); }
 
             if test_err.is_err() {
-                return futures::failed(err).boxed();
+                return FErr!(err);
             }
             // try again, lower version num
             try_auth(turtl2, username, password, version - 1)
