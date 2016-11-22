@@ -93,7 +93,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             .boxed();
         // join this most recent future with our previous results, throwing out
         // the result values so's not to make the compiler flip its shit
-        final_future = final_future.join(future).map(|x| ()).boxed();
+        final_future = final_future.join(future).map(|_| ()).boxed();
     }
     // return our final result, unwrapping the vec we built from the confines of
     // its concurrent prison before signing off.
@@ -101,7 +101,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
         .and_then(move |_| {
             match Arc::try_unwrap(mapped) {
                 Ok(x) => FOk!(x.into_inner().unwrap()),
-                Err(e) => FErr!(TError::BadValue(String::from("protected::map_deserialize() -- error unwrapping final result from Arc"))),
+                Err(e) => FErr!(TError::BadValue(format!("protected::map_deserialize() -- error unwrapping final result from Arc: {:?}", e))),
             }
         })
         .boxed()

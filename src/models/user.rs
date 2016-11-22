@@ -7,7 +7,7 @@ use ::crypto;
 use ::api::Status;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::futures::{self, Future};
+use ::futures::Future;
 use ::turtl::TurtlWrap;
 use ::api::ApiReq;
 use ::util::event::Emitter;

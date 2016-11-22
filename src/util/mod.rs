@@ -1,8 +1,6 @@
 use ::std::thread;
 use ::std::time::Duration;
 
-use ::error::{TError, TFutureResult};
-
 pub mod logger;
 pub mod thunk;
 pub mod opdata;

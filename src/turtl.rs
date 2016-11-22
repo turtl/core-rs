@@ -5,16 +5,16 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 use ::std::collections::HashMap;
+use ::std::mem;
 
 use ::regex::Regex;
-use ::futures::{self, Future};
+use ::futures::Future;
 use ::num_cpus;
 
 use ::jedi::{self, Value};
 use ::config;
 
 use ::error::{TResult, TFutureResult, TError};
-use ::util;
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -144,6 +144,12 @@ impl Turtl {
         self.remote_send(Some(mid.clone()), msg)
     }
 
+    /// If an error occurs out of band of a request, send an error event
+    pub fn error_event(&self, err: &TError, context: &str) -> TResult<()> {
+        let val = Value::Array(vec![Value::String(String::from(context)), Value::String(format!("{}", err))]);
+        Messenger::event("error", val)
+    }
+
     /// Log a user in
     pub fn login(&self, username: String, password: String) -> TFutureResult<()> {
         self.with_next_fut()
@@ -249,37 +255,23 @@ impl Turtl {
             }, "turtl:sync:resume");
             let turtl2 = turtl.clone();
             turtl.events.bind("sync:incoming:init:done", move |_| {
+                let turtl3 = turtl2.clone();
                 turtl2.load_profile()
-                    .or_else(|e| -> TFutureResult<()> {
+                    .or_else(move |e| -> TFutureResult<()> {
                         error!("turtl -- sync:load-profile: problem loading profile: {}", e);
+                        try_fut!(turtl3.error_event(&e, "load_profile"));
                         FOk!(())
                     })
                     .forget();
             }, "sync:incoming:init:done");
+            turtl.events.bind("profile:loaded", move |_| {
+                match Messenger::event("profile:loaded", jedi::obj()) {
+                    Ok(_) => {},
+                    Err(e) => error!("turtl -- profile:loaded: problem sending event: {}", e),
+                }
+            }, "turtl:profile:loaded");
         });
         Ok(())
-    }
-
-    /// Run the given callback on the next main loop. Essentially gives us a
-    /// setTimeout (if you are familiar). This means we can do something after
-    /// the stack is unwound, but get a fresh Turtl context for our callback.
-    ///
-    /// Very useful for (un)binding events and such while inside of another
-    /// triggered event (which normally deadlocks).
-    ///
-    /// Also note that this doesn't call the `cb` with `Turtl`, but instead
-    /// `TurtlWrap` which is also nice because we can `.clone()` it and use it
-    /// in multiple callbacks.
-    pub fn with_next<F>(&self, cb: F)
-        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
-    {
-        self.tx_main.next(cb);
-    }
-
-    /// Return a future that resolves with a TurtlWrap object on the next main
-    /// loop.
-    pub fn with_next_fut(&self) -> TFutureResult<TurtlWrap> {
-        self.tx_main.next_fut()
     }
 
     /// Create a new per-user database for the current user.
@@ -440,15 +432,79 @@ impl Turtl {
         }
         let db = db_guard.as_ref().unwrap();
         let mut keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
-        let boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
-        let personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
+        let mut boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
+        let mut personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
 
+        // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
-        protected::map_deserialize(self, keychain)
-            .and_then(|keychain: Vec<KeychainEntry>| -> TFutureResult<()> {
-                FOk!(())
+
+        // grab a clonable turtl context
+        self.with_next_fut()
+            .and_then(move |turtl| {
+                let turtl1 = turtl.clone();
+                let turtl2 = turtl.clone();
+                let turtl3 = turtl.clone();
+                // decrypt the keychain
+                protected::map_deserialize(turtl.as_ref(), keychain)
+                    .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Board>> {
+                        // set the keychain into the profile
+                        let mut profile_guard = turtl1.profile.write().unwrap();
+                        profile_guard.keychain.entries = keychain;
+                        drop(profile_guard);
+
+                        // now decrypt the boards
+                        for board in &mut boards { try_fut!(turtl1.find_model_key(board)); }
+                        protected::map_deserialize(turtl1.as_ref(), boards)
+                    })
+                    .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
+                        // set the keychain into the profile
+                        let mut profile_guard = turtl2.profile.write().unwrap();
+                        profile_guard.boards = boards;
+                        drop(profile_guard);
+
+                        // now decrypt the personas
+                        for persona in &mut personas { persona.set_key(Some(user_key.clone())); }
+                        protected::map_deserialize(turtl2.as_ref(), personas)
+                    })
+                    .and_then(move |mut personas: Vec<Persona>| -> TFutureResult<()> {
+                        // set the keychain into the profile
+                        let mut profile_guard = turtl3.profile.write().unwrap();
+                        if personas.len() > 0 {
+                            let mut into = Persona::new();
+                            mem::swap(&mut into, &mut personas[0]);
+                            profile_guard.persona = Some(into);
+                        } else {
+                            profile_guard.persona = None;
+                        }
+                        drop(profile_guard);
+                        turtl3.events.trigger("profile:loaded", &jedi::obj());
+                        FOk!(())
+                    })
+                    .boxed()
             })
             .boxed()
+    }
+
+    /// Run the given callback on the next main loop. Essentially gives us a
+    /// setTimeout (if you are familiar). This means we can do something after
+    /// the stack is unwound, but get a fresh Turtl context for our callback.
+    ///
+    /// Very useful for (un)binding events and such while inside of another
+    /// triggered event (which normally deadlocks).
+    ///
+    /// Also note that this doesn't call the `cb` with `Turtl`, but instead
+    /// `TurtlWrap` which is also nice because we can `.clone()` it and use it
+    /// in multiple callbacks.
+    pub fn with_next<F>(&self, cb: F)
+        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
+    {
+        self.tx_main.next(cb);
+    }
+
+    /// Return a future that resolves with a TurtlWrap object on the next main
+    /// loop.
+    pub fn with_next_fut(&self) -> TFutureResult<TurtlWrap> {
+        self.tx_main.next_fut()
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages
