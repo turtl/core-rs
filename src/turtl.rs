@@ -14,6 +14,7 @@ use ::jedi::{self, Value};
 use ::config;
 
 use ::error::{TResult, TFutureResult, TError};
+use ::util;
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -22,6 +23,7 @@ use ::models::protected::{self, Keyfinder, Protected};
 use ::models::model::Model;
 use ::models::user::User;
 use ::models::board::Board;
+use ::models::persona::Persona;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
@@ -307,16 +309,24 @@ impl Turtl {
 
     /// Given a model that we suspect we have a key entry for, find that model's
     /// key, set it into the model, and return a reference to the key.
-    pub fn find_model_key<'a, T>(&self, model: &'a mut T) -> TResult<Option<&'a Vec<u8>>>
+    pub fn find_model_key<'a, T>(&self, model: &'a mut T) -> TResult<()>
         where T: Protected + Keyfinder
     {
-        fn found_key<'a, T>(model: &'a mut T, key: Vec<u8>) -> TResult<Option<&'a Vec<u8>>>
+        // check if we have a key already. if you're trying to re-find the key,
+        // make sure you model.set_key(None) before calling...
+        if model.key().is_some() { return Ok(()); }
+
+        let notfound = Err(TError::NotFound(format!("key for {:?} not found", model.id())));
+
+        /// A standard "found a key" function
+        fn found_key<'a, T>(model: &'a mut T, key: Vec<u8>) -> TResult<()>
             where T: Protected
         {
             model.set_key(Some(key));
-            return Ok(model.key());
+            return Ok(());
         }
 
+        // fyi, this read lock is going to be open until we return
         let profile_guard = self.profile.read().unwrap();
         let ref keychain = profile_guard.keychain;
 
@@ -329,7 +339,17 @@ impl Turtl {
             }
         }
 
+        // ok, next up is to generate our search. essentially, each model passes
+        // back a separate keychain that we can use to find keys within. for
+        // instance, a Note might hand back a keychain with entries for each
+        // Board it's in, allowing us to decrypt the Note's key from its
+        // Note.keys collection using one of the board keys. note (ha ha) that
+        // unlike the old Turtl, if we find a key and it *fails*, we just keep
+        // looping until we find a working match or we exhaust our search. this
+        // is a much more versatile way of decrypting data.
         let mut search = model.get_key_search(self);
+
+        // grab the model.keys collection.
         let encrypted_keys: Vec<HashMap<String, String>> = match model.get_keys() {
             Some(x) => x.clone(),
             None => Vec::new(),
@@ -337,8 +357,10 @@ impl Turtl {
 
         // if we have no self-decrypting keys, and there's no keychain entry for
         // this model, then there's no way we can find a key
-        if encrypted_keys.len() == 0 { return Ok(None); }
+        if encrypted_keys.len() == 0 { return notfound; }
 
+        // turn model.keys into a KeyRef collection, and filter out crappy
+        // entries
         let encrypted_keys: Vec<KeyRef<String>> = encrypted_keys.into_iter()
             .map(|entry| keychain::keyref_from_encrypted(&entry))
             .filter(|x| x.k != "")
@@ -352,7 +374,24 @@ impl Turtl {
             }
         }
 
-        // no direct keychain entry
+        // let the hunt begin! basically, we loop over each model.keys entry and
+        // try to find that key item's key and use it to decrypt the model's
+        // key. i know this sounds confusing, so take the following:
+        //
+        //   model:
+        //     body: <encrypted data>
+        //     keys:
+        //       - {board: 1234, key: "b50942fe"}
+        //   board:
+        //     id: 1234
+        //     key: "696969"
+        // 
+        // so our `model` has a key, "b50942fe". this key is encrypted, and the
+        // only way to decrypt it is to use the board's key. so in the following
+        // search, we look for a key for board 1234 both in our user's global
+        // keychain *and* in the model's search keychain. if we find a match, we
+        // can use the board's key, "696969", to decrypt the model's key entry
+        // "b50942fe" into the model's actual key.
         for keyref in &encrypted_keys {
             let ref encrypted_key = keyref.k;
             let ref object_id = keyref.id;
@@ -373,19 +412,21 @@ impl Turtl {
             let matches = search.find_all_entries(object_id);
             for key in &matches {
                 match protected::decrypt_key(key, encrypted_key) {
+                    // it worked!
                     Ok(key) => return found_key(model, key),
+                    // got an error...oh well. MUSH
                     Err(_) => {},
                 }
             }
         }
-        Ok(None)
+        notfound
     }
 
     /// Load the profile from disk.
     ///
     /// Meaning, we decrypt the keychain, boards, and personas and store them
     /// in-memory in our `turtl.profile` object.
-    fn load_profile(&self) -> TFutureResult<()> {
+    pub fn load_profile(&self) -> TFutureResult<()> {
         let user_key = {
             let user_guard = self.user.read().unwrap();
             match user_guard.key() {
@@ -398,10 +439,16 @@ impl Turtl {
             return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
+        let mut keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
         let boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
+        let personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
 
-        FOk!(())
+        for key in &mut keychain { key.set_key(Some(user_key.clone())); }
+        protected::map_deserialize(self, keychain)
+            .and_then(|keychain: Vec<KeychainEntry>| -> TFutureResult<()> {
+                FOk!(())
+            })
+            .boxed()
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages
@@ -475,7 +522,8 @@ mod tests {
 
         // see if we can find the note as a direct entry
         {
-            let found_key = turtl.find_model_key(&mut note).unwrap().unwrap();
+            turtl.find_model_key(&mut note).unwrap();
+            let found_key = note.key().unwrap();
             assert_eq!(found_key, &note_key);
         }
 
@@ -490,7 +538,8 @@ mod tests {
         // we should be able to find the board's key, if we found the note's key
         // but it's good to be sure
         {
-            let found_key = turtl.find_model_key(&mut board).unwrap().unwrap();
+            turtl.find_model_key(&mut board).unwrap();
+            let found_key = board.key().unwrap();
             assert_eq!(found_key, &board_key);
         }
 
@@ -499,7 +548,8 @@ mod tests {
         // searches the keychain for it's note.keys.b record, and uses that key
         // (if found) to decrypt its own key
         {
-            let found_key = turtl.find_model_key(&mut note).unwrap().unwrap();
+            turtl.find_model_key(&mut note).unwrap();
+            let found_key = note.key().unwrap();
             assert_eq!(found_key, &note_key);
         }
 
@@ -516,10 +566,10 @@ mod tests {
         // use the model's get_key_search() function, which is custom for the
         // note type to search based on board keys
         {
-            let found_key = turtl.find_model_key(&mut note).unwrap().unwrap();
+            turtl.find_model_key(&mut note).unwrap();
+            let found_key = note.key().unwrap();
             assert_eq!(found_key, &note_key);
         }
-
     }
 }
 

@@ -22,11 +22,14 @@
 
 use ::std::collections::{HashMap, BTreeMap};
 use ::std::fmt;
+use ::std::sync::{Arc, RwLock};
+
+use ::regex::Regex;
+use ::futures::Future;
 
 use ::jedi::{self, Value};
-use ::regex::Regex;
 
-use ::error::{TResult, TError};
+use ::error::{TResult, TError, TFutureResult};
 use ::turtl::Turtl;
 use ::models::model::Model;
 use ::crypto::{self, CryptoOp};
@@ -65,6 +68,45 @@ pub fn encrypt_key(encrypting_key: &Vec<u8>, key_to_encrypt: Vec<u8>) -> TResult
     let converted = crypto::to_base64(&encrypted)?;
     Ok(converted)
 }
+// -----------------------------------------------------------------------------
+
+/// Map over a vec of Protected models, deserialize()ing them in worker threads
+/// and returning the resulting deserialized models as a vec in a future result
+pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
+    where T: Protected + Send + Sync + 'static
+{
+    // this will hold the final result
+    let mapped = Arc::new(RwLock::new(Vec::new()));
+    // this gets replaced, iteratively, as we loop
+    let mut final_future = FOk!(());
+    let ref work = turtl.work;
+    for mut model in vec {
+        let pusher = mapped.clone();
+        // run the mapping, and store the resulting future
+        let future = work.run(move || model.deserialize())
+            .and_then(move |item_mapped: Value| -> TFutureResult<()> {
+                // push our mapped item into our final vec
+                let mut vec_guard = pusher.write().unwrap();
+                vec_guard.push(try_fut!(jedi::from_val(item_mapped)));
+                FOk!(())
+            })
+            .boxed();
+        // join this most recent future with our previous results, throwing out
+        // the result values so's not to make the compiler flip its shit
+        final_future = final_future.join(future).map(|x| ()).boxed();
+    }
+    // return our final result, unwrapping the vec we built from the confines of
+    // its concurrent prison before signing off.
+    final_future
+        .and_then(move |_| {
+            match Arc::try_unwrap(mapped) {
+                Ok(x) => FOk!(x.into_inner().unwrap()),
+                Err(e) => FErr!(TError::BadValue(String::from("protected::map_deserialize() -- error unwrapping final result from Arc"))),
+            }
+        })
+        .boxed()
+}
+
 
 /// Allows a model to expose a key search
 pub trait Keyfinder {
