@@ -431,17 +431,12 @@ impl Turtl {
         if db_guard.is_none() {
             return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
-        println!("- grabbing db");
         let db = db_guard.as_ref().unwrap();
-        println!("- loading keychain");
         let mut keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
-        println!("- loading boards");
         let mut boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
-        println!("- loading personas");
         let mut personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
 
         // keychain entries are always encrypted with the user's key
-        println!("- find keychain keys");
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
 
         // grab a clonable turtl context
@@ -451,36 +446,28 @@ impl Turtl {
                 let turtl2 = turtl.clone();
                 let turtl3 = turtl.clone();
                 // decrypt the keychain
-                println!("- map_deser keychain");
                 protected::map_deserialize(turtl.as_ref(), keychain)
                     .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Board>> {
-                        println!("- mapped! setting keychain into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl1.profile.write().unwrap();
                         profile_guard.keychain.entries = keychain;
                         drop(profile_guard);
 
                         // now decrypt the boards
-                        println!("- find board keys");
                         for board in &mut boards { try_fut!(turtl1.find_model_key(board)); }
-                        println!("- map_deser boards");
                         protected::map_deserialize(turtl1.as_ref(), boards)
                     })
                     .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
-                        println!("- mapped! setting boards into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl2.profile.write().unwrap();
                         profile_guard.boards = boards;
                         drop(profile_guard);
 
                         // now decrypt the personas
-                        println!("- find persona keys");
                         for persona in &mut personas { persona.set_key(Some(user_key.clone())); }
-                        println!("- map_deser personas");
                         protected::map_deserialize(turtl2.as_ref(), personas)
                     })
                     .and_then(move |mut personas: Vec<Persona>| -> TFutureResult<()> {
-                        println!("- mapped! setting personas into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl3.profile.write().unwrap();
                         if personas.len() > 0 {
@@ -491,7 +478,6 @@ impl Turtl {
                             profile_guard.persona = None;
                         }
                         drop(profile_guard);
-                        println!("- trigger loaded");
                         turtl3.events.trigger("profile:loaded", &jedi::obj());
                         FOk!(())
                     })
@@ -668,10 +654,12 @@ mod tests {
             let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"body":"AAUCAAFqj/FnzMVEFk20i0f4d/NY6TTMZ9jrCRWhheu2LJ/oRZrnWkLBMDmHV6EkOiPWNYjJYw+7mLhqR/mXbZrdx/CMv/DhrNCBwnc1BvepuusmwS6NIfeO","type":"board","item_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab72a77af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0699c"},{"body":"AAUCAAGOoWbH1M2YgBdt6eaF8nlk7Dt52mpPp2ZF7uixMkVgk3h50kqKdBoIbkcQz3NqUQLO9XECPnwDLaxgZKhLk3IW+hzxYVEuzQxE93J/F6m6patHmftN","type":"note","item_id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab7e3e8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069bd"},{"body":"AAUCAAEr0ky+zDcT0G+3lmZdGNsn6YXZZFDGreDzzESc8wOO+/tHmCK3RxV6aAEhtvCKSwsCbq/oylRIYZoGv1uwAnu7zQOAkzBH6ioStNYN/bmmsXlSllUK","type":"note","item_id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c","user_id":"5833e49e2b13751ab303f8b1","id":"01588abc24a8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a2d"},{"body":"AAUCAAETC4kRU+NGZUE+0lXt2wXP+ENkOPOzZ5X39j6bRkeNbz0VY4+VwIkGjYLJh21+urVOmUWan7S9QE9z3U+jJV5qZZqCDHnwJjMg7ztDQmfqa/aLoS1k","type":"note","item_id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56","user_id":"5833e49e2b13751ab303f8b1","id":"01588abd7fe5af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a61"}]"#)).unwrap();
             let personas: Vec<Persona> = jedi::parse(&String::from(r#"[{"user_id":"5833e49e2b13751ab303f8b1","email":"andrew+test@turtl.it","name":"Andrew Lyon","body":"AAUCAAGFeUICKVgIylzweY9G5cPDPrqueWkVcgcqrZXtpuWYtxZOoO8sa6pyKuzoSD487saGXSqxogx0Yza61rRMeM/gH9BUq5WCw+RnOxVOBuAzD0POEbJ2yWRHgGUGPBzD7WZvkWiMxfbncB5mEujv0103ZuGAoeA0d1cxKQfx8Ja1ZyZXGHv5","id":"01588ab51d51af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba068e5","pubkey":"so then, remember, *i* said... \"later dudes!!\""}]"#)).unwrap();
             let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"body":"AAUCAAHEPNXZVpgP84GRN3xDVnlcMyo4DGiloJmJHLBkasXVFlQHsH3BUkmAA17rVkpZF9R/KBE7jwwBIW7O","keys":[],"user_id":"5833e49e2b13751ab303f8b1","id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"}]"#)).unwrap();
+            let notes: Vec<Note> = jedi::parse(&String::from(r#"[{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"mod":1479796124,"keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1"},{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"mod":1479796345,"keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAH4KSWqjSD6EYN0pUpjAufMhj/fQm1cfxaWlG9Q1+iedpR/efWGVTMFVwtUNLsM99Q1lmNz5+fmPqCAcdf2GRhyOw=="}],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAFyUX8bZlt7RaG8EZTIk0nVWUtqcOqI68DIX1gqhh6FEyArPwJRLCEgjQeERsVyegBf4kGQWTxcxE9FA59h/Dmb0yCtzYVlsKUB63I0FT3ZHbFSorNHisJI/ue+msiHarz5J2fQ9sYUAwHuPf7kVbIibVB6RkbZMHLcLCVHl8zoBP50YEoX+8j7S3MkIqqsfoU/txtprQXzkk2NNF5rm5C8KtAWSdaa/dz6ZObi/En/+2SknjJDMYh0JbCxM39wHoC48zP0gygy9PBuAql3Qp5FIVYXljWjwR9+7i17KsTreOa5gxMhRu3snMCefnhCbbnUnJWU0Vl4hbr+tvEfE+JJxxAvAq6t","id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c"},{"boards":[],"mod":1479796427,"keys":[],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAFUt4EhaYvKe4zpbr6rnEeswZPtm98RVLdHn+Dml+RX8cTZpfJHuWUA7vkybCgI7RnLL+hvYODO9H25jtfgLBfx/IfSOO1AGC+q4vqZQptpxCkbkeLsKuZFp0JPMBKuz9xX5/MX/lFtk4OvVZhlo0f/XdPoVD+F36zw6gizO2oLYkFbQWiA5oOAQtuJtuRO41pyDh76ciCULgqTjChqO3c8hpaoklk=","id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56"}]"#)).unwrap();
 
             for entry in &keychain { db.save(entry).unwrap(); }
             for persona in &personas { db.save(persona).unwrap(); }
             for board in &boards { db.save(board).unwrap(); }
+            for note in &notes { db.save(note).unwrap(); }
         }
         turtl.db = RwLock::new(Some(db));
 
@@ -683,6 +671,8 @@ mod tests {
             .and_then(move |_| {
                 let profile_guard = turtl2.profile.read().unwrap();
                 assert_eq!(profile_guard.keychain.entries.len(), 4);
+                assert_eq!(profile_guard.boards.len(), 1);
+                assert!(profile_guard.persona.is_some());
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {

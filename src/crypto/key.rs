@@ -30,6 +30,7 @@ impl Key {
     }
 
     /// Consume this Key and convert it into its underlying data
+    #[allow(dead_code)]
     pub fn into_data(self) -> Vec<u8> {
         self.data
     }
