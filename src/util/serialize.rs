@@ -10,17 +10,6 @@
 //! ...lame. Surely, the next version of Rust will support this, rendering all
 //! my code useless. But hey, it's a really good test of my macro skills.
 
-/// Define a generic struct we can use for deserialization.
-///
-/// Note that we actually need the T specifier so we can implement this struct
-/// for other structs without causing duplicate errors. This class would not
-/// be needed in the first place if we had gensyms or ident concatenation in
-/// rust macros. sigh. That said, the `value` field is only ever initialized
-/// with a `None` value, so this shouldn't be too expensive.
-pub struct TurtlVisitor<'a, T: 'a> {
-    pub value: Option<&'a T>
-}
-
 /// Given a &str value, checks to see if it matches "type_", and if so returns
 /// "type" instead. It also does the reverse: if it detects "type", it returns
 /// "type_". That way we can use this 
@@ -98,38 +87,6 @@ macro_rules! serializable {
         )]);
     };
 
-    // no pub w/ unserialized
-    (
-        $(#[$struct_meta:meta])*
-        struct $name:ident {
-            ($( $unserialized:ident: $unserialized_type:ty ),*)
-            $( $field:ident: $type_:ty, )*
-        }
-    ) => {
-        serializable!([IMPL ($name), ($( $field: $type_ ),*), ($( $unserialized: $unserialized_type ),*), (
-            ($(#[$struct_meta])*)
-            struct $name {
-                $( pub $unserialized: $unserialized_type, )*
-                $( pub $field: $type_ ),* ,
-            }
-        )]);
-    };
-
-    // no pub w/ no unserialized
-    (
-        $(#[$struct_meta:meta])*
-        struct $name:ident {
-            $( $field:ident: $type_:ty, )*
-        }
-    ) => {
-        serializable!([IMPL ($name), ($( $field: $type_ ),*), (), (
-            ($(#[$struct_meta])*)
-            struct $name {
-                $( pub $field: $type_ ),* ,
-            }
-        )]);
-    };
-
     // implementation
     (
         [IMPL ( $name:ident ), ( $( $field:ident: $type_:ty ),* ), ($( $unserialized:ident: $unserialized_type:ty ),*), (
@@ -154,76 +111,54 @@ macro_rules! serializable {
             fn deserialize<D>(deserializer: &mut D) -> Result<$name, D::Error>
                 where D: ::serde::de::Deserializer
             {
-                static FIELDS: &'static [&'static str] = &[ $( stringify!($field) ),* ];
-                let val: Option<&$name> = None;
-                deserializer.deserialize_struct(stringify!($name), FIELDS, ::util::serialize::TurtlVisitor { value: val })
-            }
-        }
+                /// Define a generic struct we can use for deserialization.
+                struct Visit0r { }
 
-        impl<'a> ::serde::de::Visitor for ::util::serialize::TurtlVisitor<'a, $name> {
-            type Value = $name;
+                impl ::serde::de::Visitor for Visit0r {
+                    type Value = $name;
 
-            fn visit_map<V>(&mut self, mut visitor: V) -> Result<$name, V::Error>
-                where V: ::serde::de::MapVisitor
-            {
-                $( let mut $field: Option<$type_> = None; )*
-                loop {
-                    // note that instead of using an Enum to ENUMerate our
-                    // struct fields, we just use strings. this makes things a
-                    // lot easier to macro away (since we don't have to deal
-                    // with passing enum names down or putting things in sub
-                    // modules and digging into them to get the struct we want).
-                    //
-                    // if rust's macro system were a bit more robust, ie we
-                    // could do things like
-                    //
-                    // macro_rules! shit {
-                    //     ($name:ident) => {
-                    //         enum FieldsFor${name} {}
-                    //         ...
-                    //     }
-                    // }
-                    //
-                    // (or if we just had gensyms)
-                    //
-                    // none of this would be necessary. as mentioned, we could
-                    // just pass down the name in the macro itself, but this is
-                    // unwieldy and i'd much rather take the performance hit and
-                    // keep the API clean.
-                    let val: Option<String> = visitor.visit_key()?;
-                    match val {
-                        Some(x) => {
-                            let mut was_set = false;
-                            $(
-                                let fieldname = fix_type!(stringify!($field));
-                                if x == fieldname {
-                                    $field = Some(visitor.visit_value()?);
-                                    was_set = true;
-                                };
-                            )*
-                            // serde doesn't like when you don't actually use a
-                            // value. it won't stand for it.
-                            if !was_set {
-                                drop(visitor.visit_value::<()>());
-                            }
-                        },
-                        None => break,
-                    };
+                    fn visit_map<V>(&mut self, mut visitor: V) -> Result<$name, V::Error>
+                        where V: ::serde::de::MapVisitor
+                    {
+                        $( let mut $field: Option<$type_> = None; )*
+                        loop {
+                            let fieldname: Option<String> = visitor.visit_key()?;
+                            match fieldname {
+                                Some(x) => {
+                                    let mut was_set = false;
+                                    $(
+                                        let fieldname = fix_type!(stringify!($field));
+                                        if x == fieldname {
+                                            $field = Some(visitor.visit_value()?);
+                                            was_set = true;
+                                        }
+                                    )*
+                                    // serde doesn't like when you don't actually use a
+                                    // value. it won't stand for it.
+                                    if !was_set { drop(visitor.visit_value::<()>()); }
+                                },
+                                None => break,
+                            };
+                        }
+
+                        $(
+                            let $field: $type_ = match $field {
+                                Some(x) => x,
+                                None => Default::default(),
+                                //None => visitor.missing_field(stringify!($field))$,
+                            };
+                        )*
+
+                        visitor.end()?;
+                        Ok($name {
+                            $( $field: $field, )*
+                            $( $unserialized: Default::default(), )*
+                        })
+                    }
                 }
 
-                $(
-                    let $field: $type_ = match $field {
-                        Some(x) => x,
-                        None => Default::default(),
-                        //None => visitor.missing_field(stringify!($field))$,
-                    };
-                )*
-
-                visitor.end()?;
-                Ok($name{
-                    $( $field: $field, )*
-                    $( $unserialized: Default::default(), )*
-                })
+                static FIELDS: &'static [&'static str] = &[ $( stringify!($field) ),* ];
+                deserializer.deserialize_struct(stringify!($name), FIELDS, Visit0r { })
             }
         }
     }
@@ -260,7 +195,7 @@ mod tests {
 
     serializable!{
         // let's make a recursive structure!
-        struct CrapTree {
+        pub struct CrapTree {
             name: String,
             crappers: Vec<LittleCrapper>,
         }
@@ -308,5 +243,35 @@ mod tests {
         let json_str = jedi::stringify(&tree).unwrap();
         assert_eq!(json_str, r#"{"name":"tree of crappy wisdom","crappers":[{"name":"harold","type":"sneak","location":"here"},{"name":"sandra","type":"sneak","location":"the bed"}]}"#);
     }
+
+    // NOTE: was never able to make this work. there are two approaches:
+    //
+    // 1. detect the type of the field via a macro, and use it to run the ser
+    //    op in the deserialize fn itself. this breaks because the :ty macro
+    //    keyword doesn't expand when used within another macro. we can fix this
+    //    by using a token tree (:tt) however using token trees within ser!
+    //    doesn't work because of rust's greedy token parser (one again,
+    //    https://github.com/rust-lang/rust/issues/24827 rears its ugly head).
+    //    not gonna happen.
+    // 2. use a trait to run the conversion. i got pretty far with this, but
+    //    realized it would take each field knowing not just the final type it
+    //    is, but the type it would convert from. without the intermediary type
+    //    info, visitor.visit_value() just returns (). lame
+    //
+    // so, fails all around.
+    /*
+    #[test]
+    fn handles_base64() {
+        serializable! {
+            pub struct BinaryBunny {
+                name: String,
+                data: Vec<u8>,
+            }
+        }
+
+        let bunny: BinaryBunny = jedi::parse(&String::from(r#"{"name":"flirty","data":"SSBIQVZFIE5PIEJST1RIRVI="}"#)).unwrap();
+        assert_eq!(String::from_utf8(bunny.data.clone()).unwrap(), "I HAVE NO BROTHER");
+    }
+    */
 }
 
