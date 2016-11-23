@@ -60,7 +60,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: RwLock<Option<Arc<Storage>>>,
+    pub db: RwLock<Option<Storage>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (Personas (soon to be deprecated) and
@@ -159,7 +159,7 @@ impl Turtl {
                     .and_then(move |_| -> TFutureResult<()> {
                         let db = try_fut!(turtl2.create_user_db());
                         let mut db_guard = turtl2.db.write().unwrap();
-                        *db_guard = Some(Arc::new(db));
+                        *db_guard = Some(db);
                         drop(db_guard);
                         FOk!(())
                     })
@@ -430,12 +430,17 @@ impl Turtl {
         if db_guard.is_none() {
             return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
+        println!("- grabbing db");
         let db = db_guard.as_ref().unwrap();
+        println!("- loading keychain");
         let mut keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
+        println!("- loading boards");
         let mut boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
+        println!("- loading personas");
         let mut personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
 
         // keychain entries are always encrypted with the user's key
+        println!("- find keychain keys");
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
 
         // grab a clonable turtl context
@@ -445,28 +450,36 @@ impl Turtl {
                 let turtl2 = turtl.clone();
                 let turtl3 = turtl.clone();
                 // decrypt the keychain
+                println!("- map_deser keychain");
                 protected::map_deserialize(turtl.as_ref(), keychain)
                     .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Board>> {
+                        println!("- mapped! setting keychain into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl1.profile.write().unwrap();
                         profile_guard.keychain.entries = keychain;
                         drop(profile_guard);
 
                         // now decrypt the boards
+                        println!("- find board keys");
                         for board in &mut boards { try_fut!(turtl1.find_model_key(board)); }
+                        println!("- map_deser boards");
                         protected::map_deserialize(turtl1.as_ref(), boards)
                     })
                     .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
+                        println!("- mapped! setting boards into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl2.profile.write().unwrap();
                         profile_guard.boards = boards;
                         drop(profile_guard);
 
                         // now decrypt the personas
+                        println!("- find persona keys");
                         for persona in &mut personas { persona.set_key(Some(user_key.clone())); }
+                        println!("- map_deser personas");
                         protected::map_deserialize(turtl2.as_ref(), personas)
                     })
                     .and_then(move |mut personas: Vec<Persona>| -> TFutureResult<()> {
+                        println!("- mapped! setting personas into profile");
                         // set the keychain into the profile
                         let mut profile_guard = turtl3.profile.write().unwrap();
                         if personas.len() > 0 {
@@ -477,6 +490,7 @@ impl Turtl {
                             profile_guard.persona = None;
                         }
                         drop(profile_guard);
+                        println!("- trigger loaded");
                         turtl3.events.trigger("profile:loaded", &jedi::obj());
                         FOk!(())
                     })
@@ -523,16 +537,24 @@ impl Drop for Turtl {
 mod tests {
     use super::*;
 
+    use ::std::sync::{Arc, RwLock};
+
+    use ::futures::Future;
+
     use ::config;
     use ::jedi;
 
+    use ::error::TFutureResult;
     use ::crypto;
     use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
-    use ::models::user;
+    use ::models::keychain::KeychainEntry;
+    use ::models::user::{self, User};
     use ::models::note::Note;
     use ::models::board::Board;
+    use ::models::persona::Persona;
+    use ::util::stopper::Stopper;
 
     protected!{
         pub struct Dog {
@@ -625,6 +647,54 @@ mod tests {
             turtl.find_model_key(&mut note).unwrap();
             let found_key = note.key().unwrap();
             assert_eq!(found_key, &note_key);
+        }
+    }
+
+    #[test]
+    fn loads_profile() {
+        let stop = Arc::new(Stopper::new());
+        stop.set(true);
+
+        let user_key = crypto::from_base64(&String::from("EdFc225pnjtUVaH+YMApzOWL0OgFTsjn5YvPWbvpN1Q=")).unwrap();
+        let mut user: User = jedi::parse(&String::from(r#"{"keys":[],"settings":[{"key":"keys"}],"id":"5833e49e2b13751ab303f8b1","storage":104857600}"#)).unwrap();
+        user.do_login(user_key, String::from("AAUCAAEyYzY1ZjFkNjY5MzQ2YmE20RFp2guhlblECuXJF9/W/ylBaN15MOM5tjse8SlvL70my76088X8Fkkg08WOqkfY3+jyICX34UI9rWQfvWMxbTFbXZpJfDuWD+j+PExpCRp2PXZqmB14VhttKxGipxSe3gCl5ZHVjH4gWWw9CbD+1I0Agm0nul6MkzEdCQIByIB5yduoozthduWlpsJgz5nYOUo="));
+
+        let mut turtl = with_test(false);
+        turtl.user = RwLock::new(user);
+
+        let db = turtl.create_user_db().unwrap();
+        {
+            let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"body":"AAUCAAFqj/FnzMVEFk20i0f4d/NY6TTMZ9jrCRWhheu2LJ/oRZrnWkLBMDmHV6EkOiPWNYjJYw+7mLhqR/mXbZrdx/CMv/DhrNCBwnc1BvepuusmwS6NIfeO","type":"board","item_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab72a77af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0699c"},{"body":"AAUCAAGOoWbH1M2YgBdt6eaF8nlk7Dt52mpPp2ZF7uixMkVgk3h50kqKdBoIbkcQz3NqUQLO9XECPnwDLaxgZKhLk3IW+hzxYVEuzQxE93J/F6m6patHmftN","type":"note","item_id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab7e3e8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069bd"},{"body":"AAUCAAEr0ky+zDcT0G+3lmZdGNsn6YXZZFDGreDzzESc8wOO+/tHmCK3RxV6aAEhtvCKSwsCbq/oylRIYZoGv1uwAnu7zQOAkzBH6ioStNYN/bmmsXlSllUK","type":"note","item_id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c","user_id":"5833e49e2b13751ab303f8b1","id":"01588abc24a8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a2d"},{"body":"AAUCAAETC4kRU+NGZUE+0lXt2wXP+ENkOPOzZ5X39j6bRkeNbz0VY4+VwIkGjYLJh21+urVOmUWan7S9QE9z3U+jJV5qZZqCDHnwJjMg7ztDQmfqa/aLoS1k","type":"note","item_id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56","user_id":"5833e49e2b13751ab303f8b1","id":"01588abd7fe5af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a61"}]"#)).unwrap();
+            let personas: Vec<Persona> = jedi::parse(&String::from(r#"[{"user_id":"5833e49e2b13751ab303f8b1","email":"andrew+test@turtl.it","name":"Andrew Lyon","body":"AAUCAAGFeUICKVgIylzweY9G5cPDPrqueWkVcgcqrZXtpuWYtxZOoO8sa6pyKuzoSD487saGXSqxogx0Yza61rRMeM/gH9BUq5WCw+RnOxVOBuAzD0POEbJ2yWRHgGUGPBzD7WZvkWiMxfbncB5mEujv0103ZuGAoeA0d1cxKQfx8Ja1ZyZXGHv5","id":"01588ab51d51af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba068e5","pubkey":"so then, remember, *i* said... \"later dudes!!\""}]"#)).unwrap();
+            let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"body":"AAUCAAHEPNXZVpgP84GRN3xDVnlcMyo4DGiloJmJHLBkasXVFlQHsH3BUkmAA17rVkpZF9R/KBE7jwwBIW7O","keys":[],"user_id":"5833e49e2b13751ab303f8b1","id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"}]"#)).unwrap();
+
+            for entry in &keychain { db.save(entry).unwrap(); }
+            for persona in &personas { db.save(persona).unwrap(); }
+            for board in &boards { db.save(board).unwrap(); }
+        }
+        turtl.db = RwLock::new(Some(db));
+
+        let turtl = Arc::new(turtl);
+        let ref tx_main = turtl.tx_main;
+        let turtl2 = turtl.clone();
+        let stop2 = stop.clone();
+        turtl.load_profile()
+            .and_then(move |_| {
+                let profile_guard = turtl2.profile.read().unwrap();
+                assert_eq!(profile_guard.keychain.entries.len(), 4);
+                FOk!(())
+            })
+            .or_else(|e| -> TFutureResult<()> {
+                panic!("load profile error: {}", e);
+            })
+            .then(move |_| -> TFutureResult<()> {
+                stop2.set(false);
+                FOk!(())
+            })
+            .forget();
+        while stop.running() {
+            let handler = tx_main.pop();
+            handler.call_box(turtl.clone());
         }
     }
 }
