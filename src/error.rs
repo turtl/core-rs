@@ -116,6 +116,7 @@ impl From<Box<::std::any::Any + Send>> for TError {
 }
 from_err!(::fern::InitError);
 from_err!(::carrier::CError);
+from_err!(::clouseau::CError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);

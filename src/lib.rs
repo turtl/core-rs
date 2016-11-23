@@ -1,4 +1,5 @@
 extern crate carrier;
+extern crate clouseau;
 extern crate config;
 extern crate crossbeam;
 extern crate crypto as rust_crypto;
@@ -38,6 +39,7 @@ mod crypto;
 mod models;
 mod profile;
 mod storage;
+mod search;
 mod dispatch;
 mod turtl;
 

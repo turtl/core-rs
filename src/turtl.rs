@@ -29,6 +29,7 @@ use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
+use ::search::Search;
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
@@ -67,6 +68,9 @@ pub struct Turtl {
     /// handle that need API access (Personas (soon to be deprecated) and
     /// invites come to mind). Use sparingly.
     pub api: Arc<Api>,
+    /// Holds our heroic search object, used to index/find our notes once the
+    /// profile is loaded.
+    pub search: RwLock<Option<Search>>,
     /// Sync system configuration (shared state with the sync system).
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Holds our sync state data
@@ -104,6 +108,7 @@ impl Turtl {
             async: Thredder::new("async", tx_main.clone(), 2),
             kv: kv,
             db: RwLock::new(None),
+            search: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
         };
@@ -260,7 +265,9 @@ impl Turtl {
                 let turtl4 = turtl2.clone();
                 turtl2.load_profile()
                     .and_then(move |_| {
-                        turtl3.index_notes()
+                        // TODO: build
+                        //turtl3.index_notes()
+                        FOk!(())
                     })
                     .or_else(move |e| -> TFutureResult<()> {
                         error!("turtl -- sync:load-profile: problem loading profile: {}", e);
