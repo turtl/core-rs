@@ -1,5 +1,4 @@
 sync:
-- load profile (keychain, boards, persona) after initial sync
 - notify UI of API -> core sync
 - notify UI of sync/login status
 - dispatch handlers for UI -> core sync
@@ -8,7 +7,6 @@ sync:
 - incoming file downloads
 
 models:
-- create `Key` type to replace ambiguous Vec<u8>
 - PGP key generation and encryption
 - move over tests from JS
 
