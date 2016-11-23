@@ -4,6 +4,13 @@
 //! acting as a simplified interface specifically for indexing and retrieving
 //! objects.
 
+#[macro_use]
+extern crate quick_error;
+extern crate rusqlite;
+
+use ::std::error::Error;
+
+use ::rusqlite::Connection;
 
 //                          ....~?=:::~M8.+$??Z$DON??=Z+,+=~.....               
 //           ...           ....~?IZO==+:=$+:+:?.$8=I.$~::+:=~....               
@@ -57,232 +64,90 @@
 //         ....ZMMNMMNNDNNNDDDO8==..,IDZ=DD.,,..,,...,.~,......,,~==+=:.........
 //          .. .ZDO8DNDNMNNNNNNNOI+=~IIN8N..:,.......,,=~,......,,,:::,.........
 
-extern crate bloomfilter;
-extern crate stem;
-extern crate regex;
-#[macro_use]
-extern crate lazy_static;
-
-use ::std::collections::HashMap;
-use ::bloomfilter::Bloom;
-use ::regex::Regex;
-
-/// Pre-process a string for indexing.
-fn process(body: &String) -> String {
-    lazy_static!{
-        static ref RE_RM_PUNCT: Regex = Regex::new(r#"[-[:punct:]_\.,/\?\\<>{}\[\]!@#$%^&*\(\)"':;+=|]"#).unwrap();
-    }
-    let body = body.to_lowercase();
-    let body = RE_RM_PUNCT.replace_all(&body[..], " ");
-    body
-}
-
-/// Returns `true` if the given word is a stopword.
-/// TODO: add complete list
-/// TODO: multiple languages
-fn is_stopword(word: &String) -> bool {
-    match word.as_ref() {
-        "and" | "or" | "the" | "but" => true,
-        _ => false
-    }
-}
-
-/// Runs a word through the stemmer
-fn stem(word: &String) -> Result<String, &str> {
-    stem::get(word)
-}
-
-/// Defines a full-text index.
-pub struct FtIndex {
-    map: HashMap<String, Bloom>,
-}
-
-impl FtIndex {
-    /// Create a new Index with the given fulltext index estimated total doc
-    /// count.
-    pub fn new() -> FtIndex {
-        FtIndex {
-            map: HashMap::new(),
+quick_error! {
+    #[derive(Debug)]
+    pub enum CError {
+        Boxed(err: Box<Error + Send + Sync>) {
+            description(err.description())
+            display("error: {}", err)
         }
     }
-
-    pub fn with_capacity(num_docs: usize) -> FtIndex {
-        FtIndex {
-            map: HashMap::with_capacity(num_docs),
-        }
-    }
-
-    /// Index a document, also specifying a bit size for our bloom filter.
-    ///
-    /// The more bits, the more accuracy, but more memory is used for the index.
-    /// If you get too many false positives, set the number higher.
-    ///
-    /// Splits `body` up by whitespace characters, filters out stopwords,
-    /// attemps to find roots of words, and indexes each of the words.
-    pub fn index_error_rate(&mut self, id: &String, num_items: usize, error_rate: f64, body: &String) {
-        let mut index = Bloom::new_for_fp_rate(num_items, error_rate);
-        for word in process(body).split_whitespace() {
-            let word = String::from(word);
-            if is_stopword(&word) { continue; }
-            let stemmed = match stem(&word) {
-                Ok(stemmed) => stemmed,
-                Err(_) => word,
-            };
-            index.set(&stemmed);
-        }
-        self.map.insert(id.clone(), index);
-    }
-
-    /// Index a document.
-    ///
-    /// Splits `body` up by whitespace characters, filters out stopwords,
-    /// attemps to find roots of words, and indexes each of the words.
-    ///
-    /// This creates a bloom filter with a default size of 20000 bits. If you
-    /// need more accuracy, use `FtIndex::index_bitlength()`.
-    pub fn index(&mut self, id: &String, body: &String) {
-        self.index_error_rate(id, 20000, 0.01, body);
-    }
-
-    /// Search our index, returning a vector of all ids that match *all* words.
-    ///
-    /// This stems all our search words to make searching a bit more fuzzy.
-    pub fn search(&self, search: &String) -> Vec<String> {
-        let mut ids: HashMap<&String, ()> = HashMap::with_capacity(self.map.len());
-        for key in self.map.keys() {
-            ids.insert(key, ());
-        }
-        // process our search, split all the words into a collection, and stem
-        // each word
-        let words = process(search)
-            .split_whitespace()
-            .map(|x| {
-                match stem(&String::from(x)) {
-                    Ok(stemmed) => stemmed,
-                    Err(_) => String::from(x),
-                }
-            })
-            .collect::<Vec<_>>();
-        // loop over each indexed document. we're going to run an AND search on
-        // each one, whittling down the result set as we go forward.
-        for (id, idx) in &self.map {
-            let mut contains_all = true;
-            for word in &words {
-                // if we don't have this word, mark the search filed for this
-                // doc and break the loop
-                if !idx.check(word) {
-                    contains_all = false;
-                    break;
-                }
-            }
-
-            // if this document doesn't contain all the given search terms, we
-            // remove it from the results
-            if !contains_all {
-                ids.remove(id);
+}
+/// A macro to make it easy to create From impls for CError
+macro_rules! from_err {
+    ($t:ty) => (
+        impl From<$t> for CError {
+            fn from(err: $t) -> CError {
+                CError::Boxed(Box::new(err))
             }
         }
-        // create our result vector
-        let mut res: Vec<String> = ids.keys()
-            .map(|x| String::from(&x[..]))
-            .collect::<Vec<String>>();
-        // and sort it so we get consistent results
-        res.sort();
-        res
+    )
+}
+from_err!(::rusqlite::Error);
+type CResult<T> = Result<T, CError>;
+
+/// The Clouseau object stores all of our search state
+pub struct Clouseau {
+    /// Holds our sqlite connection DUUHHHHH
+    pub conn: Connection,
+}
+
+impl Clouseau {
+    /// Ahh, yees, the old "create a new struct and return it by value" ploy.
+    /// Very clever. Very clever indeed!
+    pub fn new() -> CResult<Clouseau> {
+        let conn = Connection::open_in_memory()?;
+        conn.execute("CREATE VIRTUAL TABLE objects USING fts4 (id VARCHAR(64) PRIMARY KEY, content TEXT)", &[])?;
+        Ok(Clouseau {
+            conn: conn,
+        })
+    }
+
+    /// Index an object
+    pub fn index(&self, id: &String, body: &String) -> CResult<()> {
+        self.conn.execute("INSERT OR REPLACE INTO objects (id, content) VALUES (?, ?)", &[id, body])?;
+        Ok(())
+    }
+
+    /// Find things in the index
+    pub fn find(&self, terms: &String) -> CResult<Vec<String>> {
+        let mut query = self.conn.prepare("SELECT id FROM objects WHERE content match ? ORDER BY id ASC")?;
+        let rows = query.query_map(&[terms], |row| {
+            row.get("id")
+        })?;
+        let mut ids: Vec<String> = Vec::new();
+        for id in rows { ids.push(id?) }
+        Ok(ids)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::{stem};
 
-    /// used for testing index memory consumption
-    #[allow(dead_code)]
-    fn sleep(millis: u64) {
-        ::std::thread::sleep(::std::time::Duration::from_millis(millis));
-    }
-
-    lazy_static! {
-        static ref EMPTY: Vec<String> = Vec::new();
+    #[test]
+    fn sqlite_has_ft() {
+        Clouseau::new().unwrap();
     }
 
     #[test]
-    fn stemmer() {
-        assert_eq!(stem(&String::from("wonder")).unwrap(), "wonder");
-        assert_eq!(stem(&String::from("ears")).unwrap(), "ear");
-        assert_eq!(stem(&String::from("filled")).unwrap(), "fill");
-        assert_eq!(stem(&String::from("fill")).unwrap(), "fill");
-    }
+    fn searches_things() {
+        let search = Clouseau::new().unwrap();
+        search.index(&String::from("1111"), &String::from("what's the ugliest part of your body?")).unwrap();
+        search.index(&String::from("1234"), &String::from("some say your nose")).unwrap();
+        search.index(&String::from("2222"), &String::from("some say your toes")).unwrap();
+        search.index(&String::from("3333"), &String::from("i think it's your mind")).unwrap();
 
-    #[test]
-    fn index_search() {
-        let mut idx = FtIndex::with_capacity(10);
-
-        idx.index(&String::from("1234"), &String::from("i sometimes Wonder why my ears are Upside down, only to realize that my entire body is as well."));
-        idx.index(&String::from("6969"), &String::from("do you ever wonder why dogs bark?"));
-        idx.index(&String::from("4444"), &String::from("sometimes i have no idea where i am"));
-        idx.index(&String::from("2233"), &String::from("i wake up in strange places"));
-
-        // single-match
-        assert_eq!(idx.search(&String::from("wonder ears")), vec!["1234"]);
-
-        // multi-match
-        assert_eq!(idx.search(&String::from("wonder")), vec!["1234", "6969"]);
-        assert_eq!(idx.search(&String::from("sometimes")), vec!["1234", "4444"]);
-
-        // no match. obivously, not exhaustive.
-        let words = vec![
-            "ship",
-            "miner",
-            "indicative",
-            "frosty",
-            "elected",
-            "major",
-            "cave",
-            "forest",
-            "happy",
-            "intense",
-            "poppycock",
-            "undulate",
-            "42",
-            "nose",
-            "surf",
-            "jackass",
-            "lollipop",
-            "given",
-            "antidisestablishmentarianism",
-            "community",
-            "frightful",
-            "disingenuous",
-            "enabler",
-            "thieves",
-            "ring",
-            "elephant",
-            "tropical",
-        ];
-        for word in words {
-            assert_eq!(idx.search(&String::from(word)), *EMPTY);
-        }
-
-        // stemming
-        assert_eq!(idx.search(&String::from("sometime")), vec!["1234", "4444"]);
-        assert_eq!(idx.search(&String::from("dog")), vec!["6969"]);
-        assert_eq!(idx.search(&String::from("bodies")), vec!["1234"]);
-
-        // punctuation removal
-        assert_eq!(idx.search(&String::from("bark")), vec!["6969"]);
-
-        // reindexing a document
-        assert_eq!(idx.search(&String::from("strange places")), vec!["2233"]);
-        idx.index(&String::from("2233"), &String::from("i wake up in normal places"));
-        assert_eq!(idx.search(&String::from("strange places")), *EMPTY);
-        assert_eq!(idx.search(&String::from("normal places")), vec!["2233"]);
+        assert_eq!(search.find(&String::from("some say")).unwrap(), vec![String::from("1234"), String::from("2222")]);
+        assert_eq!(search.find(&String::from("your some")).unwrap(), vec![String::from("1234"), String::from("2222")]);
+        assert_eq!(search.find(&String::from("ugliest")).unwrap(), vec![String::from("1111")]);
+        assert_eq!(search.find(&String::from("ugliest mind")).unwrap().len(), 0);
+        assert_eq!(search.find(&String::from(r#""your some""#)).unwrap().len(), 0);
     }
 
     #[test]
     fn index_large_document() {
-        let mut idx = FtIndex::with_capacity(10);
+        let search = Clouseau::new().unwrap();
         let body = String::from(r#"
 YES A LOGO!!!!! That is what my website is missing!! I knew something was off
 about my website, but I simple could not put my finger on it. I will certainly
@@ -436,12 +301,14 @@ cheese in Bartholomew's pocket, I no longer can eat cheese.
 
 Please consider this when sending the logos I have requested.
         "#);
-        idx.index(&String::from("1234"), &body);
-        idx.index(&String::from("6969"), &String::from("ohhh. sayy. gnn dwnn blackbear"));
+        search.index(&String::from("1234"), &body).unwrap();
+        search.index(&String::from("6969"), &String::from("ohhh. sayy. gnn dwnn blackbear")).unwrap();
 
-        assert_eq!(idx.search(&String::from("certainly hillside creature")), vec!["1234"]);
-        assert_eq!(idx.search(&String::from("dogs shadowy running policemen grotesque coupon trash waving")), vec!["1234"]);
-        assert_eq!(idx.search(&String::from("blackbear")), vec!["6969"]);
-        assert_eq!(idx.search(&String::from("sand")), *EMPTY);
+        assert_eq!(search.find(&String::from(r#""website is missing""#)).unwrap(), vec!["1234"]);
+        assert_eq!(search.find(&String::from(r#""website iz missing""#)).unwrap().len(), 0);
+        assert_eq!(search.find(&String::from("certainly hillside creature")).unwrap(), vec!["1234"]);
+        assert_eq!(search.find(&String::from("dogs shadowy running policemen grotesque coupon trash waving")).unwrap(), vec!["1234"]);
+        assert_eq!(search.find(&String::from("blackbear")).unwrap(), vec!["6969"]);
+        assert_eq!(search.find(&String::from("sand")).unwrap().len(), 0);
     }
 }
