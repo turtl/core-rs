@@ -25,6 +25,7 @@ protected!{
     }
 }
 
+make_storable!(Note, "notes");
 make_basic_sync_model!(Note);
 
 impl Keyfinder for Note {

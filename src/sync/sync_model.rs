@@ -12,6 +12,7 @@ use ::jedi::Value;
 use ::error::TResult;
 use ::storage::Storage;
 use ::models::protected::Protected;
+use ::models::storable::Storable;
 
 #[macro_export]
 macro_rules! make_basic_sync_model {
@@ -25,10 +26,10 @@ macro_rules! make_basic_sync_model {
     }
 }
 
-pub trait SyncModel {
+pub trait SyncModel: Storable {
     /// A default save functoin that takes a db/model and saves it.
     fn saver<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
-        where T: Protected
+        where T: Protected + Storable
     {
         db.save(model)
     }

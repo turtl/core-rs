@@ -15,6 +15,7 @@ protected!{
     }
 }
 
+make_storable!(Persona, "personas");
 make_basic_sync_model!(Persona);
 
 impl Keyfinder for Persona {}

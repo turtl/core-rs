@@ -10,6 +10,7 @@ use ::dumpy::Dumpy;
 
 use ::models::model::{self};
 use ::models::protected::Protected;
+use ::models::storable::Storable;
 
 use ::error::{TResult, TError};
 
@@ -65,19 +66,19 @@ impl Storage {
 
     /// Save a model to our db. Make sure it's serialized before handing it in.
     pub fn save<T>(&self, model: &T) -> TResult<()>
-        where T: Protected
+        where T: Protected + Storable
     {
         let modeldata = model.data_for_storage();
         let table = model.table();
 
-        self.dumpy.store(&self.conn, &table, &modeldata)
+        self.dumpy.store(&self.conn, &String::from(table), &modeldata)
             .map_err(|e| From::from(e))
     }
 
     /// Get a model's data by id
     #[allow(dead_code)]
     pub fn get<T>(&self, table: &str, id: &String) -> TResult<Option<T>>
-        where T: Protected
+        where T: Protected + Storable
     {
         match self.dumpy.get(&self.conn, &String::from(table), id) {
             Ok(x) => match x {
@@ -96,14 +97,14 @@ impl Storage {
 
     /// Delete a model from storage
     pub fn delete<T>(&self, model: &T) -> TResult<()>
-        where T: Protected
+        where T: Protected + Storable
     {
         let id = match model.id() {
             Some(x) => x,
             None => return Err(TError::MissingField(String::from("storage::destroy() -- missing `id` field"))),
         };
         let table = model.table();
-        self.dumpy.delete(&self.conn, &table, &id)
+        self.dumpy.delete(&self.conn, &String::from(table), &id)
             .map_err(|e| From::from(e))
     }
 
@@ -150,6 +151,7 @@ mod tests {
             ( )
         }
     }
+    make_storable!(Shiba, "shibas");
 
     fn pretest() -> Storage {
         model::set_client_id(String::from("c0f4c762af6c42e4079cced2dfe16b4d010b190ad75ade9d83ff8cee0e96586d")).unwrap();

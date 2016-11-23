@@ -18,6 +18,7 @@ protected!{
     }
 }
 
+make_storable!(Invite, "invites");
 make_basic_sync_model!(Invite);
 
 impl Keyfinder for Invite {}

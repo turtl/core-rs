@@ -19,7 +19,7 @@ struct Handlers {
     persona: models::persona::Persona,
     board: models::board::Board,
     note: models::note::Note,
-    file: models::file::File,
+    file: models::file::FileData,
     invite: models::invite::Invite,
 }
 
@@ -55,7 +55,7 @@ impl SyncIncoming {
             persona: models::persona::Persona::new(),
             board: models::board::Board::new(),
             note: models::note::Note::new(),
-            file: models::file::File::new(),
+            file: models::file::FileData::new(),
             invite: models::invite::Invite::new(),
         };
 

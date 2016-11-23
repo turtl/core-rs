@@ -66,6 +66,7 @@ protected!{
     }
 }
 
+make_storable!(KeychainEntry, "keychain");
 make_basic_sync_model!(KeychainEntry);
 
 pub struct Keychain {

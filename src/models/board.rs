@@ -17,6 +17,7 @@ protected!{
     }
 }
 
+make_storable!(Board, "boards");
 make_basic_sync_model!(Board);
 
 impl Keyfinder for Board {

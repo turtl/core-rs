@@ -75,6 +75,7 @@ pub fn encrypt_key(encrypting_key: &Vec<u8>, key_to_encrypt: Vec<u8>) -> TResult
 pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     where T: Protected + Send + Sync + 'static
 {
+    println!("- mapper: start");
     // this will hold the final result
     let mapped = Arc::new(RwLock::new(Vec::new()));
     // this gets replaced, iteratively, as we loop
@@ -83,8 +84,10 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     for mut model in vec {
         let pusher = mapped.clone();
         // run the mapping, and store the resulting future
+        println!("- mapper: starting work on model");
         let future = work.run(move || model.deserialize())
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
+                println!("- mapper: work done, pushing model into final");
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
                 vec_guard.push(try_fut!(jedi::from_val(item_mapped)));
@@ -99,6 +102,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     // its concurrent prison before signing off.
     final_future
         .and_then(move |_| {
+            println!("- mapper: unwrapping final");
             match Arc::try_unwrap(mapped) {
                 Ok(x) => FOk!(x.into_inner().unwrap()),
                 Err(e) => FErr!(TError::BadValue(format!("protected::map_deserialize() -- error unwrapping final result from Arc: {:?}", e))),
@@ -162,9 +166,6 @@ pub trait Protected: Model + fmt::Debug {
 
     /// Like Model::set_multi(), but sets data into submodels
     fn set_multi_recursive(&mut self, data: ::jedi::Value) -> TResult<()>;
-
-    /// Grab the name of this model's table
-    fn table(&self) -> String;
 
     /// Either grab the existing or generate a new key for this model
     fn generate_key(&mut self) -> TResult<&Vec<u8>>;
@@ -301,8 +302,7 @@ pub trait Protected: Model + fmt::Debug {
         }
         self.deserialize_submodels()?;
         let fakeid = String::from("<no id>");
-        let json_bytes;
-        {
+        let json_bytes = {
             let id = match self.id() {
                 Some(x) => x,
                 None => &fakeid,
@@ -315,11 +315,14 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            json_bytes = crypto::decrypt(key, &body)?;
-        }
+            crypto::decrypt(key, &body)?
+        };
         let json_str = String::from_utf8(json_bytes)?;
+        println!("- deser: got json: {}", json_str);
         let parsed: Value = jedi::parse(&json_str)?;
+        println!("- deser: parsed");
         self.set_multi_recursive(parsed)?;
+        println!("- deser: set_multi complete");
         Ok(self.data())
     }
 
@@ -522,7 +525,6 @@ macro_rules! protected {
                 Ok(())
             }
 
-            // override model::Model to handle submodels
             #[allow(unused_mut)]
             fn set_multi_recursive(&mut self, data: ::jedi::Value) -> ::error::TResult<()> {
                 let mut hash = match data {
@@ -543,11 +545,6 @@ macro_rules! protected {
                     }
                 )*
                 self.set_multi(::jedi::Value::Object(hash))
-            }
-
-            // TODO: change to &'static str?? why is this a string??
-            fn table(&self) -> String {
-                String::from(stringify!($name)).to_lowercase()
             }
 
             fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {

@@ -27,7 +27,8 @@ protected!{
     }
 }
 
-make_basic_sync_model!(File);
+make_storable!(FileData, "files");
+make_basic_sync_model!(FileData);
 
 impl Keyfinder for FileData {}
 

@@ -15,7 +15,7 @@ use ::util::event::Emitter;
 protected!{
     pub struct User {
         ( storage: i64 ),
-        ( settings: String ),
+        ( settings: Value ),
         (
             auth: Option<String>,
             logged_in: bool
@@ -23,6 +23,7 @@ protected!{
     }
 }
 
+make_storable!(User, "users");
 make_basic_sync_model!(User);
 
 impl Keyfinder for User {}

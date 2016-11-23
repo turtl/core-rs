@@ -5,6 +5,8 @@
 pub mod model;
 #[macro_use]
 pub mod protected;
+#[macro_use]
+pub mod storable;
 pub mod user;
 pub mod keychain;
 pub mod persona;
