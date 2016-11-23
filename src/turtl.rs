@@ -15,6 +15,7 @@ use ::jedi::{self, Value};
 use ::config;
 
 use ::error::{TResult, TFutureResult, TError};
+use ::crypto::Key;
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -311,7 +312,7 @@ impl Turtl {
         let notfound = Err(TError::NotFound(format!("key for {:?} not found", model.id())));
 
         /// A standard "found a key" function
-        fn found_key<'a, T>(model: &'a mut T, key: Vec<u8>) -> TResult<()>
+        fn found_key<'a, T>(model: &'a mut T, key: Key) -> TResult<()>
             where T: Protected
         {
             model.set_key(Some(key));
@@ -545,7 +546,7 @@ mod tests {
     use ::jedi;
 
     use ::error::TFutureResult;
-    use ::crypto;
+    use ::crypto::{self, Key};
     use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
@@ -580,8 +581,8 @@ mod tests {
 
     #[test]
     fn finding_keys() {
-        let note_key = crypto::from_base64(&String::from("eVWebXDGbqzDCaYeiRVsZEHsdT5WXVDnL/DdmlbqN2c=")).unwrap();
-        let board_key = crypto::from_base64(&String::from("BkRzt6lu4YoTS9opB96c072y+kt+evtXv90+ZXHfsG8=")).unwrap();
+        let note_key = Key::new(crypto::from_base64(&String::from("eVWebXDGbqzDCaYeiRVsZEHsdT5WXVDnL/DdmlbqN2c=")).unwrap());
+        let board_key = Key::new(crypto::from_base64(&String::from("BkRzt6lu4YoTS9opB96c072y+kt+evtXv90+ZXHfsG8=")).unwrap());
         let enc_board = String::from(r#"{"body":"AAUCAAHeI0ysDNAenXpPAlOwQmmHzNWcohaCSmRXOPiRGVojaylzimiohTBSG2DyPnfsSXBl+LfxXhA=","keys":[],"user_id":"5244679b2b1375384f0000bc","id":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"}"#);
         let enc_note = String::from(r#"{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"mod":1479425965,"keys":[{"b":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","k":"AAUCAAECDLI141jXNUwVadmvUuxXYtWZ+JL7450VjH1JURk0UigiIB2TQ2f5KiDGqZKUoHyxFXCaAeorkaXKxCaAqicISg=="}],"user_id":"5244679b2b1375384f0000bc","body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"}"#);
         let mut board: Board = jedi::parse(&enc_board).unwrap();
@@ -655,7 +656,7 @@ mod tests {
         let stop = Arc::new(Stopper::new());
         stop.set(true);
 
-        let user_key = crypto::from_base64(&String::from("EdFc225pnjtUVaH+YMApzOWL0OgFTsjn5YvPWbvpN1Q=")).unwrap();
+        let user_key = Key::new(crypto::from_base64(&String::from("EdFc225pnjtUVaH+YMApzOWL0OgFTsjn5YvPWbvpN1Q=")).unwrap());
         let mut user: User = jedi::parse(&String::from(r#"{"keys":[],"settings":[{"key":"keys"}],"id":"5833e49e2b13751ab303f8b1","storage":104857600}"#)).unwrap();
         user.do_login(user_key, String::from("AAUCAAEyYzY1ZjFkNjY5MzQ2YmE20RFp2guhlblECuXJF9/W/ylBaN15MOM5tjse8SlvL70my76088X8Fkkg08WOqkfY3+jyICX34UI9rWQfvWMxbTFbXZpJfDuWD+j+PExpCRp2PXZqmB14VhttKxGipxSe3gCl5ZHVjH4gWWw9CbD+1I0Agm0nul6MkzEdCQIByIB5yduoozthduWlpsJgz5nYOUo="));
 

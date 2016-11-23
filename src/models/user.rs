@@ -3,7 +3,7 @@ use ::std::collections::HashMap;
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TFutureResult, TError};
-use ::crypto;
+use ::crypto::{self, Key};
 use ::api::Status;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
@@ -29,8 +29,8 @@ make_basic_sync_model!(User);
 impl Keyfinder for User {}
 
 /// Generate a user's key given some variables or something
-fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Vec<u8>> {
-    let key: Vec<u8> = match version {
+fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Key> {
+    let key: Key = match version {
         0 => {
             let mut salt = String::from(&username[..]);
             salt.push_str(":a_pinch_of_salt");  // and laughter too
@@ -46,7 +46,7 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
 }
 
 /// Generate a user's auth token given some variables or something
-pub fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Vec<u8>, String)> {
+pub fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Key, String)> {
     let key_auth = match version {
         0 => {
             let key = generate_key(&username, &password, version, 0)?;
@@ -97,7 +97,7 @@ fn use_code(username: &String, password: &String) -> TResult<()> {
     }, "user:growl");
     user.unbind("growl", "user:growl");
     let key = crypto::gen_key(crypto::Hasher::SHA256, password, username.as_bytes(), 100000)?;
-    let key2 = crypto::random_key()?;
+    let key2 = Key::random()?;
     let auth = crypto::encrypt_v0(&key, &crypto::random_iv()?, &String::from("message"))?;
     user.auth = Some(auth);
     let auth2 = crypto::encrypt(&key2, Vec::from(String::from("message").as_bytes()), crypto::CryptoOp::new("aes", "gcm")?)?;
@@ -117,7 +117,7 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
     let username_clone = String::from(&username[..]);
     let password_clone = String::from(&password[..]);
     work.run(move || generate_auth(&username_clone, &password_clone, version))
-        .and_then(move |key_auth: (Vec<u8>, String)| -> TFutureResult<()> {
+        .and_then(move |key_auth: (Key, String)| -> TFutureResult<()> {
             let (key, auth) = key_auth;
             let mut data = HashMap::new();
             data.insert("auth", auth.clone());
@@ -196,7 +196,7 @@ impl User {
     }
 
     /// We have a successful key/auth pair. Log the user in.
-    pub fn do_login(&mut self, key: Vec<u8>, auth: String) {
+    pub fn do_login(&mut self, key: Key, auth: String) {
         self.set_key(Some(key));
         self.auth = Some(auth);
         self.logged_in = true;

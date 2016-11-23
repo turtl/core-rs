@@ -6,6 +6,7 @@
 use ::jedi::Value;
 
 use ::error::{TResult, TError};
+use ::crypto::Key;
 
 #[derive(Debug)]
 /// Holds data we return from Thredder instances that can be passed around and
@@ -16,7 +17,7 @@ pub enum OpData {
     Str(String),
     JSON(Value),
     Null(()),
-    VecStringPair((Vec<u8>, String)),   // weird, i know. don't judge me.
+    AuthData((Key, String)),   // weird, i know. don't judge me.
 }
 
 /// A simple trait for allowing easy conversion from data into OpData
@@ -59,6 +60,6 @@ make_converter!(Vec<u8>, Bin);
 make_converter!(String, Str);
 make_converter!(Value, JSON);
 make_converter!((), Null);
-make_converter!((Vec<u8>, String), VecStringPair);
+make_converter!((Key, String), AuthData);
 
 

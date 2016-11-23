@@ -32,7 +32,7 @@ use ::jedi::{self, Value};
 use ::error::{TResult, TError, TFutureResult};
 use ::turtl::Turtl;
 use ::models::model::Model;
-use ::crypto::{self, CryptoOp};
+use ::crypto::{self, Key, CryptoOp};
 use ::models::keychain::{KeyRef, Keychain};
 
 /// Detect if a given string is the old v0 format
@@ -56,15 +56,15 @@ pub fn detect_old_format(data: &String) -> TResult<Vec<u8>> {
 // consider these functions conscientious objectors to worker crypto.
 // -----------------------------------------------------------------------------
 /// Decrypt an encrypted key, generally as part of a Protected.keys collection
-pub fn decrypt_key(decrypting_key: &Vec<u8>, encrypted_key: &String) -> TResult<Vec<u8>> {
+pub fn decrypt_key(decrypting_key: &Key, encrypted_key: &String) -> TResult<Key> {
     let raw = detect_old_format(encrypted_key)?;
     let decrypted = crypto::decrypt(decrypting_key, &raw)?;
-    Ok(decrypted)
+    Ok(Key::new(decrypted))
 }
 
 /// Encrypt a decrypted key, mainly for storage self-decrypting keys with models
-pub fn encrypt_key(encrypting_key: &Vec<u8>, key_to_encrypt: Vec<u8>) -> TResult<String> {
-    let encrypted = crypto::encrypt(encrypting_key, key_to_encrypt, crypto::CryptoOp::new("aes", "gcm")?)?;
+pub fn encrypt_key(encrypting_key: &Key, key_to_encrypt: Key) -> TResult<String> {
+    let encrypted = crypto::encrypt(encrypting_key, key_to_encrypt.into_data(), crypto::CryptoOp::new("aes", "gcm")?)?;
     let converted = crypto::to_base64(&encrypted)?;
     Ok(converted)
 }
@@ -135,10 +135,10 @@ pub trait Keyfinder {
 /// of data leaks while providing an interface that's easy to use.
 pub trait Protected: Model + fmt::Debug {
     /// Get the key for this model
-    fn key(&self) -> Option<&Vec<u8>>;
+    fn key(&self) -> Option<&Key>;
 
     /// Set this model's key
-    fn set_key(&mut self, key: Option<Vec<u8>>);
+    fn set_key(&mut self, key: Option<Key>);
 
     /// Get this model's "type" (ie, "note", "board", etc).
     fn model_type(&self) -> &str;
@@ -168,7 +168,7 @@ pub trait Protected: Model + fmt::Debug {
     fn set_multi_recursive(&mut self, data: ::jedi::Value) -> TResult<()>;
 
     /// Either grab the existing or generate a new key for this model
-    fn generate_key(&mut self) -> TResult<&Vec<u8>>;
+    fn generate_key(&mut self) -> TResult<&Key>;
 
     /// Get the model's body data
     fn get_keys<'a>(&'a self) -> Option<&'a Vec<HashMap<String, String>>>;
@@ -311,7 +311,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => detect_old_format(&x)?,
                 None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
             };
-            let key: &Vec<u8> = match self.key() {
+            let key: &Key = match self.key() {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
@@ -327,7 +327,7 @@ pub trait Protected: Model + fmt::Debug {
     }
 
     /// Given a set of keydata, replace the self.keys object
-    fn generate_subkeys(&mut self, keydata: &Vec<KeyRef<Vec<u8>>>) -> TResult<()> {
+    fn generate_subkeys(&mut self, keydata: &Vec<KeyRef<Key>>) -> TResult<()> {
         if self.key().is_none() {
             return Err(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
         }
@@ -400,7 +400,7 @@ macro_rules! protected {
             pub struct $name {
                 (
                     $( $extra_field: $extra_type, )*
-                    _key: Option<Vec<u8>>,
+                    _key: Option<::crypto::Key>,
                     model_type: String
                 )
 
@@ -437,14 +437,11 @@ macro_rules! protected {
         }
 
         impl Protected for $name {
-            fn key(&self) -> Option<&Vec<u8>> {
-                match self._key.as_ref() {
-                    Some(x) => Some(x),
-                    None => None,
-                }
+            fn key<'a>(&'a self) -> Option<&'a ::crypto::Key> {
+                self._key.as_ref()
             }
 
-            fn set_key(&mut self, key: Option<Vec<u8>>) {
+            fn set_key(&mut self, key: Option<::crypto::Key>) {
                 self._key = key;
                 self._set_key_on_submodels();
             }
@@ -547,9 +544,9 @@ macro_rules! protected {
                 self.set_multi(::jedi::Value::Object(hash))
             }
 
-            fn generate_key(&mut self) -> ::error::TResult<&Vec<u8>> {
+            fn generate_key(&mut self) -> ::error::TResult<&::crypto::Key> {
                 if self.key().is_none() {
-                    let key = ::crypto::random_key()?;
+                    let key = ::crypto::Key::random()?;
                     self.set_key(Some(key));
                 }
                 Ok(self.key().unwrap())
@@ -580,18 +577,11 @@ macro_rules! protected {
     }
 }
 
-/// Defines a key struct, used by many models that have subkey data.
-protected!{
-    pub struct Key {
-        (), (), ()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use ::jedi;
-    use ::crypto;
+    use ::crypto::{self, Key};
     use ::models::model::Model;
     use ::models::keychain::KeyRef;
 
@@ -659,7 +649,7 @@ mod tests {
     fn encrypts_decrypts() {
         let json = String::from(r#"{"size":69,"name":"barky","type":"canadian","tags":["flappy","noisy"]}"#);
         let mut dog: Dog = jedi::parse(&json).unwrap();
-        let key = crypto::random_key().unwrap();
+        let key = crypto::Key::random().unwrap();
         dog.set_key(Some(key.clone()));
         let serialized = dog.serialize().unwrap();
 
@@ -720,9 +710,9 @@ mod tests {
     fn generate_subkeys() {
         let mut dog: Dog = jedi::parse(&String::from(r#"{"size":30,"name":"dog","type":"shiba"}"#)).unwrap();
         dog.generate_key().unwrap();
-        let mut subkeys: Vec<KeyRef<Vec<u8>>> = Vec::new();
-        let key1 = crypto::from_base64(&String::from("n1OBWSG3LqwqoL/Oo8nyUPJp8fl/8Wig6kWpS45YW1U=")).unwrap();
-        let key2 = crypto::from_base64(&String::from("mbYnVxRr4wJ+Zh0tK96rM9dqveW5efJligps4IHoVW4=")).unwrap();
+        let mut subkeys: Vec<KeyRef<Key>> = Vec::new();
+        let key1 = Key::new(crypto::from_base64(&String::from("n1OBWSG3LqwqoL/Oo8nyUPJp8fl/8Wig6kWpS45YW1U=")).unwrap());
+        let key2 = Key::new(crypto::from_base64(&String::from("mbYnVxRr4wJ+Zh0tK96rM9dqveW5efJligps4IHoVW4=")).unwrap());
         subkeys.push(KeyRef::new(String::from("6969"), String::from("b"), key1));
         subkeys.push(KeyRef::new(String::from("1234"), String::from("b"), key2));
         dog.generate_subkeys(&subkeys).unwrap();

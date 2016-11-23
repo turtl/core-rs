@@ -9,6 +9,7 @@
 
 #[macro_use]
 mod low;
+mod key;
 
 pub use ::crypto::low::{
     CResult,
@@ -22,6 +23,7 @@ pub use ::crypto::low::{
     from_base64,
     secure_compare
 };
+pub use ::crypto::key::Key;
 
 /// Stores our current crypto version. This gets encoded into a header in the
 /// ciphertext and lets the crypto module know how to handle the message.
@@ -307,7 +309,7 @@ pub fn serialize(data: &mut CryptoData) -> CResult<Vec<u8>> {
 /// purpose is great, but HKDF would be slightly better.
 ///
 /// Also, this is really to support back-wards compatible crypto versions <= 4.
-fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>, Vec<u8>)> {
+fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Key, Key)> {
     match desc.kdf_index {
         Some(x) => {
             let hasher: low::Hasher;
@@ -326,7 +328,7 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
             }
 
             let derived = low::pbkdf2(hasher, master_key, &[], iterations, keylen)?;
-            Ok((Vec::from(&derived[0..32]), Vec::from(&derived[32..])))
+            Ok((Key::new(Vec::from(&derived[0..32])), Key::new(Vec::from(&derived[32..]))))
         },
         None => Err(CryptoError::Msg(format!("derive_keys: no kdf present in desc"))),
     }
@@ -347,7 +349,7 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Vec<u8>
 /// (4+3+'desc'). Great. So, let's replicate this then never speak of it again.
 /// Luckily this only applies to old versions (new versions use GCM, no need to
 /// do the HMAC ourselves).
-pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
+pub fn authenticate(data: &CryptoData, hmac_key: &Key) -> CResult<()> {
     let mut auth: Vec<u8> = Vec::new();
     let shitty_version = data.version + (data.desc.len() as u16);
     let shitty_version_char = match format!("{}", shitty_version).chars().nth(0) {
@@ -358,7 +360,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
     auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
-    let hmac = low::hmac(low::Hasher::SHA256, hmac_key, auth.as_slice())?;
+    let hmac = low::hmac(low::Hasher::SHA256, hmac_key.data().as_slice(), auth.as_slice())?;
     if !(low::secure_compare(hmac.as_slice(), data.hmac.as_slice())?) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }
@@ -367,25 +369,25 @@ pub fn authenticate(data: &CryptoData, hmac_key: &[u8]) -> CResult<()> {
 
 /// Wow. Such fail. In older versions of Turtl, keys were UTF8 encoded strings.
 /// This function converts the keys back to raw byte arrays. Ugh.
-fn fix_utf8_key(key: &Vec<u8>) -> CResult<Vec<u8>> {
+fn fix_utf8_key(key: &Key) -> CResult<Key> {
     if key.len() == 32 { return Ok(key.clone()); }
 
-    let keystr = String::from_utf8(key.clone())?;
+    let keystr = String::from_utf8(key.data().clone())?;
     let mut fixed_key: Vec<u8> = Vec::with_capacity(32);
     for char in keystr.chars() {
         fixed_key.push(char as u8);
     }
-    Ok(fixed_key)
+    Ok(Key::new(fixed_key))
 }
 
 /// Decrypt a message, given a key and the ciphertext. The ciphertext should
 /// contain *all* the data needed to decrypt the message encoded in a header
 /// (see deserialize() for more info).
-pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
+pub fn decrypt(key: &Key, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
-    let key = &fix_utf8_key(&key)?;
+    let key = &fix_utf8_key(key)?;
 
     let deserialized = deserialize(ciphertext)?;
     let version = deserialized.version;
@@ -395,14 +397,14 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     let mut decrypted: Vec<u8>;
 
     if version == 0 {
-        decrypted = low::aes_cbc_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice())?;
+        decrypted = low::aes_cbc_decrypt(key.data().as_slice(), iv.as_slice(), ciphertext.as_slice())?;
     } else if version <= 4 {
-        let (crypt_key, hmac_key) = derive_keys(key.as_slice(), &desc)?;
-        authenticate(&deserialized, hmac_key.as_slice())?;
-        decrypted = low::aes_cbc_decrypt(crypt_key.as_slice(), iv.as_slice(), ciphertext.as_slice())?;
+        let (crypt_key, hmac_key) = derive_keys(key.data().as_slice(), &desc)?;
+        authenticate(&deserialized, &hmac_key)?;
+        decrypted = low::aes_cbc_decrypt(crypt_key.data().as_slice(), iv.as_slice(), ciphertext.as_slice())?;
     } else if version >= 5 {
         let auth: Vec<u8> = serialize_header(&deserialized)?;
-        decrypted = low::aes_gcm_decrypt(key.as_slice(), iv.as_slice(), ciphertext.as_slice(), auth.as_slice())?;
+        decrypted = low::aes_gcm_decrypt(key.data().as_slice(), iv.as_slice(), ciphertext.as_slice(), auth.as_slice())?;
     } else {
         return Err(CryptoError::NotImplemented(format!("version not implemented: {}", version)));
     }
@@ -427,7 +429,7 @@ pub fn decrypt(key: &Vec<u8>, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
 ///
 /// That said, some parts of the app *need* version 0 crypto. See encrypt_v0()
 /// for this.
-pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<Vec<u8>> {
+pub fn encrypt(key: &Key, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<Vec<u8>> {
     // if our keylen is > 32, it means our key is utf8-encoded. lol. LOOOL.
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
@@ -467,16 +469,11 @@ pub fn encrypt(key: &Vec<u8>, mut plaintext: Vec<u8>, op: CryptoOp) -> CResult<V
             let desc = PayloadDescription::new(version, op.cipher, op.blockmode, None, None)?;
             let mut data = CryptoData::new(version, desc, iv, Vec::new(), Vec::new());
             let auth = serialize_header(&data)?;
-            data.ciphertext = low::aes_gcm_encrypt(key.as_slice(), data.iv.as_slice(), plaintext.as_slice(), auth.as_slice())?;
+            data.ciphertext = low::aes_gcm_encrypt(key.data().as_slice(), data.iv.as_slice(), plaintext.as_slice(), auth.as_slice())?;
             Ok(serialize(&mut data)?)
         }
         _ =>  return Err(CryptoError::NotImplemented(format!("mode not implemented: {}-{} (try \"aes-gcm\")", op.cipher, op.blockmode))) ,
     }
-}
-
-/// Generate a random cryptographic key (256-bit).
-pub fn random_key() -> CResult<Vec<u8>> {
-    low::rand_bytes(32)
 }
 
 /// Generate a random IV for use with encryption. This is a helper to enforce
@@ -494,8 +491,8 @@ pub fn random_iv() -> CResult<Vec<u8>> {
 /// use enough iterations, it's fine (and battle-tested).
 ///
 /// Generated keys are always 256-bit.
-pub fn gen_key(hasher: Hasher, pass: &str, salt: &[u8], iter: usize) -> CResult<Vec<u8>> {
-    low::pbkdf2(hasher, pass.as_bytes(), salt, iter, 32)
+pub fn gen_key(hasher: Hasher, pass: &str, salt: &[u8], iter: usize) -> CResult<Key> {
+    Ok(Key::new(low::pbkdf2(hasher, pass.as_bytes(), salt, iter, 32)?))
 }
 
 #[allow(dead_code)]
@@ -659,9 +656,9 @@ fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
 ///
 /// Note that the ONLY reason this was included is to maintain backwards compat
 /// with the login system. *NOTHING SHOULD __EVER__ USE VERSION 0 TO ENCRYPT!*
-pub fn encrypt_v0(key: &Vec<u8>, iv: &Vec<u8>, plaintext: &String) -> CResult<String> {
+pub fn encrypt_v0(key: &Key, iv: &Vec<u8>, plaintext: &String) -> CResult<String> {
     let desc = PayloadDescription::from(&[0, 0])?;
-    let enc = low::aes_cbc_encrypt(key.as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923)?;
+    let enc = low::aes_cbc_encrypt(key.data().as_slice(), iv.as_slice(), &Vec::from(plaintext.as_bytes()), PadMode::ANSIX923)?;
     let data = CryptoData::new(0, desc, iv.clone(), Vec::new(), enc);
     let serialized = serialize_version_0(&data)?;
     Ok(String::from_utf8(serialized)?)
@@ -701,7 +698,7 @@ mod tests {
         let password = String::from("this is definitely not the password i use for my bank account. no sir.");
 
         let key = gen_key(Hasher::SHA256, password.as_ref(), username.as_ref(), 69696).unwrap();
-        let keystr = to_hex(&key).unwrap();
+        let keystr = to_hex(key.data()).unwrap();
         // this hex val used for comparison was grabbed from turtl-js using the
         // same username/password/iterations/hasher.
         assert_eq!(keystr, "381dfffbb503b3ed90cd0a30d57e8d2bdba36e6c0bab274ae1c346ef3b1b9778");
@@ -709,7 +706,7 @@ mod tests {
 
     #[test]
     fn can_decrypt_v0() {
-        let key = from_base64(&String::from("WPEpNTwrRE144Y7uLuTmJSIYhc1qoo7OMLvZ3oNwaII=")).unwrap();
+        let key = Key::new(from_base64(&String::from("WPEpNTwrRE144Y7uLuTmJSIYhc1qoo7OMLvZ3oNwaII=")).unwrap());
         let enc = String::from(r#"VFQYqIsxYBVdVxANyHepjXvowy107j+n9t1bQqcSI2E2CGLscFMnuZJW6vxLz75XuBHKn0lhbC5FFL1HDuXa1bjvj9CSQcuOl96DqQzGs6BuBHBtTZDHovuzlaC+J7eanoAydRmCuz5iZgKNLLWgWox9e3HWcwRrbyGwOAq5Cj/7s0cn4lKDE5K9V/+x3EA4LzB6aOekBcJNPKD9LmV7I2yifELN2+OAJC7jcICYZHa6i0KciLBZUxTeYfpM1vZJ4suWLH5ZdTFdT9SUINbi06WGFyJtTOQrqlzIz2LFHctsm/FDuU8r9bwFc4sYbha/Ej80+z3S7Zjfp40Ra5GW71oLyK6NyuZSjbdK/xShybiqzyEhA6hf6ekH4Mfef0SlGYTKTvCx7bNd+pPJa/R+LkT/qGgDDJkyzqejvP7guhk=:ib043a089740f1d5ed086225eb30063ff"#);
         let dec = decrypt(&key, &Vec::from(enc.as_bytes())).unwrap();
         let dec_str = String::from_utf8(dec).unwrap();
@@ -718,7 +715,7 @@ mod tests {
 
     #[test]
     fn can_decrypt_v3() {
-        let key = from_base64(&String::from("HsKTwqcAdzAXSsK2Z8OaOy4RI8OqKnoUw5Miw7BbJcOUT8KOdcO0JwsO")).unwrap();
+        let key = Key::new(from_base64(&String::from("HsKTwqcAdzAXSsK2Z8OaOy4RI8OqKnoUw5Miw7BbJcOUT8KOdcO0JwsO")).unwrap());
         let enc = from_base64(&String::from(r#"AAOpckDeBymudt1AnCMpNUWE/3gA53BFCXVfl5eRXR6h2gQAAAAAmF5Li7QHzaJda8AwGom/ZGcFhKUjE9VOot2xxxKgQNop6MOkMq6stbbARt8ltbsVQb8I5wSTddcGUJapB6Spd/O+lZ7neYVBNttIm+kb3mekW4AjSBrNBFGpfqsGzOBp3ZVVpkUBJwlCT3/ZJdUXU9KqFlbHq/1uNesiRtXEugTRM4rtKaWoOvPvFye6msGDIxecdjJjI2tSJv4mCvPqnenPw9HzGGDp6U1s9r/FWtdsGoRfxuDPtIKEzuXm4t4CjxMlx/83fOV7xxE4EneMRTOlRUf8MM0eqNkDqAeDK8YNtOmdJLs3XVXRYGvPvh6eR9WcemLbcliz1gqjEmpc+UTWLrL/XDlbDcCQ2RacvJLoEq6i5ogkMa7XTyjKGhrg"#)).unwrap();
         let dec = decrypt(&key, &enc).unwrap();
         let dec_str = String::from_utf8(dec).unwrap();
@@ -727,7 +724,7 @@ mod tests {
 
     #[test]
     fn can_decrypt_v4() {
-        let key = from_base64(&String::from("rYMgzeHsjMupzeUvqBpbsDRO1pBk/JWlJp9EHw3yGPs=")).unwrap();
+        let key = Key::new(from_base64(&String::from("rYMgzeHsjMupzeUvqBpbsDRO1pBk/JWlJp9EHw3yGPs=")).unwrap());
         let enc = from_base64(&String::from(r#"AAQRk+ROrg4uNqRIwlAJrPOlTupLliAXexfnZpBt2nsCAAQAAAAA8PxvFb3rlGm50n75m4q7aLkif54G7BMiK1cqOAgKIziV7cN3Hyq+d2DggAkpSjnfcJXDDi60SGM+y0kjLUWOIuq0QVOFVF+c9OlhL6eQ5NsgYAr2ElUatg7jwufGbbCS93vItWssCJ3M5h2PTtaHTLtxhI0IrThkqeQYkV7bvK5tKOvo60Vc4pZ0LdAKfulIp3DJ0tmC15Nab2QVNDrQ35WB0tXZIBnloLIG0AkrBZYE+ig7cYK24QM52Z2sPSSQB33cKVe7U4OOZuS4rXBc1xwAhWKom9NZSMTYg6Ke69H4ZZTILZkkW4Qkgt+yIIJf"#)).unwrap();
         let dec = decrypt(&key, &enc).unwrap();
         let dec_str = String::from_utf8(dec).unwrap();
@@ -736,7 +733,7 @@ mod tests {
 
     #[test]
     fn can_decrypt_v5() {
-        let key = from_base64(&String::from("js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs=")).unwrap();
+        let key = Key::new(from_base64(&String::from("js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs=")).unwrap());
         let enc = from_base64(&String::from(r#"AAUCAAFKp4T7iuwnVM6+OY+nM9ZKnxe5sUvA+WvkVfhAFDYUKQRenSi+m1WCGGWZIigqL12fAvE4AA10MGACEjEbHvxGQ45qQcEiVZuqB3EMgijklXjNA+EcvnbvcOFSu3KJ4i1iTbsZH+KORmqoxGsWYXafq/EeejAMV94umfC0Uwl6cuCOav2OcDced5GYHwkd9qSDTR+SJyjgAq33r7ylVQQASa8YUP7jx/FGoT4mzjp0+rNAoyqGYU7gJz4v0ccUfm34ww1eZS1kkWmy33h5Cqi6R7Y0y57ytye2WXjvlHGC2/iglx7sPgemDCmIoIMBVdXDW5sMw2fxmpQph1pyst10+Wbv4DcNtN+fMpseDdmTpbXarGNFqyYul/QXM9WmzUTtjeW3kZxol989l+1WXrr6E5Ctk61NVb98PtRMFuRHYU8kt3cTUE4m0G8PGwK62vkp+2pI6fn3UijOFLYHDpeGbgRiAeBbykHgXrtXfAIpysl/FOl1NzfFz44="#)).unwrap();
         let dec = decrypt(&key, &enc).unwrap();
         let dec_str = String::from_utf8(dec).unwrap();
@@ -745,7 +742,7 @@ mod tests {
 
     #[test]
     fn can_encrypt_v0() {
-        let key = from_base64(&String::from("nDuViJIt1KFY0AKZqkyrVJ/qxeWaC8sD8Ynuo2iT850=")).unwrap();
+        let key = Key::new(from_base64(&String::from("nDuViJIt1KFY0AKZqkyrVJ/qxeWaC8sD8Ynuo2iT850=")).unwrap());
         let iv = from_base64(&String::from("uPTMrLsYTVBTj3c3LATl/g==")).unwrap();
         let plain = String::from(r#"version 0 violates the NAP"#);
         let enc = encrypt_v0(&key, &iv, &plain).unwrap();
@@ -754,7 +751,7 @@ mod tests {
 
     #[test]
     fn can_encrypt_latest() {
-        let key = from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap();
+        let key = Key::new(from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap());
         let iv = from_base64(&String::from("gFKdvdDznhM+Wo/uzfsPbg==")).unwrap();
         let plain = String::from(r#"{"title":"libertarian quotes","body":"Moreover, the institution of child labor is an honorable one, with a long and glorious history of good works. And the villains of the piece are not the employers, but rather those who prohibit the free market in child labor. These do-gooders are responsible for the untold immiseration of those who are thus forced out of employment. Although the harm done was greater in the past, when great poverty made widespread child labor necessary, there are still people in dire straits today. Present prohibitions of child labor are thus an unconscionable interference with their lives.","tags":["moron"],"mod":1468007942,"created":1468007942.493,"keys":[]}"#);
         let op = CryptoOp::new_with_iv_utf8("aes", "gcm", iv, 42).unwrap();
@@ -767,8 +764,8 @@ mod tests {
     fn can_gen_random_keys() {
         // test a number of hashes
         for _ in 0..TEST_ITERATIONS {
-            let key = random_key().unwrap();
-            assert_eq!(key.len(), 32);
+            let key = Key::random().unwrap();
+            assert_eq!(key.data().len(), 32);
         }
     }
 

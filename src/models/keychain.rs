@@ -1,5 +1,6 @@
 use ::std::collections::HashMap;
 
+use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
@@ -61,7 +62,7 @@ protected!{
         ( type_: String,
           item_id: String,
           user_id: String ),
-        ( k: Vec<u8> ),
+        ( k: Key ),
         ( )
     }
 }
@@ -84,7 +85,7 @@ impl Keychain {
     }
 
     /// Add a key to the keychain
-    pub fn add_key(&mut self, user_id: &String, item_id: &String, key: &Vec<u8>, ty: &String) {
+    pub fn add_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String) {
         let mut entry = KeychainEntry::new();
         entry.type_ = Some(ty.clone());
         entry.user_id = Some(user_id.clone());
@@ -94,7 +95,7 @@ impl Keychain {
     }
 
     /// Find the key matching a given item id
-    pub fn find_entry(&self, item_id: &String) -> Option<Vec<u8>> {
+    pub fn find_entry(&self, item_id: &String) -> Option<Key> {
         for entry in &self.entries {
             if !entry.item_id.is_some() || !entry.k.is_some() { continue; }
             let entry_item_id = entry.item_id.as_ref().unwrap();
@@ -106,7 +107,7 @@ impl Keychain {
     }
 
     /// Find ALL matching keys for an object.
-    pub fn find_all_entries(&self, item_id: &String) -> Vec<Vec<u8>> {
+    pub fn find_all_entries(&self, item_id: &String) -> Vec<Key> {
         let mut found = Vec::with_capacity(2);
         for entry in &self.entries {
             if !entry.item_id.is_some() || !entry.k.is_some() { continue; }

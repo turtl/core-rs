@@ -180,7 +180,7 @@ mod tests {
     fn saves_retrieves_models() {
         let storage = pretest();
         let mut model = Shiba::new_with_id();
-        let key = Vec::from(&(model.generate_key().unwrap())[..]);
+        let key = model.generate_key().unwrap().clone();
         model.color = Some(String::from("sesame"));
         model.name = Some(String::from("Kofi"));
         model.tags = Some(vec![String::from("serious")]);
@@ -188,14 +188,14 @@ mod tests {
         storage.save(&model).unwrap();
 
         let id = model.id().unwrap();
-        let mut shiba2: Shiba = storage.get("shiba", id).unwrap().unwrap();
+        let mut shiba2: Shiba = storage.get("shibas", id).unwrap().unwrap();
         shiba2.set_key(Some(key));
         shiba2.deserialize().unwrap();
         assert_eq!(shiba2.color.unwrap(), String::from("sesame"));
         assert_eq!(shiba2.name.unwrap(), String::from("Kofi"));
         assert_eq!(shiba2.tags.unwrap(), vec![String::from("serious")]);
 
-        assert_eq!(storage.all("shiba").unwrap().len(), 1);
+        assert_eq!(storage.all("shibas").unwrap().len(), 1);
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
         storage.delete(&model).unwrap();
 
         let id = model.id().unwrap();
-        let sheeb: Option<Shiba> = storage.get("shiba", id).unwrap();
+        let sheeb: Option<Shiba> = storage.get("shibas", id).unwrap();
         assert!(sheeb.is_none());
     }
 
