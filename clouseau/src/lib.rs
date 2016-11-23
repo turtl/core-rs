@@ -109,6 +109,12 @@ impl Clouseau {
         Ok(())
     }
 
+    /// Remove an object from the index
+    pub fn unindex(&self, id: &String) -> CResult<()> {
+        self.conn.execute("DELETE FROM objects WHERE id = ?", &[id])?;
+        Ok(())
+    }
+
     /// Find things in the index
     pub fn find(&self, terms: &String) -> CResult<Vec<String>> {
         let mut query = self.conn.prepare("SELECT id FROM objects WHERE content match ? ORDER BY id ASC")?;
@@ -143,6 +149,11 @@ mod tests {
         assert_eq!(search.find(&String::from("ugliest")).unwrap(), vec![String::from("1111")]);
         assert_eq!(search.find(&String::from("ugliest mind")).unwrap().len(), 0);
         assert_eq!(search.find(&String::from(r#""your some""#)).unwrap().len(), 0);
+
+        search.unindex(&String::from("1234")).unwrap();
+        assert_eq!(search.find(&String::from("some say")).unwrap(), vec![String::from("2222")]);
+        search.unindex(&String::from("2222")).unwrap();
+        assert_eq!(search.find(&String::from("some say")).unwrap().len(), 0);
     }
 
     #[test]
