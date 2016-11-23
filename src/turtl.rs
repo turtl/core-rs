@@ -257,10 +257,14 @@ impl Turtl {
             let turtl2 = turtl.clone();
             turtl.events.bind("sync:incoming:init:done", move |_| {
                 let turtl3 = turtl2.clone();
+                let turtl4 = turtl2.clone();
                 turtl2.load_profile()
+                    .and_then(move |_| {
+                        turtl3.index_notes()
+                    })
                     .or_else(move |e| -> TFutureResult<()> {
                         error!("turtl -- sync:load-profile: problem loading profile: {}", e);
-                        try_fut!(turtl3.error_event(&e, "load_profile"));
+                        try_fut!(turtl4.error_event(&e, "load_profile"));
                         FOk!(())
                     })
                     .forget();
@@ -638,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn loads_profile() {
+    fn loads_profile_search_notes() {
         let stop = Arc::new(Stopper::new());
         stop.set(true);
 
@@ -650,6 +654,10 @@ mod tests {
         turtl.user = RwLock::new(user);
 
         let db = turtl.create_user_db().unwrap();
+        // load our profile from a few big JSON blobs. we do this out of scope
+        // so's not to be tempted to use them later on...we want the profile to
+        // load itself completely from the DB and deserialize successfully w/o
+        // having access to any of the data we put in here.
         {
             let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"body":"AAUCAAFqj/FnzMVEFk20i0f4d/NY6TTMZ9jrCRWhheu2LJ/oRZrnWkLBMDmHV6EkOiPWNYjJYw+7mLhqR/mXbZrdx/CMv/DhrNCBwnc1BvepuusmwS6NIfeO","type":"board","item_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab72a77af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0699c"},{"body":"AAUCAAGOoWbH1M2YgBdt6eaF8nlk7Dt52mpPp2ZF7uixMkVgk3h50kqKdBoIbkcQz3NqUQLO9XECPnwDLaxgZKhLk3IW+hzxYVEuzQxE93J/F6m6patHmftN","type":"note","item_id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab7e3e8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069bd"},{"body":"AAUCAAEr0ky+zDcT0G+3lmZdGNsn6YXZZFDGreDzzESc8wOO+/tHmCK3RxV6aAEhtvCKSwsCbq/oylRIYZoGv1uwAnu7zQOAkzBH6ioStNYN/bmmsXlSllUK","type":"note","item_id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c","user_id":"5833e49e2b13751ab303f8b1","id":"01588abc24a8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a2d"},{"body":"AAUCAAETC4kRU+NGZUE+0lXt2wXP+ENkOPOzZ5X39j6bRkeNbz0VY4+VwIkGjYLJh21+urVOmUWan7S9QE9z3U+jJV5qZZqCDHnwJjMg7ztDQmfqa/aLoS1k","type":"note","item_id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56","user_id":"5833e49e2b13751ab303f8b1","id":"01588abd7fe5af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a61"}]"#)).unwrap();
             let personas: Vec<Persona> = jedi::parse(&String::from(r#"[{"user_id":"5833e49e2b13751ab303f8b1","email":"andrew+test@turtl.it","name":"Andrew Lyon","body":"AAUCAAGFeUICKVgIylzweY9G5cPDPrqueWkVcgcqrZXtpuWYtxZOoO8sa6pyKuzoSD487saGXSqxogx0Yza61rRMeM/gH9BUq5WCw+RnOxVOBuAzD0POEbJ2yWRHgGUGPBzD7WZvkWiMxfbncB5mEujv0103ZuGAoeA0d1cxKQfx8Ja1ZyZXGHv5","id":"01588ab51d51af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba068e5","pubkey":"so then, remember, *i* said... \"later dudes!!\""}]"#)).unwrap();
@@ -672,7 +680,9 @@ mod tests {
                 let profile_guard = turtl2.profile.read().unwrap();
                 assert_eq!(profile_guard.keychain.entries.len(), 4);
                 assert_eq!(profile_guard.boards.len(), 1);
+                assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Things I hate"));
                 assert!(profile_guard.persona.is_some());
+                // TODO: load notes from some kind of search mechanism
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {
