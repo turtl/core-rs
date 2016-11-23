@@ -8,6 +8,7 @@ sync:
 - incoming file downloads
 
 models:
+- create `Key` type to replace ambiguous Vec<u8>
 - PGP key generation and encryption
 - move over tests from JS
 
