@@ -158,7 +158,7 @@ macro_rules! FErr {
 
 /// A helper to make trying stuff in futures easier
 #[mecro_export]
-macro_rules! try_fut {
+macro_rules! ftry {
     ($ex:expr) => {
         match $ex {
             Ok(x) => x,

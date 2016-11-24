@@ -87,7 +87,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
-                vec_guard.push(try_fut!(jedi::from_val(item_mapped)));
+                vec_guard.push(ftry!(jedi::from_val(item_mapped)));
                 FOk!(())
             })
             .boxed();

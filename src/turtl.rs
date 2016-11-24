@@ -163,7 +163,7 @@ impl Turtl {
                 let turtl2 = turtl.clone();
                 User::login(turtl.clone(), &username, &password)
                     .and_then(move |_| -> TFutureResult<()> {
-                        let db = try_fut!(turtl2.create_user_db());
+                        let db = ftry!(turtl2.create_user_db());
                         let mut db_guard = turtl2.db.write().unwrap();
                         *db_guard = Some(db);
                         drop(db_guard);
@@ -179,7 +179,7 @@ impl Turtl {
         self.with_next_fut()
             .and_then(|turtl| -> TFutureResult<()> {
                 turtl.events.trigger("sync:shutdown", &Value::Bool(false));
-                try_fut!(User::logout(turtl.clone()));
+                ftry!(User::logout(turtl.clone()));
 
                 // wipe the user db
                 let mut db_guard = turtl.db.write().unwrap();
@@ -271,7 +271,7 @@ impl Turtl {
                     })
                     .or_else(move |e| -> TFutureResult<()> {
                         error!("turtl -- sync:load-profile: problem loading profile: {}", e);
-                        try_fut!(turtl4.error_event(&e, "load_profile"));
+                        ftry!(turtl4.error_event(&e, "load_profile"));
                         FOk!(())
                     })
                     .forget();
@@ -443,9 +443,9 @@ impl Turtl {
             return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut keychain: Vec<KeychainEntry> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("keychain")))));
-        let mut boards: Vec<Board> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("boards")))));
-        let mut personas: Vec<Persona> = try_fut!(jedi::from_val(jedi::to_val(&try_fut!(db.all("personas")))));
+        let mut keychain: Vec<KeychainEntry> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("keychain")))));
+        let mut boards: Vec<Board> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("boards")))));
+        let mut personas: Vec<Persona> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("personas")))));
 
         // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
@@ -465,7 +465,7 @@ impl Turtl {
                         drop(profile_guard);
 
                         // now decrypt the boards
-                        for board in &mut boards { try_fut!(turtl1.find_model_key(board)); }
+                        for board in &mut boards { ftry!(turtl1.find_model_key(board)); }
                         protected::map_deserialize(turtl1.as_ref(), boards)
                     })
                     .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
