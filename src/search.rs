@@ -13,8 +13,10 @@ use ::clouseau::Clouseau;
 
 use ::error::{TResult, TError};
 use ::models::note::Note;
+use ::models::file::File;
 
 /// Used to specify what field we're sorting our results on
+#[derive(Debug)]
 pub enum Sort {
     /// Sort by create date
     Created,
@@ -23,13 +25,17 @@ pub enum Sort {
 }
 
 /// Defines our sort direction
+#[derive(Debug)]
 pub enum SortDirection {
     Asc,
     Desc,
 }
 
 /// A query builder
+#[derive(Debug)]
 pub struct Query {
+    /// Full-text search query
+    text: Option<String>,
     /// Boards (OR)
     boards: Vec<String>,
     /// Tags (AND)
@@ -56,6 +62,7 @@ impl Query {
     /// Create a new search query builder
     pub fn new() -> Query {
         Query {
+            text: None,
             boards: Vec::new(),
             tags: Vec::new(),
             excluded_tags: Vec::new(),
@@ -67,6 +74,12 @@ impl Query {
             page: 1,
             per_page: 100,
         }
+    }
+
+    /// Set the full-text search query
+    pub fn text<'a>(&'a mut self, text: String) -> &'a mut Self {
+        self.text = Some(text);
+        self
     }
 
     /// Set boards in the search
@@ -156,20 +169,32 @@ impl Search {
     pub fn index_note(&self, note: &Note) -> TResult<()> {
         model_getter!(get_field, "Search.index_note()");
         let id = get_field!(note, id);
-        let has_file = get_field!(note, has_file);
-        let mod_ = get_field!(note, mod_) as i64;
-        let type_ = get_field!(note, type_);
-        let color = get_field!(note, color);
+        let has_file = get_field!(note, has_file, false);
+        let mod_ = get_field!(note, mod_, 99999999) as i64;
+        let type_ = get_field!(note, type_, String::from("text"));
+        let color = get_field!(note, color, 0);
         self.idx.conn.execute("INSERT INTO notes (id, has_file, mod, type, color) VALUES (?, ?, ?, ?, ?)", &[&id, &has_file, &mod_, &type_, &color])?;
 
-        let boards = get_field!(note, boards);
-        let tags = get_field!(note, tags);
+        let boards = get_field!(note, boards, Vec::new());
+        let tags = get_field!(note, tags, Vec::new());
         for board in boards {
             self.idx.conn.execute("INSERT INTO notes_boards (note_id, board_id) VALUES (?, ?)", &[&id, &board])?;
         }
         for tag in tags {
             self.idx.conn.execute("INSERT INTO notes_tags (note_id, tag) VALUES (?, ?)", &[&id, &tag])?;
         }
+        let note_body = [
+            get_field!(note, title, String::from("")),
+            get_field!(note, text, String::from("")),
+            get_field!(note, tags, Vec::new()).as_slice().join(" "),
+            get_field!(note, url, String::from("")),
+            {
+                let fakefile = File::new();
+                let file = get_field!(note, file, &fakefile);
+                get_field!(file, name, String::from(""))
+            },
+        ].join(" ");
+        self.idx.index(&id, &note_body);
         Ok(())
     }
 
@@ -180,6 +205,7 @@ impl Search {
         self.idx.conn.execute("DELETE FROM notes WHERE id = ?", &[&id])?;
         self.idx.conn.execute("DELETE FROM notes_boards where note_id = ?", &[&id])?;
         self.idx.conn.execute("DELETE FROM notes_tags where note_id = ?", &[&id])?;
+        self.idx.unindex(&id);
         Ok(())
     }
 
@@ -191,6 +217,12 @@ impl Search {
 
     /// Search for notes. Returns the note IDs only. Loading them from the db
     /// and decrypting are up to you...OR YOUR MOM.
+    ///
+    /// NOTE: This function uses a lot of vector concatenation and joining to
+    /// build our queries. It's probably pretty slow and inefficient. On top of
+    /// that, it makes extensive use of SQL's `intersect` to grab results from a
+    /// bunch of separate queries. There may be a more efficient way to do this,
+    /// however since this is all in-memory anyway, it's probably fine.
     pub fn find(&self, query: &Query) -> TResult<Vec<String>> {
         enum SearchVal {
             Bool(bool),
@@ -211,8 +243,29 @@ impl Search {
         let mut exclude_queries: Vec<String> = Vec::new();
         let mut qry_vals: Vec<SearchVal> = Vec::new();
 
+        // this one is kind of weird. we basically do
+        //   SELECT id FROM notes WHERE id IN (id1, id2)
+        // there's probably a much better way, but this is easiest for now
+        if query.text.is_some() {
+            let ft_note_ids = self.idx.find(query.text.as_ref().unwrap())?;
+            if ft_note_ids.len() > 0 {
+                let mut ft_qry: Vec<&str> = Vec::with_capacity(ft_note_ids.len() + 2);
+                ft_qry.push("SELECT id FROM notes WHERE id IN (");
+                for id in &ft_note_ids {
+                    if id == &ft_note_ids[ft_note_ids.len() - 1] {
+                        ft_qry.push("?");
+                    } else {
+                        ft_qry.push("?,");
+                    }
+                    qry_vals.push(SearchVal::String(id.clone()));
+                }
+                ft_qry.push(")");
+                queries.push(ft_qry.as_slice().join(""));
+            }
+        }
+
         if query.boards.len() > 0 {
-            let mut board_qry: Vec<&str> = Vec::new();
+            let mut board_qry: Vec<&str> = Vec::with_capacity(query.boards.len() + 2);
             board_qry.push("SELECT note_id FROM notes_boards WHERE board_id IN (");
             for board in &query.boards {
                 if board == &query.boards[query.boards.len() - 1] {
@@ -227,7 +280,7 @@ impl Search {
         }
 
         if query.tags.len() > 0 {
-            let mut tag_qry: Vec<&str> = Vec::new();
+            let mut tag_qry: Vec<&str> = Vec::with_capacity(query.tags.len() + 2);
             tag_qry.push("SELECT note_id FROM notes_tags WHERE tag IN (");
             for tag in &query.tags {
                 if tag == &query.tags[query.tags.len() - 1] {
@@ -243,7 +296,7 @@ impl Search {
         }
 
         if query.excluded_tags.len() > 0 {
-            let mut excluded_tag_qry: Vec<&str> = Vec::new();
+            let mut excluded_tag_qry: Vec<&str> = Vec::with_capacity(query.excluded_tags.len() + 2);
             excluded_tag_qry.push("SELECT note_id FROM notes_tags WHERE tag IN (");
             for excluded_tag in &query.excluded_tags {
                 if excluded_tag == &query.excluded_tags[query.excluded_tags.len() - 1] {
@@ -287,16 +340,17 @@ impl Search {
             String::from("SELECT id FROM notes")
         };
         let orderby = format!(" ORDER BY {} {}", match query.sort {
-            Sort::Created => "created",
+            Sort::Created => "id",
             Sort::Mod => "mod",
         }, match query.sort_direction {
             SortDirection::Asc => "ASC",
             SortDirection::Desc => "DESC",
         });
 
-        let pagination = format!(" LIMIT {} OFFSET {}", query.page, (query.page - 1) * query.per_page);
+        let pagination = format!(" LIMIT {} OFFSET {}", query.per_page, (query.page - 1) * query.per_page);
         let final_query = (filter_query + &orderby) + &pagination;
 
+        println!("- find: final: {} -- {:?}", final_query, query);
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
         let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
         for val in &qry_vals {
@@ -316,9 +370,38 @@ impl Search {
 mod tests {
     use super::*;
 
+    use ::jedi;
+    use ::models::note::Note;
+
     #[test]
     fn loads_search() {
+        // seems stupic, but let's make sure our queries work
         Search::new().unwrap();
+    }
+
+    #[test]
+    fn index_unindex_filter() {
+        let search = Search::new().unwrap();
+
+        let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists"],"boards":["6969","1212"]}"#)).unwrap();
+        let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","link":"text","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
+        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"boards":["6969"]}"#)).unwrap();
+        let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights"],"boards":["1212","8989"]}"#)).unwrap();
+        let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"boards":["8989","6969"]}"#)).unwrap();
+
+        search.index_note(&note1).unwrap();
+        search.index_note(&note2).unwrap();
+        search.index_note(&note3).unwrap();
+        search.index_note(&note4).unwrap();
+        search.index_note(&note5).unwrap();
+
+        let mut query = Query::new();
+        query.boards(vec![String::from("6969")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["5555", "3333", "1111"]);
+
+        search.unindex_note(&note3).unwrap();
+        search.unindex_note(&note5).unwrap();
     }
 }
 
