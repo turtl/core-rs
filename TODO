@@ -9,7 +9,6 @@ sync:
 models:
 - PGP key generation and encryption
 - move over tests from JS
-- tests for model_getter!{}
 
 profile:
 - post-load indexing (load all notes and index in-mem via clouseau)

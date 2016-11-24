@@ -39,7 +39,7 @@ macro_rules! model_getter {
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {
                     Some(val) => val.clone(),
-                    None => return Err(TError::MissingData(format!("{} -- missing field `{}`", $func, stringify!($field)))),
+                    None => return Err(::error::TError::MissingData(format!("{} -- missing field `{}`", $func, stringify!($field)))),
                 }
             };
 
@@ -203,6 +203,8 @@ mod tests {
     use super::*;
     use ::jedi::{self, Value};
 
+    use ::error::TResult;
+
     model! {
         pub struct Rabbit {
             ()
@@ -270,6 +272,26 @@ mod tests {
         rabbit.city = Some(String::from("sc"));
 
         assert_eq!(rabbit.stringify().unwrap(), "{\"id\":\"12345\",\"name\":null,\"type\":\"hopper\",\"city\":\"sc\",\"chews_on_things_that_dont_belong_to_him\":null}");
+    }
+
+    #[test]
+    fn model_getter() {
+        model_getter!(get_val, "model_getter.test()");
+        fn run_test1(rabbit: &Rabbit) -> TResult<()> {
+            assert_eq!(get_val!(rabbit, id), "omglolwtf");
+            assert_eq!(get_val!(rabbit, name), "flirty");
+            assert_eq!(get_val!(rabbit, type_), "dutch");
+            assert_eq!(get_val!(rabbit, city, String::from("santa cruz")), "santa cruz");
+            Ok(())
+        }
+        fn run_test2(rabbit: &Rabbit) -> TResult<()> {
+            get_val!(rabbit, city);
+            Ok(())
+        }
+
+        let rabbit: Rabbit = jedi::parse(&String::from(r#"{"id":"omglolwtf","name":"flirty","type":"dutch"}"#)).unwrap();
+        assert!(run_test1(&rabbit).is_ok());
+        assert!(run_test2(&rabbit).is_err());
     }
 }
 
