@@ -23,6 +23,27 @@ lazy_static! {
     static ref CLIENT_ID: RwLock<Option<String>> = RwLock::new(None);
 }
 
+/// A macro that makes it easy to create one-off Option field grabbers for model
+/// fields.
+///
+/// Example:
+///
+///   model_getter!(get_field, "Search.index_note()");
+///   let id = get_field!(mymodel, id);
+#[macro_export]
+macro_rules! model_getter {
+    ($name:ident, $func:expr) => {
+        macro_rules! $name {
+            ($model:ident, $field:ident) => {
+                match $model.$field.as_ref() {
+                    Some(val) => val.clone(),
+                    None => return Err(TError::MissingData(String::from(concat!($func, " -- missing field `", stringify!($field), "`")))),
+                }
+            }
+        }
+    }
+}
+
 /// Set the model system's client id
 pub fn get_client_id() -> Option<String> {
     let guard = (*CLIENT_ID).read().unwrap();
