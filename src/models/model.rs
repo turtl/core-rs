@@ -34,12 +34,22 @@ lazy_static! {
 macro_rules! model_getter {
     ($name:ident, $func:expr) => {
         macro_rules! $name {
+            // this variant throws an enourmous tantrum of epic proportions if
+            // the model field is None
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {
                     Some(val) => val.clone(),
-                    None => return Err(TError::MissingData(String::from(concat!($func, " -- missing field `", stringify!($field), "`")))),
+                    None => return Err(TError::MissingData(format!("{} -- missing field `{}`", $func, stringify!($field)))),
                 }
-            }
+            };
+
+            // this variant returns a default value if the model field is None
+            ($model:ident, $field:ident, $def:expr) => {
+                match $model.$field.as_ref() {
+                    Some(val) => val.clone(),
+                    None => $def,
+                }
+            };
         }
     }
 }
