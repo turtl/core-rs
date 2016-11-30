@@ -5,13 +5,13 @@
 //!
 //! Note that this module only returns note IDs when returning search results.
 
-use ::rusqlite::types::{ToSql, Null, sqlite3_stmt};
-use ::rusqlite::types::Value as SqlValue;
+use ::rusqlite::types::{ToSql, sqlite3_stmt};
 use ::libc::c_int;
 
 use ::clouseau::Clouseau;
 
-use ::error::{TResult, TError};
+use ::error::TResult;
+use ::models::model;
 use ::models::note::Note;
 use ::models::file::File;
 
@@ -169,8 +169,12 @@ impl Search {
     pub fn index_note(&self, note: &Note) -> TResult<()> {
         model_getter!(get_field, "Search.index_note()");
         let id = get_field!(note, id);
+        let id_mod = match model::id_timestamp(&id) {
+            Ok(x) => x,
+            Err(_) => 99999999,
+        };
         let has_file = get_field!(note, has_file, false);
-        let mod_ = get_field!(note, mod_, 99999999) as i64;
+        let mod_ = get_field!(note, mod_, id_mod) as i64;
         let type_ = get_field!(note, type_, String::from("text"));
         let color = get_field!(note, color, 0);
         self.idx.conn.execute("INSERT INTO notes (id, has_file, mod, type, color) VALUES (?, ?, ?, ?, ?)", &[&id, &has_file, &mod_, &type_, &color])?;
@@ -194,7 +198,7 @@ impl Search {
                 get_field!(file, name, String::from(""))
             },
         ].join(" ");
-        self.idx.index(&id, &note_body);
+        self.idx.index(&id, &note_body)?;
         Ok(())
     }
 
@@ -381,7 +385,7 @@ mod tests {
         let search = Search::new().unwrap();
 
         let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists"],"boards":["6969","1212"]}"#)).unwrap();
-        let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","link":"text","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
+        let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","type":"link","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"boards":["6969"]}"#)).unwrap();
         let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"boards":["1212","8989"]}"#)).unwrap();
         let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"boards":["8989","6969"]}"#)).unwrap();
@@ -398,6 +402,15 @@ mod tests {
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333", "1111"]);
 
+        // board search w/ paging
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .page(2)
+            .per_page(1);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["3333"]);
+
         // combine boards/tags
         let mut query = Query::new();
         query
@@ -406,13 +419,24 @@ mod tests {
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
-        // combining boards/tags
+        // combining boards/tags/sort
         let mut query = Query::new();
         query
             .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#));
+            .text(String::from(r#"(penis OR "icy hearts")"#))
+            .sort(Sort::Created);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333"]);
+
+        // combining boards/tags/sort/desc
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#))
+            .sort(Sort::Created)
+            .sort_direction(SortDirection::Asc);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["3333", "5555"]);
 
         // combining boards/text/tags
         let mut query = Query::new();
@@ -433,9 +457,11 @@ mod tests {
         let mut query = Query::new();
         query
             .boards(vec![String::from("6969")])
-            .exclude_tags(vec![String::from("weird")]);
+            .exclude_tags(vec![String::from("weird")])
+            .sort(Sort::Mod)
+            .sort_direction(SortDirection::Asc);
         let notes = search.find(&query).unwrap();
-        assert_eq!(notes, vec!["5555", "1111"]);
+        assert_eq!(notes, vec!["1111", "5555"]);
 
         // reindex note 3
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"BREAKING NEWS Auto insurance companies HATE this one simple trick! Are you a good person? Here are ten questions you can ask yourself to find out. You won't believe number eight!!!!","tags":["buzzfeed","quiz","insurance"],"boards":["6969"]}"#)).unwrap();
@@ -513,6 +539,20 @@ mod tests {
             .exclude_tags(vec![String::from("weird")]);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
+
+        // type
+        let mut query = Query::new();
+        query.ty(String::from("link"));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["2222"]);
+
+        // color
+        let mut query = Query::new();
+        query
+            .color(3)
+            .has_file(true);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes.len(), 0);
     }
 }
 

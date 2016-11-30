@@ -87,6 +87,18 @@ pub fn cid() -> TResult<String> {
     Ok(cid)
 }
 
+/// Parse a unix timestamp out of a model id
+pub fn id_timestamp(id: &String) -> TResult<i64> {
+    let ts = if id.len() == 24 {
+        i64::from_str_radix(&id[0..8], 16)? * 1000
+    } else if id.len() == 80 {
+        i64::from_str_radix(&id[0..12], 16)?
+    } else {
+        return Err(TError::BadValue(format!("model::id_timestamp() -- bad id given ({})", id)));
+    };
+    Ok(ts)
+}
+
 /// The model trait defines an interface for (de)serializable objects that track
 /// their changes via eventing.
 pub trait Model: Emitter + Serialize + Deserialize {

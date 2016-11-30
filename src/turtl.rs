@@ -26,6 +26,7 @@ use ::models::user::User;
 use ::models::board::Board;
 use ::models::persona::Persona;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
+use ::models::note::Note;
 use ::util::thredder::{Thredder, Pipeline};
 use ::messaging::{Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
@@ -265,8 +266,11 @@ impl Turtl {
                 let turtl4 = turtl2.clone();
                 turtl2.load_profile()
                     .and_then(move |_| {
-                        // TODO: build
-                        //turtl3.index_notes()
+                        ftry!(Messenger::event("profile:loaded", jedi::obj()));
+                        turtl3.index_notes()
+                    })
+                    .and_then(|_| {
+                        ftry!(Messenger::event("profile:indexed", jedi::obj()));
                         FOk!(())
                     })
                     .or_else(move |e| -> TFutureResult<()> {
@@ -497,6 +501,33 @@ impl Turtl {
             .boxed()
     }
 
+    /// Take all the (encrypted) notes in our profile data then decrypt, index,
+    /// and free them. The idea is we can get a set of note IDs from a search,
+    /// but we're not holding all our notes decrypted in memory at all times.
+    pub fn index_notes(&self) -> TFutureResult<()> {
+        let db_guard = self.db.write().unwrap();
+        if db_guard.is_none() {
+            return FErr!(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
+        }
+        let db = db_guard.as_ref().unwrap();
+        let mut notes: Vec<Note> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("notes")))));
+        for note in &mut notes { ftry!(self.find_model_key(note)); }
+        self.with_next_fut()
+            .and_then(move |turtl| {
+                let turtl1 = turtl.clone();
+                protected::map_deserialize(turtl.as_ref(), notes)
+                    .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
+                        let search = ftry!(Search::new());
+                        for note in &notes { ftry!(search.index_note(note)); }
+                        let mut search_guard = turtl1.search.write().unwrap();
+                        *search_guard = Some(search);
+                        FOk!(())
+                    })
+                    .boxed()
+            })
+            .boxed()
+    }
+
     /// Run the given callback on the next main loop. Essentially gives us a
     /// setTimeout (if you are familiar). This means we can do something after
     /// the stack is unwound, but get a fresh Turtl context for our callback.
@@ -544,6 +575,7 @@ mod tests {
 
     use ::error::TFutureResult;
     use ::crypto::{self, Key};
+    use ::search::Query;
     use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
@@ -681,6 +713,7 @@ mod tests {
         let turtl = Arc::new(turtl);
         let ref tx_main = turtl.tx_main;
         let turtl2 = turtl.clone();
+        let turtl3 = turtl.clone();
         let stop2 = stop.clone();
         turtl.load_profile()
             .and_then(move |_| {
@@ -689,7 +722,35 @@ mod tests {
                 assert_eq!(profile_guard.boards.len(), 1);
                 assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Things I hate"));
                 assert!(profile_guard.persona.is_some());
-                // TODO: load notes from some kind of search mechanism
+                turtl2.index_notes()
+            })
+            .and_then(move |_| {
+                let search_guard = turtl3.search.read().unwrap();
+                let search = search_guard.as_ref().unwrap();
+
+                // this stuff is mostly covered in the search tests, but let's
+                // just make sure here.
+
+                let mut qry = Query::new();
+                qry.boards(vec![String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")]);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c"), String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
+
+                let mut qry = Query::new();
+                qry.text(String::from("story deployment"));
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
+
+                let mut qry = Query::new();
+                qry.text(String::from("story baby"));
+                assert_eq!(search.find(&qry).unwrap().len(), 0);
+
+                let mut qry = Query::new();
+                qry.text(String::from("confederate"));
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56")]);
+
+                let mut qry = Query::new();
+                qry.tags(vec![String::from("morons")]);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c")]);
+
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {

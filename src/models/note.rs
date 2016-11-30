@@ -10,7 +10,7 @@ protected!{
           boards: Vec<String>,
           file: File,
           has_file: bool,
-          mod_: u64 ),
+          mod_: i64 ),
         ( type_: String,
           title: String,
           tags: Vec<String>,
