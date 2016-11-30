@@ -1,4 +1,3 @@
 vars.mk
 target
-Cargo.lock
 config.yaml
