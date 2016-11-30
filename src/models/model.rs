@@ -30,6 +30,7 @@ lazy_static! {
 ///
 ///   model_getter!(get_field, "Search.index_note()");
 ///   let id = get_field!(mymodel, id);
+///   let name = get_field!(mymodel, name, String::from("default name"));
 #[macro_export]
 macro_rules! model_getter {
     ($name:ident, $func:expr) => {
