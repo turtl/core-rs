@@ -41,7 +41,7 @@ pub struct Query {
     /// Tags (AND)
     tags: Vec<String>,
     /// Tags we've excluded
-    excluded_tags: Vec<String>,
+    exclude_tags: Vec<String>,
     /// Search on type
     type_: Option<String>,
     /// Search on whether we have a file or not
@@ -65,7 +65,7 @@ impl Query {
             text: None,
             boards: Vec::new(),
             tags: Vec::new(),
-            excluded_tags: Vec::new(),
+            exclude_tags: Vec::new(),
             type_: None,
             has_file: None,
             color: None,
@@ -95,8 +95,8 @@ impl Query {
     }
 
     /// Set excluded tags into the search
-    pub fn excluded_tags<'a>(&'a mut self, excluded_tags: Vec<String>) -> &'a mut Self {
-        self.excluded_tags = excluded_tags;
+    pub fn exclude_tags<'a>(&'a mut self, exclude_tags: Vec<String>) -> &'a mut Self {
+        self.exclude_tags = exclude_tags;
         self
     }
 
@@ -205,7 +205,7 @@ impl Search {
         self.idx.conn.execute("DELETE FROM notes WHERE id = ?", &[&id])?;
         self.idx.conn.execute("DELETE FROM notes_boards where note_id = ?", &[&id])?;
         self.idx.conn.execute("DELETE FROM notes_tags where note_id = ?", &[&id])?;
-        self.idx.unindex(&id);
+        self.idx.unindex(&id)?;
         Ok(())
     }
 
@@ -248,20 +248,18 @@ impl Search {
         // there's probably a much better way, but this is easiest for now
         if query.text.is_some() {
             let ft_note_ids = self.idx.find(query.text.as_ref().unwrap())?;
-            if ft_note_ids.len() > 0 {
-                let mut ft_qry: Vec<&str> = Vec::with_capacity(ft_note_ids.len() + 2);
-                ft_qry.push("SELECT id FROM notes WHERE id IN (");
-                for id in &ft_note_ids {
-                    if id == &ft_note_ids[ft_note_ids.len() - 1] {
-                        ft_qry.push("?");
-                    } else {
-                        ft_qry.push("?,");
-                    }
-                    qry_vals.push(SearchVal::String(id.clone()));
+            let mut ft_qry: Vec<&str> = Vec::with_capacity(ft_note_ids.len() + 2);
+            ft_qry.push("SELECT id FROM notes WHERE id IN (");
+            for id in &ft_note_ids {
+                if id == &ft_note_ids[ft_note_ids.len() - 1] {
+                    ft_qry.push("?");
+                } else {
+                    ft_qry.push("?,");
                 }
-                ft_qry.push(")");
-                queries.push(ft_qry.as_slice().join(""));
+                qry_vals.push(SearchVal::String(id.clone()));
             }
+            ft_qry.push(")");
+            queries.push(ft_qry.as_slice().join(""));
         }
 
         if query.boards.len() > 0 {
@@ -295,11 +293,11 @@ impl Search {
             queries.push(tag_qry.as_slice().join(""));
         }
 
-        if query.excluded_tags.len() > 0 {
-            let mut excluded_tag_qry: Vec<&str> = Vec::with_capacity(query.excluded_tags.len() + 2);
+        if query.exclude_tags.len() > 0 {
+            let mut excluded_tag_qry: Vec<&str> = Vec::with_capacity(query.exclude_tags.len() + 2);
             excluded_tag_qry.push("SELECT note_id FROM notes_tags WHERE tag IN (");
-            for excluded_tag in &query.excluded_tags {
-                if excluded_tag == &query.excluded_tags[query.excluded_tags.len() - 1] {
+            for excluded_tag in &query.exclude_tags {
+                if excluded_tag == &query.exclude_tags[query.exclude_tags.len() - 1] {
                     excluded_tag_qry.push("?");
                 } else {
                     excluded_tag_qry.push("?,");
@@ -307,7 +305,7 @@ impl Search {
                 qry_vals.push(SearchVal::String(excluded_tag.clone()));
             }
             excluded_tag_qry.push(") GROUP BY note_id HAVING COUNT(*) = ?");
-            qry_vals.push(SearchVal::Int(query.excluded_tags.len() as i32));
+            qry_vals.push(SearchVal::Int(query.exclude_tags.len() as i32));
             exclude_queries.push(excluded_tag_qry.as_slice().join(""));
         }
 
@@ -350,7 +348,6 @@ impl Search {
         let pagination = format!(" LIMIT {} OFFSET {}", query.per_page, (query.page - 1) * query.per_page);
         let final_query = (filter_query + &orderby) + &pagination;
 
-        println!("- find: final: {} -- {:?}", final_query, query);
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
         let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
         for val in &qry_vals {
@@ -386,7 +383,7 @@ mod tests {
         let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists"],"boards":["6969","1212"]}"#)).unwrap();
         let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","link":"text","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"boards":["6969"]}"#)).unwrap();
-        let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights"],"boards":["1212","8989"]}"#)).unwrap();
+        let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"boards":["1212","8989"]}"#)).unwrap();
         let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"boards":["8989","6969"]}"#)).unwrap();
 
         search.index_note(&note1).unwrap();
@@ -395,13 +392,127 @@ mod tests {
         search.index_note(&note4).unwrap();
         search.index_note(&note5).unwrap();
 
+        // board search
         let mut query = Query::new();
         query.boards(vec![String::from("6969")]);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333", "1111"]);
 
+        // combine boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .tags(vec![String::from("terrorists")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["1111"]);
+
+        // combining boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["5555", "3333"]);
+
+        // combining boards/text/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#))
+            .tags(vec![String::from("riots")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["5555"]);
+
+        // do tags show up in a text search? they should
+        let mut query = Query::new();
+        query.text(String::from(r#"socialism"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["4444"]);
+
+        // excluded tags!
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .exclude_tags(vec![String::from("weird")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["5555", "1111"]);
+
+        // reindex note 3
+        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"BREAKING NEWS Auto insurance companies HATE this one simple trick! Are you a good person? Here are ten questions you can ask yourself to find out. You won't believe number eight!!!!","tags":["buzzfeed","quiz","insurance"],"boards":["6969"]}"#)).unwrap();
+        search.reindex_note(&note3).unwrap();
+
+        // combining boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["5555"]);
+
+        // combining boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"one simple trick"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["3333"]);
+
+        // combining boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"simple tricks"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        // remove some notes, rerun
         search.unindex_note(&note3).unwrap();
         search.unindex_note(&note5).unwrap();
+
+        // board search
+        let mut query = Query::new();
+        query.boards(vec![String::from("6969")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["1111"]);
+
+        // combine boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .tags(vec![String::from("terrorists")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["1111"]);
+
+        // combining boards/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        // combining boards/text/tags
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .text(String::from(r#"(penis OR "icy hearts")"#))
+            .tags(vec![String::from("riots")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        // do tags show up in a text search? they should
+        let mut query = Query::new();
+        query.text(String::from(r#"socialism"#));
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["4444"]);
+
+        // excluded tags!
+        let mut query = Query::new();
+        query
+            .boards(vec![String::from("6969")])
+            .exclude_tags(vec![String::from("weird")]);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["1111"]);
     }
 }
 
