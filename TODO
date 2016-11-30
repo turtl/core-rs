@@ -1,7 +1,8 @@
 sync:
 - notify UI of API -> core sync
 - notify UI of sync/login status
-- dispatch handlers for UI -> core sync
+- notify core of UI data change
+  - reindex on note change
 - effective way to test sync via tests or at least client?
 - outgoing file uploads
 - incoming file downloads
@@ -11,10 +12,6 @@ models:
 - move over tests from JS
 
 profile:
-- post-load indexing (load all notes and index in-mem via clouseau)
-  - http://stackoverflow.com/questions/2060718/how-do-i-efficiently-do-the-intersection-of-joins-in-sql
-  - http://stackoverflow.com/questions/2000567/sql-n-to-n-matching-multiple-values/2000642#2000642
-- reindex on item change
 - dispatch handlers for grabbing/searching notes
 
 invites/personas:
