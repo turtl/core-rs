@@ -1,3 +1,9 @@
+user:
+- join
+
+profile:
+- dispatch handlers for grabbing/searching notes
+
 sync:
 - notify UI of API -> core sync
 - notify UI of sync/login status
@@ -10,9 +16,6 @@ sync:
 models:
 - PGP key generation and encryption
 - move over tests from JS
-
-profile:
-- dispatch handlers for grabbing/searching notes
 
 invites/personas:
 - anything special? or will sync+ui notifications handle all this?

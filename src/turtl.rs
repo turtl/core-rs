@@ -751,6 +751,18 @@ mod tests {
                 qry.tags(vec![String::from("morons")]);
                 assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c")]);
 
+                assert_eq!(
+                    search.tags_by_frequency(&Vec::new(), 9999).unwrap(),
+                    vec![
+                        (String::from("annoying"), 1),
+                        (String::from("death penalty"), 1),
+                        (String::from("morons"), 1),
+                        (String::from("pro-life"), 1),
+                        (String::from("story"), 1),
+                    ]
+                );
+
+
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {

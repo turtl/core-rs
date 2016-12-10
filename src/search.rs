@@ -15,22 +15,6 @@ use ::models::model;
 use ::models::note::Note;
 use ::models::file::File;
 
-/// Used to specify what field we're sorting our results on
-#[derive(Debug)]
-pub enum Sort {
-    /// Sort by create date
-    Created,
-    /// Sort by mod date
-    Mod,
-}
-
-/// Defines our sort direction
-#[derive(Debug)]
-pub enum SortDirection {
-    Asc,
-    Desc,
-}
-
 /// A query builder
 #[derive(Debug)]
 pub struct Query {
@@ -49,9 +33,9 @@ pub struct Query {
     /// Search by color
     color: Option<i32>,
     /// What we're sorting on
-    sort: Sort,
+    sort: String,
     /// What sort direction
-    sort_direction: SortDirection,
+    sort_direction: String,
     /// Result page
     page: i32,
     /// Results per page
@@ -69,8 +53,8 @@ impl Query {
             type_: None,
             has_file: None,
             color: None,
-            sort: Sort::Created,
-            sort_direction: SortDirection::Desc,
+            sort: String::from("id"),
+            sort_direction: String::from("desc"),
             page: 1,
             per_page: 100,
         }
@@ -119,13 +103,13 @@ impl Query {
     }
 
     /// How to sort our results
-    pub fn sort<'a>(&'a mut self, sort: Sort) -> &'a mut Self {
+    pub fn sort<'a>(&'a mut self, sort: String) -> &'a mut Self {
         self.sort = sort;
         self
     }
 
     /// Our sort direction
-    pub fn sort_direction<'a>(&'a mut self, sort_direction: SortDirection) -> &'a mut Self {
+    pub fn sort_direction<'a>(&'a mut self, sort_direction: String) -> &'a mut Self {
         self.sort_direction = sort_direction;
         self
     }
@@ -152,6 +136,23 @@ pub struct Search {
 
 unsafe impl Send for Search {}
 unsafe impl Sync for Search {}
+
+/// Makes generating SQL statements somewhat painless by implementing rusqlite's
+/// ToSql for some primitive types (wrapped in one enum).
+enum SearchVal {
+    Bool(bool),
+    String(String),
+    Int(i32),
+}
+impl ToSql for SearchVal {
+    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
+        match *self {
+            SearchVal::Bool(ref x) => x.bind_parameter(stmt, col),
+            SearchVal::Int(ref x) => x.bind_parameter(stmt, col),
+            SearchVal::String(ref x) => x.bind_parameter(stmt, col),
+        }
+    }
+}
 
 impl Search {
     /// Create a new Search object
@@ -228,21 +229,6 @@ impl Search {
     /// bunch of separate queries. There may be a more efficient way to do this,
     /// however since this is all in-memory anyway, it's probably fine.
     pub fn find(&self, query: &Query) -> TResult<Vec<String>> {
-        enum SearchVal {
-            Bool(bool),
-            String(String),
-            Int(i32),
-        }
-        impl ToSql for SearchVal {
-            unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
-                match *self {
-                    SearchVal::Bool(ref x) => x.bind_parameter(stmt, col),
-                    SearchVal::Int(ref x) => x.bind_parameter(stmt, col),
-                    SearchVal::String(ref x) => x.bind_parameter(stmt, col),
-                }
-            }
-        }
-
         let mut queries: Vec<String> = Vec::new();
         let mut exclude_queries: Vec<String> = Vec::new();
         let mut qry_vals: Vec<SearchVal> = Vec::new();
@@ -341,14 +327,7 @@ impl Search {
         } else {
             String::from("SELECT id FROM notes")
         };
-        let orderby = format!(" ORDER BY {} {}", match query.sort {
-            Sort::Created => "id",
-            Sort::Mod => "mod",
-        }, match query.sort_direction {
-            SortDirection::Asc => "ASC",
-            SortDirection::Desc => "DESC",
-        });
-
+        let orderby = format!(" ORDER BY {} {}", query.sort, query.sort_direction);
         let pagination = format!(" LIMIT {} OFFSET {}", query.per_page, (query.page - 1) * query.per_page);
         let final_query = (filter_query + &orderby) + &pagination;
 
@@ -360,10 +339,46 @@ impl Search {
         }
         let rows = prepared_qry.query_map(values.as_slice(), |row| row.get(0))?;
         let mut note_ids = Vec::new();
-        for id in rows {
-            note_ids.push(id?);
-        }
+        for id in rows { note_ids.push(id?); }
         Ok(note_ids)
+    }
+
+    /// Grab note tags out of the index, sorted by frequency of use (desc).
+    /// Takes a vec of board_ids to limit the search to, but if passed a zero
+    /// length vec, will just pull out all tags.
+    pub fn tags_by_frequency(&self, boards: &Vec<String>, limit: i32) -> TResult<Vec<(String, i32)>> {
+        let mut tag_qry: Vec<&str> = Vec::with_capacity(boards.len() + 4);
+        let mut qry_vals: Vec<SearchVal> = Vec::new();
+        tag_qry.push("SELECT tag, count(tag) AS tag_count FROM notes_tags ");
+        if boards.len() > 0 {
+            tag_qry.push("WHERE note_id IN (SELECT note_id FROM notes_boards WHERE board_id IN (");
+            for board in boards {
+                if board == &boards[boards.len() - 1] {
+                    tag_qry.push("?");
+                } else {
+                    tag_qry.push("?,");
+                }
+                qry_vals.push(SearchVal::String(board.clone()));
+            }
+            tag_qry.push(")) ");
+        }
+        tag_qry.push("GROUP BY tag ORDER BY tag_count DESC, tag ASC LIMIT ?");
+        qry_vals.push(SearchVal::Int(limit));
+
+        let final_query = tag_qry.as_slice().join("");
+        let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
+        let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
+        for val in &qry_vals {
+            let ts: &ToSql = val;
+            values.push(ts);
+        }
+        let rows = prepared_qry.query_map(values.as_slice(), |row| (row.get("tag"), row.get("tag_count")))?;
+        let mut tags = Vec::new();
+        for entry in rows {
+            let val = entry?;
+            tags.push((val.0, val.1));
+        }
+        Ok(tags)
     }
 }
 
@@ -384,7 +399,7 @@ mod tests {
     fn index_unindex_filter() {
         let search = Search::new().unwrap();
 
-        let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists"],"boards":["6969","1212"]}"#)).unwrap();
+        let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Do you have breast cancer??? Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists","breasts"],"boards":["6969","1212"]}"#)).unwrap();
         let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","type":"link","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"boards":["6969"]}"#)).unwrap();
         let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"boards":["1212","8989"]}"#)).unwrap();
@@ -424,7 +439,7 @@ mod tests {
         query
             .boards(vec![String::from("6969")])
             .text(String::from(r#"(penis OR "icy hearts")"#))
-            .sort(Sort::Created);
+            .sort(String::from("id"));
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333"]);
 
@@ -433,8 +448,8 @@ mod tests {
         query
             .boards(vec![String::from("6969")])
             .text(String::from(r#"(penis OR "icy hearts")"#))
-            .sort(Sort::Created)
-            .sort_direction(SortDirection::Asc);
+            .sort(String::from("id"))
+            .sort_direction(String::from("asc"));
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333", "5555"]);
 
@@ -458,12 +473,84 @@ mod tests {
         query
             .boards(vec![String::from("6969")])
             .exclude_tags(vec![String::from("weird")])
-            .sort(Sort::Mod)
-            .sort_direction(SortDirection::Asc);
+            .sort(String::from("mod"))
+            .sort_direction(String::from("asc"));
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111", "5555"]);
 
+        // tag frequency search
+        let tags = search.tags_by_frequency(&Vec::new(), 9999).unwrap();
+        assert_eq!(
+            tags,
+            vec![
+                (String::from("breasts"), 2),
+                (String::from("corporations"), 2),
+                (String::from("news"), 2),
+                (String::from("airplanes"), 1),
+                (String::from("balanced"), 1),
+                (String::from("buzzfeed"), 1),
+                (String::from("cnn"), 1),
+                (String::from("fair"), 1),
+                (String::from("fox"), 1),
+                (String::from("liberatrians"), 1),
+                (String::from("pipeline"), 1),
+                (String::from("property rights"), 1),
+                (String::from("protests"), 1),
+                (String::from("riots"), 1),
+                (String::from("simple"), 1),
+                (String::from("socialism"), 1),
+                (String::from("taxes"), 1),
+                (String::from("terrorists"), 1),
+                (String::from("trick"), 1),
+                (String::from("weird"), 1),
+            ]
+        );
+        let tags = search.tags_by_frequency(&vec![String::from("6969")], 9999).unwrap();
+        assert_eq!(
+            tags,
+            vec![
+                (String::from("breasts"), 2),
+                (String::from("airplanes"), 1),
+                (String::from("buzzfeed"), 1),
+                (String::from("cnn"), 1),
+                (String::from("corporations"), 1),
+                (String::from("news"), 1),
+                (String::from("pipeline"), 1),
+                (String::from("protests"), 1),
+                (String::from("riots"), 1),
+                (String::from("simple"), 1),
+                (String::from("terrorists"), 1),
+                (String::from("trick"), 1),
+                (String::from("weird"), 1),
+            ]
+        );
+        let tags = search.tags_by_frequency(&vec![String::from("6969"), String::from("1212")], 9999).unwrap();
+        assert_eq!(
+            tags,
+            vec![
+                (String::from("breasts"), 2),
+                (String::from("airplanes"), 1),
+                (String::from("buzzfeed"), 1),
+                (String::from("cnn"), 1),
+                (String::from("corporations"), 1),
+                (String::from("liberatrians"), 1),
+                (String::from("news"), 1),
+                (String::from("pipeline"), 1),
+                (String::from("property rights"), 1),
+                (String::from("protests"), 1),
+                (String::from("riots"), 1),
+                (String::from("simple"), 1),
+                (String::from("socialism"), 1),
+                (String::from("taxes"), 1),
+                (String::from("terrorists"), 1),
+                (String::from("trick"), 1),
+                (String::from("weird"), 1),
+            ]
+        );
+
+        // ---------------------------------------------------------------------
         // reindex note 3
+        // ---------------------------------------------------------------------
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"BREAKING NEWS Auto insurance companies HATE this one simple trick! Are you a good person? Here are ten questions you can ask yourself to find out. You won't believe number eight!!!!","tags":["buzzfeed","quiz","insurance"],"boards":["6969"]}"#)).unwrap();
         search.reindex_note(&note3).unwrap();
 
@@ -491,7 +578,9 @@ mod tests {
         let notes = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
+        // ---------------------------------------------------------------------
         // remove some notes, rerun
+        // ---------------------------------------------------------------------
         search.unindex_note(&note3).unwrap();
         search.unindex_note(&note5).unwrap();
 
