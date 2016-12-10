@@ -20,13 +20,17 @@
 //! you want it to.
 
 extern crate jedi;
+extern crate libc;
 #[macro_use]
 extern crate quick_error;
 extern crate rusqlite;
 extern crate serde_json;
 
+use ::libc::c_int;
+
 use ::rusqlite::Connection;
 use ::rusqlite::types::Value as SqlValue;
+use ::rusqlite::types::{ToSql, sqlite3_stmt};
 use ::rusqlite::Error as SqlError;
 use ::jedi::{Value, JSONError};
 
@@ -34,6 +38,23 @@ pub mod error;
 
 pub use ::error::DError;
 use ::error::DResult;
+
+/// Makes generating SQL statements somewhat painless by implementing rusqlite's
+/// ToSql for some primitive types (wrapped in one enum).
+pub enum SearchVal {
+    Bool(bool),
+    String(String),
+    Int(i32),
+}
+impl ToSql for SearchVal {
+    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
+        match *self {
+            SearchVal::Bool(ref x) => x.bind_parameter(stmt, col),
+            SearchVal::Int(ref x) => x.bind_parameter(stmt, col),
+            SearchVal::String(ref x) => x.bind_parameter(stmt, col),
+        }
+    }
+}
 
 /// The Dumpy struct stores our schema and acts as a namespace for our public
 /// functions.
@@ -271,6 +292,36 @@ impl Dumpy {
         Ok(objects)
     }
 
+    /// Get ALL objects in a table with the given IDs
+    pub fn by_id(&self, conn: &Connection, table: &String, ids: &Vec<String>) -> DResult<Vec<Value>> {
+        let mut qry_parts: Vec<&str> = Vec::with_capacity(ids.len() + 2);
+        let mut qry_vals: Vec<SearchVal> = Vec::new();
+        qry_vals.push(SearchVal::String(table.clone()));
+        qry_parts.push("SELECT data FROM Dumpy_objects WHERE table_name = ? AND id IN (");
+        for id in ids {
+            if id == &ids[ids.len() - 1] {
+                qry_parts.push("?");
+            } else {
+                qry_parts.push("?,");
+            }
+            qry_vals.push(SearchVal::String(id.clone()));
+        }
+        qry_parts.push(") ORDER BY id ASC");
+        let final_query = qry_parts.as_slice().join("");
+        let mut prepared_qry = conn.prepare(final_query.as_str())?;
+        let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
+        for val in &qry_vals {
+            let ts: &ToSql = val;
+            values.push(ts);
+        }
+        let rows = prepared_qry.query_map(values.as_slice(), |row| row.get("data"))?;
+        let mut objects: Vec<Value> = Vec::new();
+        for data in rows {
+            objects.push(jedi::parse(&data?)?);
+        }
+        Ok(objects)
+    }
+
     /// Set a value into the key/val store
     pub fn kv_set(&self, conn: &Connection, key: &str, val: &String) -> DResult<()> {
         conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val])?;
@@ -428,6 +479,9 @@ mod tests {
 
         let all_records = dumpy.all(&conn, &String::from("notes")).unwrap();
         assert_eq!(all_records.len(), 7);
+
+        let by_ids = dumpy.by_id(&conn, &String::from("notes"), &vec![String::from("n0mnm"), String::from("6tuns"), String::from("gr1my"), String::from("L00000000L")]).unwrap();
+        assert_eq!(by_ids.len(), 3);
     }
 
     #[test]

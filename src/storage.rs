@@ -114,6 +114,12 @@ impl Storage {
             .map_err(|e| From::from(e))
     }
 
+    /// Get ALL objects in a table with the given IDs
+    pub fn by_id(&self, table: &str, ids: &Vec<String>) -> TResult<Vec<Value>> {
+        self.dumpy.by_id(&self.conn, &String::from(table), &ids)
+            .map_err(|e| From::from(e))
+    }
+
     /// Grab a value from our dumpy k/v store
     pub fn kv_get(&self, key: &str) -> TResult<Option<String>> {
         self.dumpy.kv_get(&self.conn, key)

@@ -5,6 +5,7 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
 jedi = { path = "../jedi" }
+libc = "0.2.15"
 rusqlite = "0.7.3"
 quick-error = "1.1.0"
 serde = "0.8.16"

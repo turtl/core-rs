@@ -5,41 +5,32 @@
 //!
 //! Note that this module only returns note IDs when returning search results.
 
-use ::rusqlite::types::{ToSql, sqlite3_stmt};
-use ::libc::c_int;
+use ::rusqlite::types::ToSql;
 
 use ::clouseau::Clouseau;
+use ::dumpy::SearchVal;
 
 use ::error::TResult;
 use ::models::model;
 use ::models::note::Note;
 use ::models::file::File;
 
-/// A query builder
-#[derive(Debug)]
-pub struct Query {
-    /// Full-text search query
-    text: Option<String>,
-    /// Boards (OR)
-    boards: Vec<String>,
-    /// Tags (AND)
-    tags: Vec<String>,
-    /// Tags we've excluded
-    exclude_tags: Vec<String>,
-    /// Search on type
-    type_: Option<String>,
-    /// Search on whether we have a file or not
-    has_file: Option<bool>,
-    /// Search by color
-    color: Option<i32>,
-    /// What we're sorting on
-    sort: String,
-    /// What sort direction
-    sort_direction: String,
-    /// Result page
-    page: i32,
-    /// Results per page
-    per_page: i32,
+serializable! {
+    /// A query builder
+    #[derive(Debug)]
+    pub struct Query {
+        text: Option<String>,
+        boards: Vec<String>,
+        tags: Vec<String>,
+        exclude_tags: Vec<String>,
+        type_: Option<String>,
+        has_file: Option<bool>,
+        color: Option<i32>,
+        sort: String,
+        sort_direction: String,
+        page: i32,
+        per_page: i32,
+    }
 }
 
 impl Query {
@@ -136,23 +127,6 @@ pub struct Search {
 
 unsafe impl Send for Search {}
 unsafe impl Sync for Search {}
-
-/// Makes generating SQL statements somewhat painless by implementing rusqlite's
-/// ToSql for some primitive types (wrapped in one enum).
-enum SearchVal {
-    Bool(bool),
-    String(String),
-    Int(i32),
-}
-impl ToSql for SearchVal {
-    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
-        match *self {
-            SearchVal::Bool(ref x) => x.bind_parameter(stmt, col),
-            SearchVal::Int(ref x) => x.bind_parameter(stmt, col),
-            SearchVal::String(ref x) => x.bind_parameter(stmt, col),
-        }
-    }
-}
 
 impl Search {
     /// Create a new Search object
