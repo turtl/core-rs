@@ -19,7 +19,7 @@ pub fn init() -> thread::JoinHandle<()> {
 
     thread::spawn(|| {
         turtl_core::init().unwrap();
-        let app_config = String::from(r#"{"data_folder":"d:/tmp/turtl/"}"#);
+        let app_config = String::from(r#"{"data_folder":":memory:"}"#);
         turtl_core::start(app_config).join().unwrap();
     })
 }
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn login_sync_logout() {
+    fn login_sync_load_logout() {
         let handle = init();
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
@@ -99,6 +99,12 @@ mod tests {
         send(msg.as_str());
         let msg = recv("4");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = String::from(r#"["6","profile:get-notes",{}]"#);
+        send(msg.as_str());
+        let msg = recv("6");
+        assert_eq!(msg, r#"assss"#);
         sleep(10);
 
         let msg = String::from(r#"["6","app:shutdown-sync"]"#);
