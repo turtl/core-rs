@@ -139,6 +139,7 @@ impl Api {
             })
             .map(|out| {
                 info!("api::call() -- res({}): {} {}", out.len(), method2, resource);
+                debug!("api::call() -- body: {} {} -- {}", method2, resource, out);
                 out
             })
             .and_then(|out| jedi::parse::<Value>(&out).map_err(|e| toterr!(e)))
