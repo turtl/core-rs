@@ -111,17 +111,19 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // std::fs, for me please, we're lookin at china. we're lookin at
             // the UN. go ahead and create our data directory.
             let data_folder = config::get::<String>(&["data_folder"])?;
-            match fs::create_dir(&data_folder) {
-                Ok(()) => {
-                    info!("main::start() -- created data folder: {}", data_folder);
-                },
-                Err(e) => {
-                    match e.kind() {
-                        // talked to drew about directory already existing.
-                        // sounds good.
-                        ErrorKind::AlreadyExists => (),
-                        _ => {
-                            return Err(From::from(e));
+            if data_folder != ":memory:" {
+                match fs::create_dir(&data_folder) {
+                    Ok(()) => {
+                        info!("main::start() -- created data folder: {}", data_folder);
+                    },
+                    Err(e) => {
+                        match e.kind() {
+                            // talked to drew about directory already existing.
+                            // sounds good.
+                            ErrorKind::AlreadyExists => (),
+                            _ => {
+                                return Err(From::from(e));
+                            }
                         }
                     }
                 }
