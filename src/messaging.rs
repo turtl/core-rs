@@ -110,6 +110,7 @@ impl Messenger {
 
     /// Send an event out to our UI thread. Note that this is a static method!
     pub fn event(name: &str, data: Value) -> TResult<()> {
+        info!("Messenger::event() -- `{}`", name);
         let channel: String = config::get(&["messaging", "events"])?;
         let event = Event {
             e: String::from(name),
