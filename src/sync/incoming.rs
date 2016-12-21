@@ -136,19 +136,40 @@ impl SyncIncoming {
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, data: Value) -> TResult<()> {
-        let sync_type = jedi::get::<String>(&["type"], &data)?;
-        let res = match sync_type.as_ref() {
-            "user" => self.handlers.user.incoming(&self.db, data),
-            "keychain" => self.handlers.keychain.incoming(&self.db, data),
-            "persona" => self.handlers.persona.incoming(&self.db, data),
-            "board" => self.handlers.board.incoming(&self.db, data),
-            "note" => self.handlers.note.incoming(&self.db, data),
-            "file" => self.handlers.file.incoming(&self.db, data),
-            "invite" => self.handlers.invite.incoming(&self.db, data),
+    fn run_sync_item(&self, sync_item: Value) -> TResult<()> {
+        // grab our type from the sync item
+        let sync_type = jedi::get::<String>(&["type"], &sync_item)?;
+
+        // check if we have missing data, and if so, if it's on purpose
+        match jedi::get::<Value>(&["data"], &sync_item) {
+            Ok(_) => (),
+            Err(_) => {
+                let missing = match jedi::get::<bool>(&["missing"], &sync_item) {
+                    Ok(x) => x,
+                    Err(_) => false,
+                };
+                if sync_type == "file" {
+                } else if missing {
+                    info!("sync::incoming::run_sync_item() -- got missing item, probably and add/delete: {:?}", sync_item);
+                    return Ok(());
+                } else {
+                    return Err(TError::BadValue(format!("sync::incoming::run_sync_item() -- bad item: {:?}", sync_item)));
+                }
+            },
+        }
+
+        // send our sync item off to each type's respective handler. these are
+        // defined by the SyncModel (sync/sync_model.rs).
+        match sync_type.as_ref() {
+            "user" => self.handlers.user.incoming(&self.db, sync_item),
+            "keychain" => self.handlers.keychain.incoming(&self.db, sync_item),
+            "persona" => self.handlers.persona.incoming(&self.db, sync_item),
+            "board" => self.handlers.board.incoming(&self.db, sync_item),
+            "note" => self.handlers.note.incoming(&self.db, sync_item),
+            "file" => self.handlers.file.incoming(&self.db, sync_item),
+            "invite" => self.handlers.invite.incoming(&self.db, sync_item),
             _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_type))),
-        };
-        res
+        }
     }
 }
 
@@ -176,7 +197,7 @@ impl Syncer for SyncIncoming {
         };
         // let our Turtl know we're done
         self.get_tx().next(|turtl| {
-            turtl.events.trigger("sync:incoming:init:done", &jedi::obj());
+            turtl.events.trigger("sync:incoming:init:done", &Value::Bool(true));
         });
         res
     }
