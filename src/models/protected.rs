@@ -294,7 +294,7 @@ pub trait Protected: Model + fmt::Debug {
     /// It returns the Value of all fields.
     fn deserialize(&mut self) -> TResult<Value> {
         if self.key().is_none() {
-            return Err(TError::MissingData(format!("protected.deserialize() -- model {:?} missing key", self.id())));
+            return Err(TError::MissingData(format!("protected.deserialize() -- missing key for {} model {:?} missing key", self.model_type(), self.id())));
         }
         self.deserialize_submodels()?;
         let fakeid = String::from("<no id>");
@@ -393,8 +393,7 @@ macro_rules! protected {
             pub struct $name {
                 (
                     $( $extra_field: $extra_type, )*
-                    _key: Option<::crypto::Key>,
-                    model_type: String
+                    _key: Option<::crypto::Key>
                 )
 
                 $( $pub_field: $pub_type, )*
@@ -440,7 +439,7 @@ macro_rules! protected {
             }
 
             fn model_type(&self) -> &str {
-                &self.model_type[..]
+                stringify!($name)
             }
 
             fn public_fields(&self) -> Vec<&'static str> {
