@@ -1,8 +1,10 @@
 use ::turtl::Turtl;
+use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::Keychain;
 use ::models::file::File;
+use ::jedi::Value;
 
 protected!{
     pub struct Note {
@@ -26,7 +28,11 @@ protected!{
 }
 
 make_storable!(Note, "notes");
-make_basic_sync_model!(Note);
+make_basic_sync_model!{ Note,
+    fn transform(&self, sync_item: Value) -> TResult<Value> {
+        Ok(sync_item)
+    }
+}
 
 impl Keyfinder for Note {
     fn get_key_search(&self, turtl: &Turtl) -> Keychain {
