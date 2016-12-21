@@ -280,12 +280,6 @@ impl Turtl {
                     })
                     .forget();
             }, "sync:incoming:init:done");
-            turtl.events.bind("profile:loaded", move |_| {
-                match Messenger::event("profile:loaded", jedi::obj()) {
-                    Ok(_) => {},
-                    Err(e) => error!("turtl -- profile:loaded: problem sending event: {}", e),
-                }
-            }, "turtl:profile:loaded");
         });
         Ok(())
     }
