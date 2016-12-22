@@ -7,21 +7,28 @@
 
 use ::std::sync::Arc;
 
-use ::jedi::Value;
-
 use ::error::TResult;
 use ::storage::Storage;
+use ::sync::item::SyncItem;
 use ::models::protected::Protected;
 use ::models::storable::Storable;
 
 macro_rules! make_sync_incoming {
     ($n:ty) => {
-        fn incoming(&self, db: &::std::sync::Arc<::storage::Storage>, sync_item: ::jedi::Value) -> ::error::TResult<()> {
-            let sync_item = self.transform(sync_item)?;
-            debug!("sync::incoming() -- {} / data: {}", self.model_type(), sync_item);
-            let model_data = ::jedi::get(&["data"], &sync_item)?;
-            let model: $n = ::jedi::from_val(model_data)?;
-            self.saver(db, &model)
+        fn incoming(&self, db: &::std::sync::Arc<::storage::Storage>, sync_item: ::sync::item::SyncItem) -> ::error::TResult<()> {
+            let data = match sync_item.data.as_ref() {
+                Some(x) => x.clone(),
+                None => return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id, self.model_type()))),
+            };
+            if sync_item.action == "delete" {
+                let model: $n = ::jedi::from_val(data)?;
+                self.db_delete(db, &model)
+            } else {
+                let sync_item = self.transform(sync_item)?;
+                debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), sync_item);
+                let model: $n = ::jedi::from_val(data)?;
+                self.db_save(db, &model)
+            }
         }
     };
 }
@@ -44,19 +51,26 @@ macro_rules! make_basic_sync_model {
 }
 
 pub trait SyncModel: Storable {
-    /// A default save functoin that takes a db/model and saves it.
-    fn saver<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
+    /// A default save function that takes a db/model and saves it.
+    fn db_save<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
         where T: Protected + Storable
     {
         db.save(model)
     }
 
+    /// A default delete function that takes a db/model and deletes it.
+    fn db_delete<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
+        where T: Protected + Storable
+    {
+        db.delete(model)
+    }
+
     /// Transform this model's data (if required).
-    fn transform(&self, sync_item: Value) -> TResult<Value> {
+    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
         Ok(sync_item)
     }
 
     /// Run an incoming sync item
-    fn incoming(&self, db: &Arc<Storage>, sync_item: Value) -> TResult<()>;
+    fn incoming(&self, db: &Arc<Storage>, sync_item: SyncItem) -> TResult<()>;
 }
 

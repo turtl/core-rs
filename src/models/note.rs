@@ -4,7 +4,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::Keychain;
 use ::models::file::File;
-use ::jedi::Value;
+use ::sync::item::SyncItem;
 
 protected!{
     pub struct Note {
@@ -29,7 +29,7 @@ protected!{
 
 make_storable!(Note, "notes");
 make_basic_sync_model!{ Note,
-    fn transform(&self, sync_item: Value) -> TResult<Value> {
+    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
         Ok(sync_item)
     }
 }

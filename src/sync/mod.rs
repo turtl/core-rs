@@ -15,6 +15,7 @@
 
 mod incoming;
 mod outgoing;
+pub mod item;
 #[macro_use]
 pub mod sync_model;
 

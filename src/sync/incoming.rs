@@ -6,6 +6,7 @@ use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
+use ::sync::item::SyncItem;
 use ::util::thredder::Pipeline;
 use ::util::event::Emitter;
 use ::storage::Storage;
@@ -119,7 +120,7 @@ impl SyncIncoming {
         // the api sends back the latest sync id out of the bunch. grab it.
         let sync_id = jedi::get::<String>(&["sync_id"], &syncdata)?;
         // also grab our sync records.
-        let records = jedi::get::<Vec<Value>>(&["records"], &syncdata)?;
+        let records: Vec<SyncItem> = jedi::get(&["records"], &syncdata)?;
 
         // start a transaction. we don't want to save half-data.
         self.db.conn.execute("BEGIN TRANSACTION", &[])?;
@@ -136,31 +137,24 @@ impl SyncIncoming {
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, sync_item: Value) -> TResult<()> {
-        // grab our type from the sync item
-        let sync_type = jedi::get::<String>(&["type"], &sync_item)?;
-
+    fn run_sync_item(&self, sync_item: SyncItem) -> TResult<()> {
         // check if we have missing data, and if so, if it's on purpose
-        match jedi::get::<Value>(&["data"], &sync_item) {
-            Ok(_) => (),
-            Err(_) => {
-                let missing = match jedi::get::<bool>(&["missing"], &sync_item) {
-                    Ok(x) => x,
-                    Err(_) => false,
-                };
-                if sync_type == "file" {
-                } else if missing {
-                    info!("sync::incoming::run_sync_item() -- got missing item, probably and add/delete: {:?}", sync_item);
-                    return Ok(());
-                } else {
-                    return Err(TError::BadValue(format!("sync::incoming::run_sync_item() -- bad item: {:?}", sync_item)));
-                }
-            },
+        if sync_item.data.is_none() {
+            let missing = match sync_item.missing {
+                Some(x) => x,
+                None => false,
+            };
+            if missing {
+                info!("sync::incoming::run_sync_item() -- got missing item, probably and add/delete: {:?}", sync_item);
+                return Ok(());
+            } else {
+                return Err(TError::BadValue(format!("sync::incoming::run_sync_item() -- bad item: {:?}", sync_item)));
+            }
         }
 
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
-        match sync_type.as_ref() {
+        match sync_item.type_.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, sync_item),
             "keychain" => self.handlers.keychain.incoming(&self.db, sync_item),
             "persona" => self.handlers.persona.incoming(&self.db, sync_item),
@@ -168,7 +162,7 @@ impl SyncIncoming {
             "note" => self.handlers.note.incoming(&self.db, sync_item),
             "file" => self.handlers.file.incoming(&self.db, sync_item),
             "invite" => self.handlers.invite.incoming(&self.db, sync_item),
-            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_type))),
+            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.type_))),
         }
     }
 }

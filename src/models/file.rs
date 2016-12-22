@@ -1,5 +1,10 @@
-use ::jedi::Value;
+use ::std::sync::Arc;
 
+use ::jedi::Value;
+use ::error::TResult;
+use ::storage::Storage;
+use ::sync::item::SyncItem;
+use ::models::storable::Storable;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
@@ -28,7 +33,19 @@ protected!{
 }
 
 make_storable!(FileData, "files");
-make_basic_sync_model!(FileData);
+make_basic_sync_model!{ FileData,
+    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
+        // TODO: transform note data into file data
+        Ok(sync_item)
+    }
+
+    fn db_save<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
+        where T: Protected + Storable
+    {
+        db.save(model)
+        // TODO: add to file download queue
+    }
+}
 
 impl Keyfinder for FileData {}
 
