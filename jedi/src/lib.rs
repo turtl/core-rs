@@ -223,6 +223,16 @@ pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
     }
 }
 
+/// A lot like `get()`, in fact under the hood uses `get()`, except it converts
+/// all errors into a None value. Really nice for quick "does this object have
+/// this key path?" one-offs.
+pub fn get_opt<T: Deserialize>(keys: &[&str], value: &Value) -> Option<T> {
+    match get(keys, value) {
+        Ok(x) => Some(x),
+        Err(_) => None,
+    }
+}
+
 #[allow(dead_code)]
 /// Set a field into a mutable JSON Value
 pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResult<()> {
@@ -284,6 +294,12 @@ mod tests {
         assert_eq!(val_int, 17);
         assert_eq!(val_float, 3.885);
         assert_eq!(val_bool, false);
+
+        // lazy gets (get_opt)
+        let val_str: Option<String> = get_opt(&["1", "name"], &get_parsed());
+        let val_str2: Option<String> = get_opt(&["0", "sexrobot", "countfistula"], &get_parsed());
+        assert_eq!(val_str, Some(String::from("slappy")));
+        assert_eq!(val_str2, None);
     }
 
     #[test]
