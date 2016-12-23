@@ -27,7 +27,7 @@ extern crate serde_yaml;
 extern crate time;
 
 #[macro_use]
-mod error;
+pub mod error;
 #[macro_use]
 mod util;
 mod messaging;

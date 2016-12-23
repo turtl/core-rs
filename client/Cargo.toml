@@ -6,5 +6,6 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 [dependencies]
 carrier = { path = "../carrier" }
 config = { path = "../config" }
+jedi = { path = "../jedi" }
 turtl_core = { path = ".." }
 

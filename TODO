@@ -3,6 +3,7 @@ user:
 
 profile:
 - dispatch handlers for grabbing/searching notes
+- fix profile load in client test. currently bugs out when deserializing the profile
 
 sync:
 - notify UI of API -> core sync
