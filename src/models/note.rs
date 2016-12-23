@@ -1,3 +1,4 @@
+use ::jedi;
 use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
@@ -29,7 +30,19 @@ protected!{
 
 make_storable!(Note, "notes");
 make_basic_sync_model!{ Note,
-    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
+    fn transform(&self, mut sync_item: SyncItem) -> TResult<SyncItem> {
+        let data = sync_item.data.as_ref().unwrap().clone();
+        match jedi::get::<String>(&["board_id"], &data) {
+            Ok(board_id) => {
+                jedi::set(&["boards"], sync_item.data.as_mut().unwrap(), &vec![board_id])?;
+            },
+            Err(_) => {},
+        }
+
+        if jedi::get_opt::<String>(&["file", "hash"], &data).is_some() {
+            jedi::set(&["file", "id"], sync_item.data.as_mut().unwrap(), &jedi::get::<String>(&["file", "hash"], &data)?)?;
+        }
+
         Ok(sync_item)
     }
 }

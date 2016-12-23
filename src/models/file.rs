@@ -1,6 +1,6 @@
 use ::std::sync::Arc;
 
-use ::jedi::Value;
+use ::jedi::{self, Value};
 use ::error::TResult;
 use ::storage::Storage;
 use ::sync::item::SyncItem;
@@ -34,8 +34,20 @@ protected!{
 
 make_storable!(FileData, "files");
 make_basic_sync_model!{ FileData,
-    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
-        // TODO: transform note data into file data
+    fn transform(&self, mut sync_item: SyncItem) -> TResult<SyncItem> {
+        let note_id: String = jedi::get(&["id"], sync_item.data.as_ref().unwrap())?;
+        sync_item.data = Some(jedi::get(&["file"], sync_item.data.as_ref().unwrap())?);
+        match sync_item.data.as_mut().unwrap() {
+            &mut Value::Object(ref mut hash) => {
+                hash.remove(&String::from("body"));
+            },
+            _ => {},
+        }
+
+        if jedi::get_opt::<String>(&["note_id"], sync_item.data.as_ref().unwrap()).is_none() {
+            jedi::set(&["note_id"], sync_item.data.as_mut().unwrap(), &note_id)?;
+        }
+
         Ok(sync_item)
     }
 
