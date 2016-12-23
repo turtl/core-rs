@@ -393,6 +393,7 @@ macro_rules! protected {
             pub struct $name {
                 (
                     $( $extra_field: $extra_type, )*
+                    _shared: bool,
                     _key: Option<::crypto::Key>
                 )
 
