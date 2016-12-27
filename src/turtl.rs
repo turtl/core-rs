@@ -6,6 +6,7 @@ use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 use ::std::collections::HashMap;
 use ::std::mem;
+use ::std::fs;
 
 use ::regex::Regex;
 use ::futures::Future;
@@ -58,7 +59,7 @@ pub struct Turtl {
     /// before our main local db because our local db is baed off the currently
     /// logged-in user, and we need persistant key-value storage even when
     /// logged out.
-    pub kv: Arc<Storage>,
+    pub kv: Arc<RwLock<Storage>>,
     /// Our main database, initialized after a successful login. This db is
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
@@ -87,13 +88,7 @@ impl Turtl {
         let num_workers = num_cpus::get() - 1;
 
         let api = Arc::new(Api::new());
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let kv_location = if data_folder == ":memory:" {
-            String::from(":memory:")
-        } else {
-            format!("{}/kv.sqlite", &data_folder)
-        };
-        let kv = Arc::new(Storage::new(&kv_location, jedi::obj())?);
+        let kv = Arc::new(RwLock::new(Turtl::open_kv()?));
 
         // make sure we have a client id
         storage::setup_client_id(kv.clone())?;
@@ -121,6 +116,17 @@ impl Turtl {
     pub fn new_wrap(tx_main: Pipeline) -> TResult<TurtlWrap> {
         let turtl = Arc::new(Turtl::new(tx_main)?);
         Ok(turtl)
+    }
+
+    /// Create/open a new KV store connection
+    pub fn open_kv() -> TResult<Storage> {
+        let data_folder = config::get::<String>(&["data_folder"])?;
+        let kv_location = if data_folder == ":memory:" {
+            String::from(":memory:")
+        } else {
+            format!("{}/turtl-kv.sqlite", &data_folder)
+        };
+        Ok(Storage::new(&kv_location, jedi::obj())?)
     }
 
     /// Send a message to (presumably) our UI.
@@ -544,6 +550,30 @@ impl Turtl {
         self.tx_main.next_fut()
     }
 
+    /// Log out the current user (if logged in) and wipe ALL local SQL databases
+    /// from our data folder.
+    pub fn wipe_local_data(&self) -> TResult<()> {
+        let mut kv_guard = self.kv.write().unwrap();
+        kv_guard.close()?;
+        let data_folder = config::get::<String>(&["data_folder"])?;
+        let paths = fs::read_dir(data_folder)?;
+        for entry in paths {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() { continue; }
+            let filename = entry.file_name();
+            let filename_str = match filename.to_str() {
+                Some(x) => x,
+                None => return Err(TError::Msg(format!("turtl.wipe_local_data() -- error converting OsString into &str"))),
+            };
+            if &filename_str[0..6] != "turtl-" { continue; }
+            fs::remove_file(&path)?;
+            info!("turtl.wipe_local_data() -- removing {}", path.display());
+        }
+        (*kv_guard) = Turtl::open_kv()?;
+        Ok(())
+    }
+
     /// Shut down this Turtl instance and all the state/threads it manages
     pub fn shutdown(&mut self) { }
 }
@@ -719,30 +749,29 @@ mod tests {
                 turtl2.index_notes()
             })
             .and_then(move |_| {
+                fn parserrr(json: &str) -> Query {
+                    jedi::parse(&String::from(json)).unwrap()
+                }
+
                 let search_guard = turtl3.search.read().unwrap();
                 let search = search_guard.as_ref().unwrap();
 
                 // this stuff is mostly covered in the search tests, but let's
                 // just make sure here.
 
-                let mut qry = Query::new();
-                qry.boards(vec![String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")]);
+                let qry = parserrr(r#"{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"]}"#);
                 assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c"), String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
 
-                let mut qry = Query::new();
-                qry.text(String::from("story deployment"));
+                let qry = parserrr(r#"{"text":"story deployment"}"#);
                 assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
 
-                let mut qry = Query::new();
-                qry.text(String::from("story baby"));
+                let qry = parserrr(r#"{"text":"story baby"}"#);
                 assert_eq!(search.find(&qry).unwrap().len(), 0);
 
-                let mut qry = Query::new();
-                qry.text(String::from("confederate"));
+                let qry = parserrr(r#"{"text":"confederate"}"#);
                 assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56")]);
 
-                let mut qry = Query::new();
-                qry.tags(vec![String::from("morons")]);
+                let qry = parserrr(r#"{"tags":["morons"]}"#);
                 assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c")]);
 
                 assert_eq!(

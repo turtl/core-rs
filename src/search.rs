@@ -33,91 +33,6 @@ serializable! {
     }
 }
 
-impl Query {
-    /// Create a new search query builder
-    pub fn new() -> Query {
-        Query {
-            text: None,
-            boards: Vec::new(),
-            tags: Vec::new(),
-            exclude_tags: Vec::new(),
-            type_: None,
-            has_file: None,
-            color: None,
-            sort: String::from("id"),
-            sort_direction: String::from("desc"),
-            page: 1,
-            per_page: 100,
-        }
-    }
-
-    /// Set the full-text search query
-    pub fn text<'a>(&'a mut self, text: String) -> &'a mut Self {
-        self.text = Some(text);
-        self
-    }
-
-    /// Set boards in the search
-    pub fn boards<'a>(&'a mut self, boards: Vec<String>) -> &'a mut Self {
-        self.boards = boards;
-        self
-    }
-
-    /// Set tags into the search
-    pub fn tags<'a>(&'a mut self, tags: Vec<String>) -> &'a mut Self {
-        self.tags = tags;
-        self
-    }
-
-    /// Set excluded tags into the search
-    pub fn exclude_tags<'a>(&'a mut self, exclude_tags: Vec<String>) -> &'a mut Self {
-        self.exclude_tags = exclude_tags;
-        self
-    }
-
-    /// Search by type
-    pub fn ty<'a>(&'a mut self, type_: String) -> &'a mut Self {
-        self.type_ = Some(type_);
-        self
-    }
-
-    /// Set has_file into the search
-    pub fn has_file<'a>(&'a mut self, has_file: bool) -> &'a mut Self {
-        self.has_file = Some(has_file);
-        self
-    }
-
-    /// Set color into the search
-    pub fn color<'a>(&'a mut self, color: i32) -> &'a mut Self {
-        self.color = Some(color);
-        self
-    }
-
-    /// How to sort our results
-    pub fn sort<'a>(&'a mut self, sort: String) -> &'a mut Self {
-        self.sort = sort;
-        self
-    }
-
-    /// Our sort direction
-    pub fn sort_direction<'a>(&'a mut self, sort_direction: String) -> &'a mut Self {
-        self.sort_direction = sort_direction;
-        self
-    }
-
-    /// Set our result page
-    pub fn page<'a>(&'a mut self, page: i32) -> &'a mut Self {
-        self.page = page;
-        self
-    }
-
-    /// Set our results per page
-    pub fn per_page<'a>(&'a mut self, per_page: i32) -> &'a mut Self {
-        self.per_page = per_page;
-        self
-    }
-}
-
 /// Holds the state for our search
 pub struct Search {
     /// Our main index, driven by Clouseau. Mainly for full-text search, but is
@@ -301,8 +216,17 @@ impl Search {
         } else {
             String::from("SELECT id FROM notes")
         };
-        let orderby = format!(" ORDER BY {} {}", query.sort, query.sort_direction);
-        let pagination = format!(" LIMIT {} OFFSET {}", query.per_page, (query.page - 1) * query.per_page);
+        let mut sort = query.sort.clone();
+        let mut sort_dir = query.sort_direction.clone();
+        let mut page = query.page;
+        let mut per_page = query.per_page;
+        if sort == "" { sort = String::from("id"); }
+        if sort_dir == "" { sort_dir = String::from("desc"); }
+        if page < 1 { page = 1; }
+        if per_page < 1 { per_page = 50; }
+
+        let orderby = format!(" ORDER BY {} {}", sort, sort_dir);
+        let pagination = format!(" LIMIT {} OFFSET {}", per_page, (page - 1) * per_page);
         let final_query = (filter_query + &orderby) + &pagination;
 
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
@@ -371,6 +295,10 @@ mod tests {
 
     #[test]
     fn index_unindex_filter() {
+        fn parserrr(json: &str) -> Query {
+            jedi::parse(&String::from(json)).unwrap()
+        }
+
         let search = Search::new().unwrap();
 
         let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Do you have breast cancer??? Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists","breasts"],"boards":["6969","1212"]}"#)).unwrap();
@@ -386,69 +314,42 @@ mod tests {
         search.index_note(&note5).unwrap();
 
         // board search
-        let mut query = Query::new();
-        query.boards(vec![String::from("6969")]);
+        let query = parserrr(r#"{"boards":["6969"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333", "1111"]);
 
         // board search w/ paging
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .page(2)
-            .per_page(1);
+        let query = parserrr(r#"{"boards":["6969"],"page":2,"per_page":1}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333"]);
 
         // combine boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .tags(vec![String::from("terrorists")]);
+        let query = parserrr(r#"{"boards":["6969"],"tags":["terrorists"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combining boards/tags/sort
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#))
-            .sort(String::from("id"));
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","sort":"id"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333"]);
 
         // combining boards/tags/sort/desc
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#))
-            .sort(String::from("id"))
-            .sort_direction(String::from("asc"));
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","sort":"id","sort_direction":"asc"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333", "5555"]);
 
         // combining boards/text/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#))
-            .tags(vec![String::from("riots")]);
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","tags":["riots"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555"]);
 
         // do tags show up in a text search? they should
-        let mut query = Query::new();
-        query.text(String::from(r#"socialism"#));
+        let query = parserrr(r#"{"text":"socialism"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["4444"]);
 
         // excluded tags!
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .exclude_tags(vec![String::from("weird")])
-            .sort(String::from("mod"))
-            .sort_direction(String::from("asc"));
+        let query = parserrr(r#"{"boards":["6969"],"exclude_tags":["weird"],"sort":"mod","sort_direction":"asc"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111", "5555"]);
 
@@ -529,26 +430,17 @@ mod tests {
         search.reindex_note(&note3).unwrap();
 
         // combining boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#));
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555"]);
 
         // combining boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"one simple trick"#));
+        let query = parserrr(r#"{"boards":["6969"],"text":"one simple trick"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333"]);
 
         // combining boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"simple tricks"#));
+        let query = parserrr(r#"{"boards":["6969"],"text":"simple tricks"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
@@ -559,61 +451,42 @@ mod tests {
         search.unindex_note(&note5).unwrap();
 
         // board search
-        let mut query = Query::new();
-        query.boards(vec![String::from("6969")]);
+        let query = parserrr(r#"{"boards":["6969"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combine boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .tags(vec![String::from("terrorists")]);
+        let query = parserrr(r#"{"boards":["6969"],"tags":["terrorists"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combining boards/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#));
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
         // combining boards/text/tags
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .text(String::from(r#"(penis OR "icy hearts")"#))
-            .tags(vec![String::from("riots")]);
+        let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","tags":["riots"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
         // do tags show up in a text search? they should
-        let mut query = Query::new();
-        query.text(String::from(r#"socialism"#));
+        let query = parserrr(r#"{"text":"socialism"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["4444"]);
 
         // excluded tags!
-        let mut query = Query::new();
-        query
-            .boards(vec![String::from("6969")])
-            .exclude_tags(vec![String::from("weird")]);
+        let query = parserrr(r#"{"boards":["6969"],"exclude_tags":["weird"]}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // type
-        let mut query = Query::new();
-        query.ty(String::from("link"));
+        let query = parserrr(r#"{"type":"link"}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes, vec!["2222"]);
 
         // color
-        let mut query = Query::new();
-        query
-            .color(3)
-            .has_file(true);
+        let query = parserrr(r#"{"color":3,"has_file":true}"#);
         let notes = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
     }

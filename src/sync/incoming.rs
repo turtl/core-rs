@@ -120,12 +120,16 @@ impl SyncIncoming {
         // the api sends back the latest sync id out of the bunch. grab it.
         let sync_id = jedi::get::<String>(&["sync_id"], &syncdata)?;
         // also grab our sync records.
-        let records: Vec<SyncItem> = jedi::get(&["records"], &syncdata)?;
+        let records: Vec<Value> = jedi::get(&["records"], &syncdata)?;
 
         // start a transaction. we don't want to save half-data.
         self.db.conn.execute("BEGIN TRANSACTION", &[])?;
         for rec in records {
-            self.run_sync_item(rec)?
+            // NOTE: doing `records: Vec<SyncItem> = jedi::get(...)` breaks the
+            // deserialization, but converting one-by-one from a Value here
+            // works. what the hell?
+            let item: SyncItem = jedi::from_val(rec)?;
+            self.run_sync_item(item)?;
         }
         // make sure we save our sync_id as the LAST STEP of our transaction.
         // if this fails, then next time we load we just start from the same

@@ -24,7 +24,7 @@ pub fn init() -> thread::JoinHandle<()> {
 
     thread::spawn(|| {
         turtl_core::init().unwrap();
-        let app_config = String::from(r#"{"data_folder":":memory:"}"#);
+        let app_config = String::from(r#"{"data_folder":"/tmp/turtl/"}"#);
         turtl_core::start(app_config).join().unwrap();
     })
 }
@@ -34,12 +34,23 @@ pub fn send(msg: &str) {
     carrier::send_string(&format!("{}-core-in", channel), String::from(&msg[..])).unwrap();
 }
 
+pub fn send_msg(msg: &str) -> TResult<()> {
+    let channel: String = config::get(&["messaging", "reqres"])?;
+    carrier::send_string(&format!("{}-core-in", channel), String::from(&msg[..]))?;
+    Ok(())
+}
+
 pub fn recv(mid: &str) -> String {
     let channel: String = config::get(&["messaging", "reqres"]).unwrap();
     String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid)).unwrap()).unwrap()
 }
 
-pub fn event() -> String {
+pub fn recv_msg(mid: &str) -> TResult<String> {
+    let channel: String = config::get(&["messaging", "reqres"])?;
+    Ok(String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid))?)?)
+}
+
+pub fn recv_event() -> String {
     let channel: String = config::get(&["messaging", "events"]).unwrap();
     String::from_utf8(carrier::recv(channel.as_str()).unwrap()).unwrap()
 }
@@ -62,7 +73,7 @@ fn repl() -> TResult<()> {
         let cmd = parts.remove(0);
 
         // i GUESS i'll let you exit
-        if cmd == "quit" {
+        if cmd == "quit" || cmd == "q" {
             send(format!("[\"{}\",\"app:shutdown\"]", req_id).as_str());
             break;
         }
@@ -79,24 +90,14 @@ fn repl() -> TResult<()> {
         msg_parts.append(&mut args);
 
         let msg = jedi::stringify(&msg_parts)?;
-        send(&msg.as_str());
+        send_msg(&msg.as_str())?;
         // TODO: why isn't this printing?????!?!?!
         // TODO: why isn't this printing?????!?!?!
         // TODO: why isn't this printing?????!?!?!
         // TODO: why isn't this printing?????!?!?!
         // TODO: why isn't this printing?????!?!?!
-        format!("here?");
         // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        let response = recv(req_str.as_str());
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        format!("here?2");
+        let response = recv_msg(req_str.as_str())?;
         format!("response: {}", response);
         req_id += 1;
     }
@@ -158,6 +159,12 @@ mod tests {
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
 
+        let msg = format!(r#"["69","app:wipe-local-data"]"#);
+        send(msg.as_str());
+        let msg = recv("69");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
         let msg = format!(r#"["2","user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
         send(msg.as_str());
         let msg = recv("2");
@@ -170,10 +177,13 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = String::from(r#"["6","profile:get-notes",{}]"#);
+        // wait until we're indexed
+        while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
+
+        let msg = String::from(r#"["6","profile:get-notes",{"search":{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"]}}]"#);
         send(msg.as_str());
         let msg = recv("6");
-        assert_eq!(msg, r#"assss"#);
+        assert_eq!(msg, r#"{"e":0,"d":[{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","color":null,"embed":null,"file":null,"has_file":null,"id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f","keys":null,"mod":1479425965,"password":null,"tags":[],"text":"the confederate flag is the flag of traitors","title":"mai title","type":"text","url":null,"user_id":"5244679b2b1375384f0000bc","username":null}]}"#);
         sleep(10);
 
         let msg = String::from(r#"["6","app:shutdown-sync"]"#);

@@ -1,7 +1,8 @@
 //! The storage module stores things. Don't worry, those things are encrypted.
 //! Probably.
 
-use ::std::sync::Arc;
+use ::std::sync::{Arc, RwLock};
+use ::std::mem;
 
 use ::crypto;
 use ::rusqlite::{self, Connection};
@@ -17,9 +18,10 @@ use ::error::{TResult, TError};
 /// Make ModelDataRef a ToSql type
 
 /// Make sure we have a client ID, and sync it with the model system
-pub fn setup_client_id(storage: Arc<Storage>) -> TResult<()> {
-    let conn = &storage.conn;
-    let dumpy = &storage.dumpy;
+pub fn setup_client_id(storage: Arc<RwLock<Storage>>) -> TResult<()> {
+    let storage_guard = storage.read().unwrap();
+    let conn = &storage_guard.conn;
+    let dumpy = &storage_guard.dumpy;
     let id = match dumpy.kv_get(conn, "client_id")? {
         Some(x) => x,
         None => {
@@ -130,6 +132,14 @@ impl Storage {
     pub fn kv_set(&self, key: &str, val: &String) -> TResult<()> {
         self.dumpy.kv_set(&self.conn, key, val)
             .map_err(|e| From::from(e))
+    }
+
+    /// Close the db connection
+    pub fn close(&mut self) -> TResult<()> {
+        let mut conn = Connection::open_in_memory()?;
+        mem::swap(&mut self.conn, &mut conn);
+        conn.close()?;
+        Ok(())
     }
 }
 

@@ -11,7 +11,7 @@ serializable!{
         id: String,
         action: String,
         type_: String,
-        user_id: String,
+        user_id: Option<String>,
         missing: Option<bool>,
         data: Option<Value>,
     }

@@ -93,6 +93,18 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
         "user:join" => {
             turtl.msg_success(&mid, jedi::obj())
         },
+        "app:wipe-local-data" => {
+            match turtl.wipe_local_data() {
+                Ok(_) => turtl.msg_success(&mid, jedi::obj()),
+                Err(e) => {
+                    match turtl.msg_error(&mid, &e) {
+                        Err(e) => error!("dispatch -- problem sending message: {}", e),
+                        _ => ()
+                    }
+                    Ok(())
+                }
+            }
+        },
         "app:start-sync" => {
             turtl.start_sync()?;
             let turtl2 = turtl.clone();
@@ -157,7 +169,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             let search = search_guard.as_ref().unwrap();
             let db = db_guard.as_ref().unwrap();
             let note_ids = search.find(&qry)?;
-            let notes: Vec<Note> = jedi::from_val(Value::Array(db.by_id("notes", &note_ids)?))?;
+            let mut notes: Vec<Note> = jedi::from_val(Value::Array(db.by_id("notes", &note_ids)?))?;
+            for note in &mut notes { turtl.find_model_key(note)?; }
             let mid1 = mid.clone();
             let mid2 = mid.clone();
             let turtl1 = turtl.clone();

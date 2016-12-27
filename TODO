@@ -2,7 +2,9 @@ user:
 - join
 
 profile:
-- dispatch handlers for grabbing/searching notes
+- dispatch handler for searching notes
+- dispatch handler for getting ALL notes (populate homescreen when indexing)
+
 - fix profile load in client test. currently bugs out when deserializing the profile
 
 sync:
