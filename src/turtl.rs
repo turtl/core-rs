@@ -430,6 +430,23 @@ impl Turtl {
         notfound
     }
 
+    /// Load/deserialize a set of notes by id.
+    pub fn load_notes(&self, note_ids: &Vec<String>) -> TFutureResult<Vec<Note>> {
+        let db_guard = self.db.read().unwrap();
+        if db_guard.is_none() {
+            return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object")));
+        }
+        let db = db_guard.as_ref().unwrap();
+
+        let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
+        for note in &mut notes { ftry!(self.find_model_key(note)); }
+        self.with_next_fut()
+            .and_then(move |turtl| -> TFutureResult<Vec<Note>> {
+                protected::map_deserialize(turtl.clone().as_ref(), notes)
+            })
+            .boxed()
+    }
+
     /// Load the profile from disk.
     ///
     /// Meaning, we decrypt the keychain, boards, and personas and store them

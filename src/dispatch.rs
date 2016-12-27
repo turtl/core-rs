@@ -18,7 +18,6 @@ use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
 use ::search::Query;
 use ::models::note::Note;
-use ::models::protected;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
@@ -157,31 +156,44 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             Ok(())
         },
         "profile:get-notes" => {
-            let qry: Query = jedi::get(&["2", "search"], &data)?;
-            let search_guard = turtl.search.read().unwrap();
-            if search_guard.is_none() {
-                return Err(TError::MissingField(String::from("dispatch: profile:get-notes -- turtl is missing `search` object")));
-            }
-            let db_guard = turtl.db.read().unwrap();
-            if db_guard.is_none() {
-                return Err(TError::MissingField(String::from("dispatch: profile:get-notes -- turtl is missing `db` object")));
-            }
-            let search = search_guard.as_ref().unwrap();
-            let db = db_guard.as_ref().unwrap();
-            let note_ids = search.find(&qry)?;
-            let mut notes: Vec<Note> = jedi::from_val(Value::Array(db.by_id("notes", &note_ids)?))?;
-            for note in &mut notes { turtl.find_model_key(note)?; }
+            let note_ids = jedi::get(&["2"], &data)?;
             let mid1 = mid.clone();
             let mid2 = mid.clone();
             let turtl1 = turtl.clone();
             let turtl2 = turtl.clone();
-            protected::map_deserialize(turtl.clone().as_ref(), notes)
+            turtl.load_notes(&note_ids)
                 .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
                     FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
                 })
                 .or_else(move |e| -> TFutureResult<()> {
                     match turtl2.msg_error(&mid2, &e) {
                         Err(e) => error!("dispatch -- problem sending get-notes message: {}", e),
+                        _ => ()
+                    }
+                    FOk!(())
+                })
+                .forget();
+            Ok(())
+        },
+        "profile:find-notes" => {
+            let qry: Query = jedi::get(&["2", "search"], &data)?;
+            let search_guard = turtl.search.read().unwrap();
+            if search_guard.is_none() {
+                return Err(TError::MissingField(String::from("dispatch: profile:find-notes -- turtl is missing `search` object")));
+            }
+            let search = search_guard.as_ref().unwrap();
+            let note_ids = search.find(&qry)?;
+            let mid1 = mid.clone();
+            let mid2 = mid.clone();
+            let turtl1 = turtl.clone();
+            let turtl2 = turtl.clone();
+            turtl.load_notes(&note_ids)
+                .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
+                    FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
+                })
+                .or_else(move |e| -> TFutureResult<()> {
+                    match turtl2.msg_error(&mid2, &e) {
+                        Err(e) => error!("dispatch -- problem sending find-notes message: {}", e),
                         _ => ()
                     }
                     FOk!(())

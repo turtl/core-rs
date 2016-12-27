@@ -177,10 +177,18 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
+        // wait until we're loaded
+        while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
+
+        let msg = String::from(r#"["12","profile:get-notes",["015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"]]"#);
+        send(msg.as_str());
+        let msg = recv("12");
+        assert_eq!(msg, r##"{"e":0,"d":[{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","color":null,"embed":null,"file":null,"has_file":null,"id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f","keys":null,"mod":1479425965,"password":null,"tags":[],"text":"the confederate flag is the flag of traitors","title":"mai title","type":"text","url":null,"user_id":"5244679b2b1375384f0000bc","username":null}]}"##);
+
         // wait until we're indexed
         while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
 
-        let msg = String::from(r#"["6","profile:get-notes",{"search":{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"]}}]"#);
+        let msg = String::from(r#"["6","profile:find-notes",{"search":{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"]}}]"#);
         send(msg.as_str());
         let msg = recv("6");
         assert_eq!(msg, r#"{"e":0,"d":[{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","color":null,"embed":null,"file":null,"has_file":null,"id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f","keys":null,"mod":1479425965,"password":null,"tags":[],"text":"the confederate flag is the flag of traitors","title":"mai title","type":"text","url":null,"user_id":"5244679b2b1375384f0000bc","username":null}]}"#);

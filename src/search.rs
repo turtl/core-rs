@@ -20,6 +20,7 @@ serializable! {
     #[derive(Debug)]
     pub struct Query {
         text: Option<String>,
+        notes: Vec<String>,
         boards: Vec<String>,
         tags: Vec<String>,
         exclude_tags: Vec<String>,
@@ -139,6 +140,21 @@ impl Search {
             }
             ft_qry.push(")");
             queries.push(ft_qry.as_slice().join(""));
+        }
+
+        if query.notes.len() > 0 {
+            let mut note_qry: Vec<&str> = Vec::with_capacity(query.notes.len() + 2);
+            note_qry.push("SELECT id FROM notes WHERE id IN (");
+            for note_id in &query.notes {
+                if note_id == &query.notes[query.notes.len() - 1] {
+                    note_qry.push("?");
+                } else {
+                    note_qry.push("?,");
+                }
+                qry_vals.push(SearchVal::String(note_id.clone()));
+            }
+            note_qry.push(")");
+            queries.push(note_qry.as_slice().join(""));
         }
 
         if query.boards.len() > 0 {
@@ -312,6 +328,11 @@ mod tests {
         search.index_note(&note3).unwrap();
         search.index_note(&note4).unwrap();
         search.index_note(&note5).unwrap();
+
+        // search by note ids
+        let query = parserrr(r#"{"notes":["1111","4444","6969loljkomg"]}"#);
+        let notes = search.find(&query).unwrap();
+        assert_eq!(notes, vec!["4444", "1111"]);
 
         // board search
         let query = parserrr(r#"{"boards":["6969"]}"#);
