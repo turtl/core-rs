@@ -82,6 +82,12 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     let ref work = turtl.work;
     for mut model in vec {
         let pusher = mapped.clone();
+        // don't bother with models that don't have a key...
+        if model.key().is_none() {
+            let mut vec_guard = pusher.write().unwrap();
+            vec_guard.push(model);
+            continue;
+        }
         // run the mapping, and store the resulting future
         let future = work.run(move || model.deserialize())
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {

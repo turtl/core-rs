@@ -47,6 +47,7 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
 
 /// Generate a user's auth token given some variables or something
 pub fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Key, String)> {
+    info!("user::generate_auth() -- generating v{} auth", version);
     let key_auth = match version {
         0 => {
             let key = generate_key(&username, &password, version, 0)?;

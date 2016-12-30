@@ -2,9 +2,7 @@ user:
 - join
 
 profile:
-- dispatch handler for searching notes
 - dispatch handler for getting ALL notes (populate homescreen when indexing)
-
 - fix profile load in client test. currently bugs out when deserializing the profile
 
 sync:
@@ -24,7 +22,7 @@ invites/personas:
 - anything special? or will sync+ui notifications handle all this?
 
 general/future:
-- binary exchange format? MessagePack? JSON requires base64 and is clunky
 - get rid of rust-crypto/gcrypt, replace with either openssl or nettle
 - come up with strategy to deprecate personas
+- binary exchange format? MessagePack? JSON requires base64 and is clunky
 

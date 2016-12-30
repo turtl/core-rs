@@ -100,7 +100,7 @@ impl SyncIncoming {
     /// objects, which is super handy because we can just treat them like any
     /// other sync
     fn load_full_profile(&self) -> TResult<()> {
-        let syncdata = self.api.get("/sync/full", ApiReq::new())?;
+        let syncdata = self.api.get("/sync/full", ApiReq::new().timeout(120))?;
         self.connected(true);
         self.update_local_db_from_api_sync(syncdata)
     }
@@ -193,9 +193,17 @@ impl Syncer for SyncIncoming {
             // no sync id ='[ ='[ ='[ ...instead grab the full profile
             None => self.load_full_profile(),
         };
+        let init_err: Option<String> = match res {
+            Ok(_) => None,
+            Err(ref e) => Some(format!("sync::incoming::init() -- {}", e)),
+        };
         // let our Turtl know we're done
-        self.get_tx().next(|turtl| {
-            turtl.events.trigger("sync:incoming:init:done", &Value::Bool(true));
+        self.get_tx().next(move |turtl| {
+            let val = match init_err {
+                Some(x) => Value::String(x),
+                None => Value::Bool(true),
+            };
+            turtl.events.trigger("sync:incoming:init:done", &val);
         });
         res
     }

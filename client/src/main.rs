@@ -91,14 +91,8 @@ fn repl() -> TResult<()> {
 
         let msg = jedi::stringify(&msg_parts)?;
         send_msg(&msg.as_str())?;
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
-        // TODO: why isn't this printing?????!?!?!
         let response = recv_msg(req_str.as_str())?;
-        format!("response: {}", response);
+        println!("response: {}", response);
         req_id += 1;
     }
     Ok(())
@@ -165,7 +159,7 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = format!(r#"["2","user:login",{{"username":"{}","password":"{}"}}]"#, username, password);
+        let msg = format!(r#"["2","user:login","{}","{}"]"#, username, password);
         send(msg.as_str());
         let msg = recv("2");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);

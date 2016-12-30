@@ -267,7 +267,12 @@ impl Turtl {
                 if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
             }, "turtl:sync:resume");
             let turtl2 = turtl.clone();
-            turtl.events.bind("sync:incoming:init:done", move |_| {
+            turtl.events.bind("sync:incoming:init:done", move |err| {
+                // don't load the profile if we didn't sync correctly
+                match *err {
+                    Value::Bool(_) => {},
+                    _ => return error!("turtl::sync:incoming:init:done -- sync error, skipping profile load"),
+                }
                 let turtl3 = turtl2.clone();
                 let turtl4 = turtl2.clone();
                 turtl2.load_profile()
@@ -439,7 +444,12 @@ impl Turtl {
         let db = db_guard.as_ref().unwrap();
 
         let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
-        for note in &mut notes { ftry!(self.find_model_key(note)); }
+        for note in &mut notes {
+            match self.find_model_key(note) {
+                Ok(_) => {},
+                Err(_) => error!("turtl.load_notes() -- skipping note {:?}: problem finding key", note.id()),
+            }
+        }
         self.with_next_fut()
             .and_then(move |turtl| -> TFutureResult<Vec<Note>> {
                 protected::map_deserialize(turtl.clone().as_ref(), notes)
@@ -528,7 +538,12 @@ impl Turtl {
         }
         let db = db_guard.as_ref().unwrap();
         let mut notes: Vec<Note> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("notes")))));
-        for note in &mut notes { ftry!(self.find_model_key(note)); }
+        for note in &mut notes {
+            match self.find_model_key(note) {
+                Ok(_) => {},
+                Err(_) => error!("turtl.index_notes() -- skipping note {:?}: problem finding key", note.id()),
+            }
+        }
         self.with_next_fut()
             .and_then(move |turtl| {
                 let turtl1 = turtl.clone();

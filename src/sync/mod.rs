@@ -204,7 +204,7 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
         sync.runner();
-        info!("sync::start() -- outgoing shutting down");
+        info!("sync::start() -- outgoing shut down");
     })?;
 
     // start our incoming sync process
@@ -214,7 +214,7 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
         let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
         sync.runner();
-        info!("sync::start() -- incoming shutting down");
+        info!("sync::start() -- incoming shut down");
     })?;
 
     let config1 = config.clone();
