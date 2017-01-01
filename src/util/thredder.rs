@@ -11,6 +11,7 @@ use ::futures::{self, Future, Canceled};
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
+use ::util;
 use ::util::thunk::Thunk;
 use ::util::opdata::{OpData, OpConverter};
 use ::turtl::TurtlWrap;
@@ -80,7 +81,7 @@ impl Thredder {
         Thredder {
             name: String::from(name),
             tx: tx_main,
-            pool: CpuPool::new(workers),
+            pool: CpuPool::new(workers as usize),
         }
     }
 
@@ -92,10 +93,11 @@ impl Thredder {
         let (fut_tx, fut_rx) = futures::oneshot::<TResult<OpData>>();
         let tx_main = self.tx.clone();
         let thread_name = String::from(&self.name[..]);
-        self.pool.execute(|| run().map(|x| x.to_opdata()))
-            .and_then(move |res: TResult<OpData>| {
-                Ok(tx_main.next(move |_| { fut_tx.complete(res) }))
-            }).forget();
+        let runme = self.pool.spawn_fn(|| run().map(|x| x.to_opdata()))
+            .then(move |res: TResult<OpData>| -> TFutureResult<()> {
+                FOk!(tx_main.next(move |_| { fut_tx.complete(res) }))
+            });
+        util::run_future(runme);
         Thredder::op_converter(fut_rx, thread_name)
     }
 

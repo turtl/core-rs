@@ -48,7 +48,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let turtl2 = turtl.clone();
                 let mid = mid.clone();
                 let mid2 = mid.clone();
-                turtl.login(username, password)
+                let runme = turtl.login(username, password)
                     .map(move |_| {
                         debug!("dispatch({}) -- user:login success", mid);
                         match turtl1.msg_success(&mid, jedi::obj()) {
@@ -62,8 +62,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             Err(e) => error!("dispatch -- problem sending login message: {}", e),
                             _ => ()
                         }
-                    })
-                    .forget();
+                    });
+                util::run_future(runme);
                 Ok(())
             },
             "user:logout" => {
@@ -71,7 +71,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let turtl2 = turtl.clone();
                 let mid1 = mid.clone();
                 let mid2 = mid.clone();
-                turtl.logout()
+                let runme = turtl.logout()
                     .then(|res| {
                         util::sleep(1000);
                         futures::done(res)
@@ -89,8 +89,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             Err(e) => error!("dispatch -- problem sending logout message: {}", e),
                             _ => ()
                         }
-                    })
-                    .forget();
+                    });
+                util::run_future(runme);
                 Ok(())
             },
             "user:join" => {
@@ -166,7 +166,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let mid2 = mid.clone();
                 let turtl1 = turtl.clone();
                 let turtl2 = turtl.clone();
-                turtl.load_notes(&note_ids)
+                let runme = turtl.load_notes(&note_ids)
                     .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
                         FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
                     })
@@ -176,8 +176,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             _ => ()
                         }
                         FOk!(())
-                    })
-                    .forget();
+                    });
+                util::run_future(runme);
                 Ok(())
             },
             "profile:find-notes" => {
@@ -192,7 +192,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let mid2 = mid.clone();
                 let turtl1 = turtl.clone();
                 let turtl2 = turtl.clone();
-                turtl.load_notes(&note_ids)
+                let runme = turtl.load_notes(&note_ids)
                     .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
                         FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
                     })
@@ -202,8 +202,8 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             _ => ()
                         }
                         FOk!(())
-                    })
-                    .forget();
+                    });
+                util::run_future(runme);
                 Ok(())
             },
             "ping" => {

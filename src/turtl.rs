@@ -17,6 +17,7 @@ use ::config;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::crypto::Key;
+use ::util;
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -275,7 +276,7 @@ impl Turtl {
                 }
                 let turtl3 = turtl2.clone();
                 let turtl4 = turtl2.clone();
-                turtl2.load_profile()
+                let runme = turtl2.load_profile()
                     .and_then(move |_| {
                         ftry!(Messenger::event("profile:loaded", jedi::obj()));
                         turtl3.index_notes()
@@ -288,8 +289,8 @@ impl Turtl {
                         error!("turtl -- sync:load-profile: problem loading profile: {}", e);
                         ftry!(turtl4.error_event(&e, "load_profile"));
                         FOk!(())
-                    })
-                    .forget();
+                    });
+                util::run_future(runme);
             }, "sync:incoming:init:done");
         });
         Ok(())
@@ -653,6 +654,7 @@ mod tests {
     use ::error::TFutureResult;
     use ::crypto::{self, Key};
     use ::search::Query;
+    use ::util;
     use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
@@ -792,7 +794,7 @@ mod tests {
         let turtl2 = turtl.clone();
         let turtl3 = turtl.clone();
         let stop2 = stop.clone();
-        turtl.load_profile()
+        let runme = turtl.load_profile()
             .and_then(move |_| {
                 let profile_guard = turtl2.profile.read().unwrap();
                 assert_eq!(profile_guard.keychain.entries.len(), 4);
@@ -843,14 +845,16 @@ mod tests {
                 panic!("load profile error: {}", e);
             })
             .then(move |_| -> TFutureResult<()> {
+                println!("--- omglolwtf!!");
                 stop2.set(false);
                 FOk!(())
-            })
-            .forget();
+            });
+        util::run_future(runme);
         while stop.running() {
             let handler = tx_main.pop();
             handler.call_box(turtl.clone());
         }
+        println!("--- over!!!");
     }
 }
 
