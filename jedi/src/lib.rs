@@ -103,6 +103,11 @@ pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
 }
 
+/// Parse a JSON byte array and return a Result<Value>
+pub fn parse_bytes<T: Deserialize>(bytes: &[u8]) -> JResult<T> {
+    serde_json::from_slice(bytes).map_err(JSONError::Parse)
+}
+
 /// Parse a YAML string and return a Value type
 pub fn parse_yaml(string: &String) -> JResult<Value> {
     let data: Value = serde_yaml::from_str(string)?;
