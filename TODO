@@ -2,8 +2,7 @@ user:
 - join
 
 profile:
-- dispatch handler for getting ALL notes (populate homescreen when indexing)
-- fix profile load in client test. currently bugs out when deserializing the profile
+- fix stack overflow on larger profiles
 
 sync:
 - notify UI of API -> core sync
