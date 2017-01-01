@@ -156,6 +156,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     Err(..) => (),
                 }
                 util::sleep(10);
+                turtl.events.trigger("sync:shutdown", &Value::Bool(true));
                 turtl.events.trigger("app:shutdown", &jedi::to_val(&()));
                 Ok(())
             },
