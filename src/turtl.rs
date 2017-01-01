@@ -322,7 +322,7 @@ impl Turtl {
 
     /// Given a model that we suspect we have a key entry for, find that model's
     /// key, set it into the model, and return a reference to the key.
-    pub fn find_model_key<'a, T>(&self, model: &'a mut T) -> TResult<()>
+    pub fn find_model_key<T>(&self, model: &mut T) -> TResult<()>
         where T: Protected + Keyfinder
     {
         // check if we have a key already. if you're trying to re-find the key,
@@ -332,14 +332,14 @@ impl Turtl {
         let notfound = Err(TError::NotFound(format!("key for {:?} not found", model.id())));
 
         /// A standard "found a key" function
-        fn found_key<'a, T>(model: &'a mut T, key: Key) -> TResult<()>
+        fn found_key<T>(model: &mut T, key: Key) -> TResult<()>
             where T: Protected
         {
             model.set_key(Some(key));
             return Ok(());
         }
 
-        // fyi, this read lock is going to be open until we return
+        // fyi ders, this read lock is going to be open until we return
         let profile_guard = self.profile.read().unwrap();
         let ref keychain = profile_guard.keychain;
 
@@ -435,26 +435,25 @@ impl Turtl {
         notfound
     }
 
-    /// Load/deserialize a set of notes by id.
-    pub fn load_notes(&self, note_ids: &Vec<String>) -> TFutureResult<Vec<Note>> {
-        let db_guard = self.db.read().unwrap();
-        if db_guard.is_none() {
-            return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object")));
-        }
-        let db = db_guard.as_ref().unwrap();
-
-        let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
-        for note in &mut notes {
-            match self.find_model_key(note) {
+    /// Given a model vector that we suspect we have a key entry for, find those
+    /// models' keys and set it into the models.
+    pub fn find_models_keys<T>(&self, models: &mut Vec<T>) -> TResult<()>
+        where T: Protected + Keyfinder
+    {
+        let mut errcount = 0;
+        for model in models {
+            match self.find_model_key(model) {
                 Ok(_) => {},
-                Err(_) => error!("turtl.load_notes() -- skipping note {:?}: problem finding key", note.id()),
+                Err(_) => {
+                    error!("turtl.find_models_keys() -- skipping model {:?}: problem finding key", model.id());
+                    errcount += 1;
+                },
             }
         }
-        self.with_next_fut()
-            .and_then(move |turtl| -> TFutureResult<Vec<Note>> {
-                protected::map_deserialize(turtl.clone().as_ref(), notes)
-            })
-            .boxed()
+        if errcount > 0 {
+            error!("turtl.find_models_keys() -- load summary: couldn't load keys for {} models", errcount);
+        }
+        Ok(())
     }
 
     /// Load the profile from disk.
@@ -496,7 +495,7 @@ impl Turtl {
                         drop(profile_guard);
 
                         // now decrypt the boards
-                        for board in &mut boards { ftry!(turtl1.find_model_key(board)); }
+                        ftry!(turtl1.find_models_keys(&mut boards));
                         protected::map_deserialize(turtl1.as_ref(), boards)
                     })
                     .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
@@ -528,6 +527,23 @@ impl Turtl {
             .boxed()
     }
 
+    /// Load/deserialize a set of notes by id.
+    pub fn load_notes(&self, note_ids: &Vec<String>) -> TFutureResult<Vec<Note>> {
+        let db_guard = self.db.read().unwrap();
+        if db_guard.is_none() {
+            return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object")));
+        }
+        let db = db_guard.as_ref().unwrap();
+
+        let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
+        ftry!(self.find_models_keys(&mut notes));
+        self.with_next_fut()
+            .and_then(move |turtl| -> TFutureResult<Vec<Note>> {
+                protected::map_deserialize(turtl.clone().as_ref(), notes)
+            })
+            .boxed()
+    }
+
     /// Take all the (encrypted) notes in our profile data then decrypt, index,
     /// and free them. The idea is we can get a set of note IDs from a search,
     /// but we're not holding all our notes decrypted in memory at all times.
@@ -538,22 +554,27 @@ impl Turtl {
         }
         let db = db_guard.as_ref().unwrap();
         let mut notes: Vec<Note> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("notes")))));
-        for note in &mut notes {
-            match self.find_model_key(note) {
-                Ok(_) => {},
-                Err(_) => error!("turtl.index_notes() -- skipping note {:?}: problem finding key", note.id()),
-            }
-        }
+        ftry!(self.find_models_keys(&mut notes));
         self.with_next_fut()
             .and_then(move |turtl| {
                 let turtl1 = turtl.clone();
                 protected::map_deserialize(turtl.as_ref(), notes)
                     .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
                         let search = ftry!(Search::new());
-                        for note in &notes { ftry!(search.index_note(note)); }
+                        for note in &notes {
+                            match search.index_note(note) {
+                                Ok(_) => {},
+                                // keep going on error
+                                Err(e) => error!("turtl.index_notes() -- problem indexing note {:?}: {}", note.id(), e),
+                            }
+                        }
                         let mut search_guard = turtl1.search.write().unwrap();
                         *search_guard = Some(search);
                         FOk!(())
+                    })
+                    .or_else(|e| -> TFutureResult<()> {
+                        error!("turtl.index_notes() -- there was a problem indexing notes: {}", e);
+                        FErr!(e)
                     })
                     .boxed()
             })
@@ -816,8 +837,6 @@ mod tests {
                         (String::from("story"), 1),
                     ]
                 );
-
-
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {

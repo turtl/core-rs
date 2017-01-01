@@ -55,7 +55,7 @@ impl Keyfinder for Note {
             Some(ids) => for id in ids { board_ids.push(id.clone()); },
             None => {},
         }
-        match self.keys.as_ref() {
+        match self.get_keys() {
             Some(keys) => for key in keys {
                 match key.get(&String::from("b")) {
                     Some(id) => board_ids.push(id.clone()),
@@ -64,6 +64,9 @@ impl Keyfinder for Note {
             },
             None => {},
         }
+
+        // skip looping over boards if we don't have any boards in the note
+        if board_ids.len() == 0 { return keychain; }
 
         let user_id = String::from("");     // fake id is ok
         let ty = String::from("board");

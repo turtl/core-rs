@@ -121,6 +121,11 @@ pub trait Model: Emitter + Serialize + Deserialize {
     /// Given a JSON object value, set all the applicable fields into this
     /// model.
     fn set_multi(&mut self, data: Value) -> TResult<()> {
+        // if we have a null, just return
+        match data {
+            Value::Null => return Ok(()),
+            _ => {},
+        }
         let tmp_model: Self = jedi::from_val(data)?;
         self.merge_in(tmp_model);
         Ok(())

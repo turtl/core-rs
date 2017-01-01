@@ -26,6 +26,8 @@ use ::std::sync::{Arc, RwLock};
 
 use ::regex::Regex;
 use ::futures::Future;
+use ::encoding::{Encoding, DecoderTrap};
+use ::encoding::all::ISO_8859_1;
 
 use ::jedi::{self, Value};
 
@@ -75,6 +77,7 @@ pub fn encrypt_key(encrypting_key: &Key, key_to_encrypt: Key) -> TResult<String>
 pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     where T: Protected + Send + Sync + 'static
 {
+    debug!("protected::map_deserialize() -- starting on {} items", vec.len());
     // this will hold the final result
     let mapped = Arc::new(RwLock::new(Vec::new()));
     // this gets replaced, iteratively, as we loop
@@ -88,12 +91,20 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             vec_guard.push(model);
             continue;
         }
+        let mut model_clone = ftry!(model.clone());
+        let model_type = String::from(model.model_type());
+        let model_id = model.id().unwrap().clone();
         // run the mapping, and store the resulting future
-        let future = work.run(move || model.deserialize())
+        let future = work.run(move || model_clone.deserialize())
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
-                vec_guard.push(ftry!(jedi::from_val(item_mapped)));
+                ftry!(model.set_multi_recursive(item_mapped));
+                vec_guard.push(model);
+                FOk!(())
+            })
+            .or_else(move |e| -> TFutureResult<()> {
+                error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
                 FOk!(())
             })
             .boxed();
@@ -105,6 +116,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     // its concurrent prison before signing off.
     final_future
         .and_then(move |_| {
+            debug!("protected::map_deserialize() -- finishing");
             match Arc::try_unwrap(mapped) {
                 Ok(x) => FOk!(x.into_inner().unwrap()),
                 Err(e) => FErr!(TError::BadValue(format!("protected::map_deserialize() -- error unwrapping final result from Arc: {:?}", e))),
@@ -168,6 +180,9 @@ pub trait Protected: Model + fmt::Debug {
 
     /// Like Model::set_multi(), but sets data into submodels
     fn set_multi_recursive(&mut self, data: ::jedi::Value) -> TResult<()>;
+
+    /// Clone this protected model
+    fn clone(&self) -> TResult<Self>;
 
     /// Either grab the existing or generate a new key for this model
     fn generate_key(&mut self) -> TResult<&Key>;
@@ -319,8 +334,22 @@ pub trait Protected: Model + fmt::Debug {
             };
             crypto::decrypt(key, &body)?
         };
-        let json_str = String::from_utf8(json_bytes)?;
-        let parsed: Value = jedi::parse(&json_str)?;
+        let json_str: String = match String::from_utf8(json_bytes) {
+            Ok(x) => x,
+            Err(e) => {
+                match ISO_8859_1.decode(e.into_bytes().as_slice(), DecoderTrap::Ignore) {
+                    Ok(x) => x,
+                    Err(_) => return Err(TError::BadValue(format!("Protected::deserialize() -- error decoding UTF8 string"))),
+                }
+            },
+        };
+        let parsed: Value = match jedi::parse(&json_str) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("protected.deserialize() -- error parsing JSON for {} model {:?}: {}", self.model_type(), self.id(), e);
+                return Err(From::from(e));
+            },
+        };
         self.set_multi_recursive(parsed)?;
         Ok(self.data())
     }
@@ -453,6 +482,7 @@ macro_rules! protected {
                 vec![
                     "id",
                     "body",
+                    "keys",
                     $( fix_type!(stringify!($pub_field)), )*
                 ]
             }
@@ -513,7 +543,9 @@ macro_rules! protected {
                 $(
                     match self.$submodel_field.as_mut() {
                         Some(ref mut x) => {
-                            x.deserialize()?;
+                            if x.get_body().is_some() {
+                                x.deserialize()?;
+                            }
                         },
                         None => {},
                     }
@@ -541,6 +573,14 @@ macro_rules! protected {
                     }
                 )*
                 self.set_multi(::jedi::Value::Object(hash))
+            }
+
+            fn clone(&self) -> ::error::TResult<Self> {
+                let mut model = $name::new();
+                model.set_multi_recursive(self.data())?;
+                let key = self.key().map(|x| x.clone());
+                model.set_key(key);
+                Ok(model)
             }
 
             fn generate_key(&mut self) -> ::error::TResult<&::crypto::Key> {
@@ -579,10 +619,11 @@ macro_rules! protected {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi;
+    use ::jedi::{self, Value};
     use ::crypto::{self, Key};
     use ::models::model::Model;
     use ::models::keychain::KeyRef;
+    use ::models::note::Note;
 
     protected!{
         pub struct Dog {
@@ -607,7 +648,7 @@ mod tests {
     #[test]
     fn returns_correct_public_fields() {
         let dog = Dog::new();
-        assert_eq!(dog.public_fields(), ["id", "body", "size"]);
+        assert_eq!(dog.public_fields(), ["id", "body", "keys", "size"]);
     }
 
     #[test]
@@ -623,8 +664,8 @@ mod tests {
         dog.id = Some(String::from("123"));
         dog.size = Some(42i64);
         dog.name = Some(String::from("barky"));
-        assert_eq!(jedi::stringify(&dog.data_for_storage()).unwrap(), r#"{"body":null,"id":"123","size":42}"#);
-        assert_eq!(dog.stringify_for_storage().unwrap(), r#"{"body":null,"id":"123","size":42}"#);
+        assert_eq!(jedi::stringify(&dog.data_for_storage()).unwrap(), r#"{"body":null,"id":"123","keys":null,"size":42}"#);
+        assert_eq!(dog.stringify_for_storage().unwrap(), r#"{"body":null,"id":"123","keys":null,"size":42}"#);
     }
 
     #[test]
@@ -642,6 +683,22 @@ mod tests {
             tags.push(String::from("fast"));
         }
         assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+    }
+
+    #[test]
+    fn deserializes_keys() {
+        let json = String::from(r#"{"board_id":"519164b92b13753e54000007","body":"AAUCAAHn4jcumLj19fAg31bFdfcmEUzg2zrPajj+9qGcRyrptjLYIaeMW+FvJ7RyNDLdV1f+LdWafl7k7CQRlf1KtgkYPfpFITS0N1MZQrAhxSvzc92mUT9Z7vDhs7n4wGREqIMNBpzZyPz/nUF3QPm6RpsNRhnqhq5NE3m0W0VrdKd8S9vQs5GxGtL+C+vYUiYmcmxH8X0OMkgeDxTpm5DX+YTbfzD0b/R/v4gRlW0hg0pcfVFe41OPB9xfS0KbLcsezEnddx7D8k6qeSlTqBjYnSu4fvsM5jWB2MQZ6EgOMZWLhsUfXt/36yRsRHAe2DolcAFceVpcOxaE6TZuX7QfrAjokSyIBk1MWhxJ7460QDDWMHS8jhhsx6O7p9glO+KG9AQ72AfYI4Mwsl4L","id":"56443924cd2249420a000dce","keys":[{"b":"519164b92b13753e54000007","k":"AAUCAAHg4Oe2Qcpatv19Pxc5VXuYnKSYvaYppRds6MazwqqX7MWeaRCJvakpAxpzc6ure5lEFh+sCdJfQRU1jAGnTiLJtQ=="}],"mod":1447311652,"user_id":"517c06912b13753915000001"}"#);
+        let note: Note = jedi::parse(&json).unwrap();
+        let keys = note.get_keys();
+        assert!(keys.is_some());
+    }
+
+    #[test]
+    fn set_multi_recursive_test() {
+        let val: Value = jedi::parse(&String::from(r#"{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","color":null,"embed":null,"file":null,"has_file":null,"id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"mod":1479796124,"password":null,"tags":null,"text":null,"title":null,"type":null,"url":null,"user_id":"5833e49e2b13751ab303f8b1","username":null}"#)).unwrap();
+        let mut note = Note::new();
+        note.set_multi_recursive(val).unwrap();
+        assert_eq!(note.boards, Some(vec![String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")]));
     }
 
     #[test]
@@ -681,9 +738,28 @@ mod tests {
     }
 
     #[test]
+    fn decrypts_utf8() {
+        let mut note: Note = jedi::parse(&String::from(r#"{"mod":1483131901,"body":"AAUCAAEObzrvy7WvU5VkmuIrWPWN3A0iz6v62nNA7LCiLI7TjG/UwRfheNcLtHvrhP2JGvBZfkz52grYDL9NoebzuLIs9AYikI2GWMer0EJ4YoSGcHIrCPk=","keys":[]}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("0A+odOOFcqMpqCLQoadIOzpSbQFkgLOwp3dOrK9OTbI=")).unwrap());
+        note.set_key(Some(key));
+        note.deserialize().unwrap();
+        assert_eq!(note.text.unwrap(), "omg \u{b7} lol");
+    }
+
+    #[test]
+    fn decrypts_clones() {
+        let mut note: Note = jedi::parse(&String::from(r#"{"mod":1483131901,"body":"AAUCAAEObzrvy7WvU5VkmuIrWPWN3A0iz6v62nNA7LCiLI7TjG/UwRfheNcLtHvrhP2JGvBZfkz52grYDL9NoebzuLIs9AYikI2GWMer0EJ4YoSGcHIrCPk=","keys":[]}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("0A+odOOFcqMpqCLQoadIOzpSbQFkgLOwp3dOrK9OTbI=")).unwrap());
+        note.set_key(Some(key));
+        let mut note_clone = note.clone().unwrap();
+        note_clone.deserialize().unwrap();
+        assert_eq!(note_clone.title.unwrap(), "utf8 stuff");
+    }
+
+    #[test]
     fn recursive_serialization() {
         let mut junkyard: Junkyard = jedi::parse(&String::from(r#"{"name":"US political system","dog":{"size":69,"name":"Gerard","type":"chowchow","tags":["bites","stubborn","furry"]}}"#)).unwrap();
-        assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"size":69},"id":null,"name":"US political system"}"#));
+        assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"keys":null,"size":69},"id":null,"keys":null,"name":"US political system"}"#));
         assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"id":null,"keys":null,"name":"US political system"}"#));
         junkyard.generate_key().unwrap();
         junkyard.serialize().unwrap();

@@ -4,6 +4,7 @@ extern crate config;
 extern crate crossbeam;
 extern crate crypto as rust_crypto;
 extern crate dumpy;
+extern crate encoding;
 extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
