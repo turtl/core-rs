@@ -119,22 +119,31 @@ pub trait Syncer {
 
     /// Check to see if we should quit the thread
     fn should_quit(&self) -> bool {
-        let config = self.get_config();
-        let guard = config.read().unwrap();
+        let local_config = self.get_config();
+        let guard = local_config.read().unwrap();
         guard.quit.clone()
     }
 
     /// Check to see if we're enabled
     fn is_enabled(&self) -> bool {
-        let config = self.get_config();
-        let guard = config.read().unwrap();
-        guard.enabled.clone()
+        let config_enabled_res = if self.get_name() == "outgoing" {
+            config::get(&["sync", "enable_outgoing"])
+        } else {
+            config::get(&["sync", "enable_incoming"])
+        };
+        let config_enabled: bool = match config_enabled_res {
+            Ok(x) => x,
+            Err(_) => true,
+        };
+        let local_config = self.get_config();
+        let guard = local_config.read().unwrap();
+        guard.enabled.clone() && config_enabled
     }
 
     /// Get our sync_id key (for our k/v store)
     fn sync_key(&self) -> TResult<String> {
-        let config = self.get_config();
-        let guard = config.read().unwrap();
+        let local_config = self.get_config();
+        let guard = local_config.read().unwrap();
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         Ok(format!("{}:{}", guard.user_id, api_endpoint))
     }
