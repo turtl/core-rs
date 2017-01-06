@@ -5,7 +5,6 @@ use ::futures::Future;
 
 pub mod logger;
 pub mod thunk;
-pub mod opdata;
 pub mod event;
 pub mod thredder;
 pub mod stopper;
@@ -18,16 +17,15 @@ pub fn sleep(millis: u64) {
 }
 
 /// Drive a future forward
+/// TODO: run on calling thread somehow (main)
 pub fn run_future<T>(future: T)
     where T: Future + Send + 'static
 {
-    println!("future - running! {:?}", thread::current().name());
-    thread::spawn(move || {
+    thread::Builder::new().name(String::from("future-runner")).spawn(move || {
         match future.wait() {
             Ok(_) => {},
             Err(_) => {},
         }
-        println!("future - done!!");
-    });
+    }).unwrap();
 }
 

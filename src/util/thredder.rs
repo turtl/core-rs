@@ -7,13 +7,12 @@ use ::std::sync::Arc;
 use ::std::ops::Deref;
 
 use ::crossbeam::sync::MsQueue;
-use ::futures::{self, Future, Canceled};
+use ::futures::{self, Future};
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
 use ::util;
 use ::util::thunk::Thunk;
-use ::util::opdata::{OpData, OpConverter};
 use ::turtl::TurtlWrap;
 
 /// Abstract our tx_main type
@@ -31,6 +30,7 @@ impl Pipeline {
 
     /// Create a new pipeline from a tx object
     pub fn new_tx(tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>) -> Pipeline {
+        // bangarang
         Pipeline {
             tx: tx,
         }
@@ -87,40 +87,26 @@ impl Thredder {
 
     /// Run an operation on this pool
     pub fn run<F, T>(&self, run: F) -> TFutureResult<T>
-        where T: OpConverter + Send + 'static,
+        where T: Sync + Send + 'static,
               F: FnOnce() -> TResult<T> + Send + 'static
     {
-        let (fut_tx, fut_rx) = futures::oneshot::<TResult<OpData>>();
+        let (fut_tx, fut_rx) = futures::oneshot::<TResult<T>>();
         let tx_main = self.tx.clone();
-        let thread_name = String::from(&self.name[..]);
-        let runme = self.pool.spawn_fn(|| run().map(|x| x.to_opdata()))
-            .then(move |res: TResult<OpData>| -> TFutureResult<()> {
+        let runme = self.pool.spawn_fn(|| run())
+            .then(move |res: TResult<T>| -> TFutureResult<()> {
                 FOk!(tx_main.next(move |_| { fut_tx.complete(res) }))
             });
         util::run_future(runme);
-        Thredder::op_converter(fut_rx, thread_name)
-    }
-
-    /// A static function to handle the conversion of a Future that has an
-    /// OpData result.
-    ///
-    /// the reason behind this being separate instead of just lumped into
-    /// Thredder.run() is that I did a bunch of work to split it out because I
-    /// wanted to use this specific code in another part of Thredder, but ended
-    /// up not going forward with that change. It took enough time to convert
-    /// that I'd rather leave it split out for now.
-    pub fn op_converter<T, O>(future: T, thread_name: String) -> TFutureResult<O>
-        where T: Future<Item = TResult<OpData>, Error = Canceled> + Send + 'static,
-              O: OpConverter + Send + 'static
-    {
-        future
-            .then(move |res: Result<TResult<OpData>, Canceled>| {
-                match res {
-                    Ok(x) => match x {
-                        Ok(x) => futures::done(OpData::to_value(x)),
-                        Err(x) => futures::done(Err(x)),
+        fut_rx
+            .then(|x| {
+                match x {
+                    Ok(x) => {
+                        match x {
+                            Ok(x) => FOk!(x),
+                            Err(e) => FErr!(e),
+                        }
                     },
-                    Err(_) => futures::done(Err(TError::Msg(format!("thredder: {}: pool oneshot future canceled", &thread_name)))),
+                    Err(_) => FErr!(TError::Msg(String::from("thredder future cancelled"))),
                 }
             })
             .boxed()

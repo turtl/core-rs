@@ -793,6 +793,7 @@ mod tests {
         let ref tx_main = turtl.tx_main;
         let turtl2 = turtl.clone();
         let turtl3 = turtl.clone();
+        let tx2 = turtl.tx_main.clone();
         let stop2 = stop.clone();
         let runme = turtl.load_profile()
             .and_then(move |_| {
@@ -845,8 +846,8 @@ mod tests {
                 panic!("load profile error: {}", e);
             })
             .then(move |_| -> TFutureResult<()> {
-                println!("--- omglolwtf!!");
                 stop2.set(false);
+                tx2.next(|_| {});
                 FOk!(())
             });
         util::run_future(runme);
@@ -854,7 +855,6 @@ mod tests {
             let handler = tx_main.pop();
             handler.call_box(turtl.clone());
         }
-        println!("--- over!!!");
     }
 }
 
