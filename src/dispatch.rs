@@ -63,7 +63,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             _ => ()
                         }
                     });
-                util::run_future(runme);
+                util::future::run(runme);
                 Ok(())
             },
             "user:logout" => {
@@ -90,7 +90,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                             _ => ()
                         }
                     });
-                util::run_future(runme);
+                util::future::run(runme);
                 Ok(())
             },
             "user:join" => {
@@ -177,11 +177,11 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                         }
                         FOk!(())
                     });
-                util::run_future(runme);
+                util::future::run(runme);
                 Ok(())
             },
             "profile:find-notes" => {
-                let qry: Query = jedi::get(&["2", "search"], &data)?;
+                let qry: Query = jedi::get(&["2"], &data)?;
                 let search_guard = turtl.search.read().unwrap();
                 if search_guard.is_none() {
                     return Err(TError::MissingField(String::from("dispatch: profile:find-notes -- turtl is missing `search` object")));
@@ -203,7 +203,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                         }
                         FOk!(())
                     });
-                util::run_future(runme);
+                util::future::run(runme);
                 Ok(())
             },
             "ping" => {

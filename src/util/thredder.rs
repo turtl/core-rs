@@ -11,7 +11,6 @@ use ::futures::{self, Future};
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult, TError};
-use ::util;
 use ::util::thunk::Thunk;
 use ::turtl::TurtlWrap;
 
@@ -65,22 +64,24 @@ impl Clone for Pipeline {
     }
 }
 
-/// Stores state information for a thread we've spawned
+/// Stores state information for a thread we've spawned.
+///
+/// NOTE: Thredder used to have a lot of wrapping around CpuPool and provided a
+/// lot of utilities for passing data between pools and our main thread. Those
+/// days are gone now since many improvements to CpuPool, so it now exists as a
+/// very thin layer.
 pub struct Thredder {
     /// Our Thredder's name
     pub name: String,
-    /// Allows sending messages to our thread
-    tx: Pipeline,
     /// Stores the thread pooler for this Thredder
     pool: CpuPool,
 }
 
 impl Thredder {
     /// Create a new thredder
-    pub fn new(name: &str, tx_main: Pipeline, workers: u32) -> Thredder {
+    pub fn new(name: &str, workers: u32) -> Thredder {
         Thredder {
             name: String::from(name),
-            tx: tx_main,
             pool: CpuPool::new(workers as usize),
         }
     }
@@ -90,26 +91,7 @@ impl Thredder {
         where T: Sync + Send + 'static,
               F: FnOnce() -> TResult<T> + Send + 'static
     {
-        let (fut_tx, fut_rx) = futures::oneshot::<TResult<T>>();
-        let tx_main = self.tx.clone();
-        let runme = self.pool.spawn_fn(|| run())
-            .then(move |res: TResult<T>| -> TFutureResult<()> {
-                FOk!(tx_main.next(move |_| { fut_tx.complete(res) }))
-            });
-        util::run_future(runme);
-        fut_rx
-            .then(|x| {
-                match x {
-                    Ok(x) => {
-                        match x {
-                            Ok(x) => FOk!(x),
-                            Err(e) => FErr!(e),
-                        }
-                    },
-                    Err(_) => FErr!(TError::Msg(String::from("thredder future cancelled"))),
-                }
-            })
-            .boxed()
+        self.pool.spawn_fn(run).boxed()
     }
 }
 

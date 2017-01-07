@@ -151,9 +151,10 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // run our main loop. all threads pipe their data/responses into this
             // loop, meaning <main> only has to check one place to grab messages.
             // this creates an event loop of sorts, without all the grossness.
+            util::future::start_poll(tx_main.clone());
             info!("main::start() -- main loop");
             while (*RUN).running() {
-                debug!("turtl: main thread message loop");
+                trace!("turtl: main thread message loop");
                 let handler = tx_main.pop();
                 handler.call_box(turtl.clone());
             }

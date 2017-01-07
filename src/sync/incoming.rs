@@ -93,7 +93,7 @@ impl SyncIncoming {
         };
 
         self.connected(true);
-        self.update_local_db_from_api_sync(syncdata)
+        self.update_local_db_from_api_sync(syncdata, !poll)
     }
 
     /// Load the user's entire profile. The API gives us back a set of sync
@@ -102,17 +102,17 @@ impl SyncIncoming {
     fn load_full_profile(&self) -> TResult<()> {
         let syncdata = self.api.get("/sync/full", ApiReq::new().timeout(120))?;
         self.connected(true);
-        self.update_local_db_from_api_sync(syncdata)
+        self.update_local_db_from_api_sync(syncdata, true)
     }
 
     /// Take sync data we got from the API and update our local database with
     /// it. Kewl.
-    fn update_local_db_from_api_sync(&self, syncdata: Value) -> TResult<()> {
+    fn update_local_db_from_api_sync(&self, syncdata: Value, force: bool) -> TResult<()> {
         // sometimes the sync call takes a while, and it's possible we've quit
         // mid-call. if this is the case, throw out our sync result.
-        if self.should_quit() { return Ok(()); }
+        if self.should_quit() && !force { return Ok(()); }
         // same, but with enabled
-        if !self.is_enabled() { return Ok(()); }
+        if !self.is_enabled() && !force { return Ok(()); }
         // if our sync data is blank, then alright, forget it. YOU KNOW WHAT?
         // HEY JUST FORGET IT!
         if syncdata == Value::Null { return Ok(()); }

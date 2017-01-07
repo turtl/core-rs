@@ -101,8 +101,8 @@ impl Turtl {
             profile: RwLock::new(Profile::new()),
             api: api,
             msg: Messenger::new(),
-            work: Thredder::new("work", tx_main.clone(), num_workers as u32),
-            async: Thredder::new("async", tx_main.clone(), 2),
+            work: Thredder::new("work", num_workers as u32),
+            async: Thredder::new("async", 2),
             kv: kv,
             db: RwLock::new(None),
             search: RwLock::new(None),
@@ -290,7 +290,7 @@ impl Turtl {
                         ftry!(turtl4.error_event(&e, "load_profile"));
                         FOk!(())
                     });
-                util::run_future(runme);
+                util::future::run(runme);
             }, "sync:incoming:init:done");
         });
         Ok(())
@@ -850,7 +850,8 @@ mod tests {
                 tx2.next(|_| {});
                 FOk!(())
             });
-        util::run_future(runme);
+        util::future::run(runme);
+        util::future::start_poll(tx_main.clone());
         while stop.running() {
             let handler = tx_main.pop();
             handler.call_box(turtl.clone());

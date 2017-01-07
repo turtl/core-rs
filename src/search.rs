@@ -254,6 +254,7 @@ impl Search {
         let rows = prepared_qry.query_map(values.as_slice(), |row| row.get(0))?;
         let mut note_ids = Vec::new();
         for id in rows { note_ids.push(id?); }
+        debug!("Search.find() -- found {} notes", note_ids.len());
         Ok(note_ids)
     }
 
