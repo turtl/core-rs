@@ -41,6 +41,7 @@ use ::error::DResult;
 
 /// Makes generating SQL statements somewhat painless by implementing rusqlite's
 /// ToSql for some primitive types (wrapped in one enum).
+#[derive(Debug)]
 pub enum SearchVal {
     Bool(bool),
     String(String),
@@ -129,13 +130,7 @@ impl Dumpy {
                             Value::String(ref x) => {
                                 subvals.push(x.clone());
                             },
-                            Value::I64(ref x) => {
-                                subvals.push(format!("{}", x));
-                            },
-                            Value::U64(ref x) => {
-                                subvals.push(format!("{}", x));
-                            },
-                            Value::F64(ref x) => {
+                            Value::Number(ref x) => {
                                 subvals.push(format!("{}", x));
                             },
                             Value::Bool(ref x) => {
@@ -147,13 +142,7 @@ impl Dumpy {
                                         Value::String(ref s) => {
                                             subvals.push(s.clone());
                                         }
-                                        Value::I64(x) => {
-                                            subvals.push(format!("{}", x));
-                                        },
-                                        Value::U64(x) => {
-                                            subvals.push(format!("{}", x));
-                                        },
-                                        Value::F64(x) => {
+                                        Value::Number(ref x) => {
                                             subvals.push(format!("{}", x));
                                         },
                                         _ => {

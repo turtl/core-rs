@@ -60,6 +60,11 @@ impl SyncOutgoing {
         Ok(())
     }
 
+    // TODO: mark the sync item as failed
+    fn freeze_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
+        Ok(())
+    }
+
     /// Get how many times a sync record has failed
     fn get_errcount(&self, sync: &SyncRecord) -> TResult<u32> {
         let query = "SELECT errcount FROM sync_outgoing WHERE id = $1 LIMIT 1";
@@ -90,7 +95,7 @@ impl SyncOutgoing {
     fn handle_failed_record(&self, failure: &SyncRecord) -> TResult<()> {
         let errcount = self.get_errcount(failure)?;
         if errcount > MAX_ALLOWED_FAILURES {
-            self.delete_sync_record(failure)
+            self.freeze_sync_record(failure)
         } else {
             self.increment_errcount(failure)
         }
@@ -98,12 +103,19 @@ impl SyncOutgoing {
 
     /// Notify the app that we have sync failure(s), and also update the error
     /// count on those records.
+    /// TODO: implement embedded errors
     fn notify_sync_failure(&self, fail: Vec<SyncRecord>, error: Value) -> TResult<()> {
         for failure in &fail {
             self.handle_failed_record(failure)?;
         }
         self.tx_main.next(move |turtl| {
-            let fail = jedi::to_val(&fail);
+            let fail = match jedi::to_val(&fail) {
+                Ok(x) => x,
+                Err(e) => {
+                    error!("sync.outgoing.notify_sync_failure() -- error serializing failed sync records: {}", e);
+                    Value::Array(vec![])
+                }
+            };
             let val = Value::Array(vec![fail, error]);
             turtl.events.trigger("sync:outgoing:failure", &val);
         });
@@ -152,7 +164,7 @@ impl Syncer for SyncOutgoing {
         // send our "normal" syncs out to the api, and remove and successful
         // records from our local db
         if syncs.len() > 0 {
-            let sync_result = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)))?;
+            let sync_result = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
 
             // our successful syncs
             let success: Vec<SyncRecord> = jedi::get(&["success"], &sync_result)?;

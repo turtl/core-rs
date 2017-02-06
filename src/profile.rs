@@ -7,21 +7,21 @@
 //! from local storage and discarded once sent to the UI.
 
 use ::models::keychain::Keychain;
-use ::models::persona::Persona;
+use ::models::space::Space;
 use ::models::board::Board;
 
 pub struct Profile {
     pub keychain: Keychain,
+    pub spaces: Vec<Space>,
     pub boards: Vec<Board>,
-    pub persona: Option<Persona>,
 }
 
 impl Profile {
     pub fn new() -> Profile {
         Profile {
             keychain: Keychain::new(),
+            spaces: Vec::new(),
             boards: Vec::new(),
-            persona: None,
         }
     }
 }

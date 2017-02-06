@@ -19,6 +19,7 @@ serializable! {
     /// A query builder
     #[derive(Debug)]
     pub struct Query {
+        ()
         text: Option<String>,
         notes: Vec<String>,
         boards: Vec<String>,
@@ -48,8 +49,7 @@ impl Search {
     /// Create a new Search object
     pub fn new() -> TResult<Search> {
         let idx = Clouseau::new()?;
-        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, has_file BOOL, mod INTEGER, type VARCHAR(32), color INTEGER)", &[])?;
-        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes_boards (id ROWID, note_id VARCHAR(64), board_id VARCHAR(64))", &[])?;
+        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, board_id VARCHAR(96), has_file BOOL, mod INTEGER, type VARCHAR(32), color INTEGER)", &[])?;
         idx.conn.execute("CREATE TABLE IF NOT EXISTS notes_tags (id ROWID, note_id VARCHAR(64), tag VARCHAR(128))", &[])?;
         Ok(Search {
             idx: idx,
@@ -64,17 +64,15 @@ impl Search {
             Ok(x) => x,
             Err(_) => 99999999,
         };
+        let board_id = get_field!(note, board_id, String::from(""));
+        let board_id = if board_id == "" { None } else { Some(board_id) };
         let has_file = get_field!(note, has_file, false);
         let mod_ = get_field!(note, mod_, id_mod) as i64;
         let type_ = get_field!(note, type_, String::from("text"));
         let color = get_field!(note, color, 0);
-        self.idx.conn.execute("INSERT INTO notes (id, has_file, mod, type, color) VALUES (?, ?, ?, ?, ?)", &[&id, &has_file, &mod_, &type_, &color])?;
+        self.idx.conn.execute("INSERT INTO notes (id, board_id, has_file, mod, type, color) VALUES (?, ?, ?, ?, ?, ?)", &[&id, &board_id, &has_file, &mod_, &type_, &color])?;
 
-        let boards = get_field!(note, boards, Vec::new());
         let tags = get_field!(note, tags, Vec::new());
-        for board in boards {
-            self.idx.conn.execute("INSERT INTO notes_boards (note_id, board_id) VALUES (?, ?)", &[&id, &board])?;
-        }
         for tag in tags {
             self.idx.conn.execute("INSERT INTO notes_tags (note_id, tag) VALUES (?, ?)", &[&id, &tag])?;
         }
@@ -98,7 +96,6 @@ impl Search {
         model_getter!(get_field, "Search.unindex_note()");
         let id = get_field!(note, id);
         self.idx.conn.execute("DELETE FROM notes WHERE id = ?", &[&id])?;
-        self.idx.conn.execute("DELETE FROM notes_boards where note_id = ?", &[&id])?;
         self.idx.conn.execute("DELETE FROM notes_tags where note_id = ?", &[&id])?;
         self.idx.unindex(&id)?;
         Ok(())
@@ -159,7 +156,7 @@ impl Search {
 
         if query.boards.len() > 0 {
             let mut board_qry: Vec<&str> = Vec::with_capacity(query.boards.len() + 2);
-            board_qry.push("SELECT note_id FROM notes_boards WHERE board_id IN (");
+            board_qry.push("SELECT id FROM notes WHERE board_id IN (");
             for board in &query.boards {
                 if board == &query.boards[query.boards.len() - 1] {
                     board_qry.push("?");
@@ -266,7 +263,7 @@ impl Search {
         let mut qry_vals: Vec<SearchVal> = Vec::new();
         tag_qry.push("SELECT tag, count(tag) AS tag_count FROM notes_tags ");
         if boards.len() > 0 {
-            tag_qry.push("WHERE note_id IN (SELECT note_id FROM notes_boards WHERE board_id IN (");
+            tag_qry.push("WHERE note_id IN (SELECT id FROM notes WHERE board_id IN (");
             for board in boards {
                 if board == &boards[boards.len() - 1] {
                     tag_qry.push("?");
@@ -318,11 +315,11 @@ mod tests {
 
         let search = Search::new().unwrap();
 
-        let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Do you have breast cancer??? Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists","breasts"],"boards":["6969","1212"]}"#)).unwrap();
+        let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Do you have breast cancer??? Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists","breasts"],"board_id":"6969"}"#)).unwrap();
         let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","type":"link","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
-        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"boards":["6969"]}"#)).unwrap();
-        let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"boards":["1212","8989"]}"#)).unwrap();
-        let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"boards":["8989","6969"]}"#)).unwrap();
+        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"board_id":"6969"}"#)).unwrap();
+        let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"board_id":"1212"}"#)).unwrap();
+        let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"board_id":"6969"}"#)).unwrap();
 
         search.index_note(&note1).unwrap();
         search.index_note(&note2).unwrap();
@@ -448,7 +445,7 @@ mod tests {
         // ---------------------------------------------------------------------
         // reindex note 3
         // ---------------------------------------------------------------------
-        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"BREAKING NEWS Auto insurance companies HATE this one simple trick! Are you a good person? Here are ten questions you can ask yourself to find out. You won't believe number eight!!!!","tags":["buzzfeed","quiz","insurance"],"boards":["6969"]}"#)).unwrap();
+        let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","type":"text","title":"Buzzfeed","text":"BREAKING NEWS Auto insurance companies HATE this one simple trick! Are you a good person? Here are ten questions you can ask yourself to find out. You won't believe number eight!!!!","tags":["buzzfeed","quiz","insurance"],"board_id":"6969"}"#)).unwrap();
         search.reindex_note(&note3).unwrap();
 
         // combining boards/tags

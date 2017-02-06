@@ -8,6 +8,8 @@ pub mod future;
 pub mod thredder;
 pub mod stopper;
 #[macro_use]
+pub mod macros;
+#[macro_use]
 pub mod serialize;
 
 /// Go to sleeeeep

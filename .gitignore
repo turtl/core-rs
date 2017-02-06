@@ -1,3 +1,4 @@
 vars.mk
 target
 config.yaml
+sess.vim

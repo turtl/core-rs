@@ -12,6 +12,7 @@ use ::std::convert::From;
 use ::serde_json::Error as SerdeJsonError;
 use ::serde_yaml::Error as SerdeYamlError;
 pub use ::serde_json::Value;
+pub use ::serde_json::Map;
 pub use ::serde::de::Deserialize;
 pub use ::serde::ser::Serialize;
 
@@ -71,30 +72,8 @@ from_err!(SerdeYamlError);
 macro_rules! jedi_value_wrapper {
     ($name:ident) => {
         #[derive(Debug)]
+        #[derive(Serialize, Deserialize)]
         pub struct $name(::serde_json::Value);
-
-        impl $name {
-            #[allow(dead_code)]
-            fn as_val<'a>(&'a self) -> &'a Value {
-                &self.0
-            }
-        }
-
-        impl ::serde::ser::Serialize for $name {
-            fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-                where S: ::serde::ser::Serializer
-            {
-                self.0.serialize(serializer)
-            }
-        }
-
-        impl ::serde::de::Deserialize for $name {
-            fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
-                where D: ::serde::de::Deserializer
-            {
-                ::serde::de::Deserialize::deserialize(deserializer).map($name)
-            }
-        }
     }
 }
 
@@ -120,8 +99,8 @@ pub fn stringify<T: Serialize>(obj: &T) -> JResult<String> {
 }
 
 /// Turn a JSON-serializable object into a Result<Value>
-pub fn to_val<T: Serialize>(obj: &T) -> Value {
-    serde_json::to_value(obj)
+pub fn to_val<T: Serialize>(obj: &T) -> JResult<Value> {
+    Ok(serde_json::to_value(obj)?)
 }
 
 /// Turn a JSON Value into a object that implements Deserialize
@@ -251,7 +230,7 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
     let mut val = walk_mut(butlast, container)?;
     match *val {
         Value::Object(ref mut x) => {
-            x.insert(String::from(last), to_val(to));
+            x.insert(String::from(last), to_val(to)?);
             Ok(())
         },
         Value::Array(ref mut x) => {
@@ -259,7 +238,7 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
                 Ok(x) => x,
                 Err(..) => return Err(JSONError::InvalidKey(last.to_owned())),
             };
-            *(&mut x[ukey]) = to_val(to);
+            *(&mut x[ukey]) = to_val(to)?;
             Ok(())
         },
         _ => Err(JSONError::DeadEnd),
@@ -268,7 +247,7 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
 
 /// Returns a blank Value hash/object type
 pub fn obj() -> Value {
-    Value::Object(::std::collections::BTreeMap::new())
+    Value::Object(serde_json::Map::new())
 }
 
 #[cfg(test)]

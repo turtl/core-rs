@@ -1,3 +1,30 @@
+//! NOTE: I ALMOST removed this library, but given that rust macros still see
+//! this as ambiguous:
+//!
+//!   macro_rules! builder {
+//!     (
+//!         $(#[$field_meta:meta])*
+//!         $field:ident: $ty:ty
+//!     ) => {
+//!         $(#[$field_meta])*
+//!         $field: $ty
+//!     }
+//!   }
+//!
+//!   builder!{
+//!     #[serde(rename = "type")]
+//!     type_: String
+//!   }
+//!
+//! We can't realistically build protecteds/models and have them derive into
+//! serializable object using serde's derivation macros without doing a TON of
+//! work to rewrite the macro invocations for all the models. This would also
+//! be avaoidable if we could detect the field name and ADD meta to it, but
+//! the macro system, again, doesn't let you run macros while generating fields
+//! inside of a struct.
+//!
+//! ----------------------------------------------------------------------------
+//!
 //! This module provides helpers/macros for serializing (mainly for structs).
 //! Note this is all more or less written as a replacement for the derive()
 //! attributes that no longer work in serde:
@@ -98,17 +125,18 @@ macro_rules! serializable {
         $thestruct
 
         impl ::serde::ser::Serialize for $name {
-            fn serialize<S>(&self, serializer: &mut S) -> ::std::result::Result<(), S::Error>
+            fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
                 where S: ::serde::ser::Serializer
             {
-                let mut state = serializer.serialize_struct(stringify!($name), 1)?;
-                $( serializer.serialize_struct_elt(&mut state, fix_type!(stringify!($field)), &self.$field)?; )*
-                serializer.serialize_struct_end(state)
+                use ::serde::ser::SerializeStruct;
+                let mut struc = serializer.serialize_struct(stringify!($name), count_idents!($($field),*))?;
+                $( struc.serialize_field(fix_type!(stringify!($field)), &self.$field)?; )*
+                struc.end()
             }
         }
 
         impl ::serde::de::Deserialize for $name {
-            fn deserialize<D>(deserializer: &mut D) -> Result<$name, D::Error>
+            fn deserialize<D>(deserializer: D) -> Result<$name, D::Error>
                 where D: ::serde::de::Deserializer
             {
                 /// Define a generic struct we can use for deserialization.
@@ -116,8 +144,11 @@ macro_rules! serializable {
 
                 impl ::serde::de::Visitor for Visit0r {
                     type Value = $name;
+                    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                        write!(formatter, "a {}", stringify!($name))
+                    }
 
-                    fn visit_map<V>(&mut self, mut visitor: V) -> Result<$name, V::Error>
+                    fn visit_map<V>(self, mut visitor: V) -> Result<$name, V::Error>
                         where V: ::serde::de::MapVisitor
                     {
                         $( let mut $field: Option<$type_> = None; )*
@@ -149,7 +180,6 @@ macro_rules! serializable {
                             };
                         )*
 
-                        visitor.end()?;
                         Ok($name {
                             $( $field: $field, )*
                             $( $unserialized: Default::default(), )*

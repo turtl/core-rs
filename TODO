@@ -1,27 +1,50 @@
+v0.7:
+- add concept of spaces
+- remove personas
+- does subkey storage system make sense?
+  - the "s"/"b" etc shit...can we restructure?
+- get rid of sync.immediate
+- no more boards owning boards.
+- boards: pull keys from parent space
+- notes: pull keys from parent space
+- note must be in exactly one board
+- send username/salt when joining
+- only store space keys in keychain. everything else should be subkeys
+- use libsodium for everything
+  - https://github.com/orthecreedence/sodiumoxide
+- MsgPack for core <--> client comm
+  - https://github.com/3Hren/msgpack-rust
+  - https://github.com/kawanet/msgpack-lite
+
 user:
 - join
-
-profile:
-- fix stack overflow on larger profiles
+- password change
+- email change
 
 sync:
+- track sync item failures via `freeze_sync_record`
+- sync errors are now embedded in each failed sync item, no more passing errors
+  to `notify_sync_failure`
+- generic sync endpoint for various objects
+  - add/edit/delete notes/boards/spaces/keychain/user/etc
 - notify UI of API -> core sync
 - notify UI of sync/login status
 - notify core of UI data change
   - reindex on note change
 - effective way to test sync via tests or at least client?
 - outgoing file uploads
+  - can we do this without queuing? perhaps a stateless query that says
+    "here's all the notes w/ files i have, what are their file ids?"
+	then compare the ids to what we have locally
 - incoming file downloads
+  - store files in filesystem (not sqlite)
+  - filenames should be the <note.id>_<note.file.id>.enc
 
 models:
-- PGP key generation and encryption
 - move over tests from JS
 
-invites/personas:
-- anything special? or will sync+ui notifications handle all this?
+invites:
+- NOTE: invite sending/accepting requires connection
 
-general/future:
-- get rid of rust-crypto/gcrypt, replace with either openssl or nettle
-- come up with strategy to deprecate personas
-- binary exchange format? MessagePack? JSON requires base64 and is clunky
+general:
 

@@ -8,6 +8,7 @@ serializable!{
     /// API and the app.
     #[derive(Debug)]
     pub struct SyncItem {
+        ()
         id: String,
         action: String,
         type_: String,

@@ -70,7 +70,7 @@ impl Storage {
     pub fn save<T>(&self, model: &T) -> TResult<()>
         where T: Protected + Storable
     {
-        let modeldata = model.data_for_storage();
+        let modeldata = model.data_for_storage()?;
         let table = model.table();
 
         self.dumpy.store(&self.conn, &String::from(table), &modeldata)

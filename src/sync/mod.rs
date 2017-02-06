@@ -82,6 +82,7 @@ serializable!{
     /// Define a container for our sync records
     #[derive(Debug)]
     pub struct SyncRecord {
+        ()
         id: String,
         action: String,
         sync_ids: Option<Vec<String>>,
@@ -270,7 +271,7 @@ mod tests {
         assert_eq!(sync.action, String::from("add"));
         assert_eq!(sync.sync_ids, None);
         assert_eq!(sync.type_, String::from("note"));
-        let data: Value = jedi::to_val(&sync.data);
+        let data: Value = jedi::to_val(&sync.data).unwrap();
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
         let syncstr: String = jedi::stringify(&sync).unwrap();

@@ -6,7 +6,6 @@
 
 use ::std::thread::{self, JoinHandle};
 
-use ::serde::ser::{Serialize, Serializer};
 use ::carrier;
 use ::jedi::{self, Value};
 
@@ -24,6 +23,8 @@ use ::dispatch;
 /// any supporting data (the error that occurred, or the data we requested).
 ///
 /// NOTE: this is mainly used by the `Turtl` object
+#[derive(Serialize)]
+#[serde(rename = "res")]
 pub struct Response {
     /// `e > 0` means "error!!!1", `e == 0` means "great success!!"
     pub e: i64,
@@ -33,35 +34,13 @@ pub struct Response {
 
 /// Defines a container for sending events to the client. See the `Response`
 /// object for notes.
+#[derive(Serialize)]
+#[serde(rename = "ev")]
 struct Event {
     /// Our event's name
     pub e: String,
     /// Our event's data
     pub d: Value,
-}
-
-// Make `Response` Serde serializable
-impl Serialize for Response {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: Serializer
-    {
-        let mut state = serializer.serialize_struct("res", 2)?;
-        serializer.serialize_struct_elt(&mut state, "e", &self.e)?;
-        serializer.serialize_struct_elt(&mut state, "d", &self.d)?;
-        serializer.serialize_struct_end(state)
-    }
-}
-
-// Make `Event` Serde serializable
-impl Serialize for Event {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
-        where S: Serializer
-    {
-        let mut state = serializer.serialize_struct("res", 2)?;
-        serializer.serialize_struct_elt(&mut state, "e", &self.e)?;
-        serializer.serialize_struct_elt(&mut state, "d", &self.d)?;
-        serializer.serialize_struct_end(state)
-    }
 }
 
 pub struct Messenger {

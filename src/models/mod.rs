@@ -7,9 +7,10 @@ pub mod model;
 pub mod protected;
 #[macro_use]
 pub mod storable;
+
 pub mod user;
 pub mod keychain;
-pub mod persona;
+pub mod space;
 pub mod board;
 pub mod note;
 pub mod file;

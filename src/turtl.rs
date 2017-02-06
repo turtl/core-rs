@@ -5,7 +5,6 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::ops::Drop;
 use ::std::collections::HashMap;
-use ::std::mem;
 use ::std::fs;
 
 use ::regex::Regex;
@@ -25,8 +24,8 @@ use ::profile::Profile;
 use ::models::protected::{self, Keyfinder, Protected};
 use ::models::model::Model;
 use ::models::user::User;
+use ::models::space::Space;
 use ::models::board::Board;
-use ::models::persona::Persona;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::models::note::Note;
 use ::util::thredder::{Thredder, Pipeline};
@@ -68,8 +67,7 @@ pub struct Turtl {
     pub db: RwLock<Option<Storage>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
-    /// handle that need API access (Personas (soon to be deprecated) and
-    /// invites come to mind). Use sparingly.
+    /// handle that need API access (invites come to mind). Use sparingly.
     pub api: Arc<Api>,
     /// Holds our heroic search object, used to index/find our notes once the
     /// profile is loaded.
@@ -170,6 +168,23 @@ impl Turtl {
             .and_then(move |turtl| -> TFutureResult<()> {
                 let turtl2 = turtl.clone();
                 User::login(turtl.clone(), &username, &password)
+                    .and_then(move |_| -> TFutureResult<()> {
+                        let db = ftry!(turtl2.create_user_db());
+                        let mut db_guard = turtl2.db.write().unwrap();
+                        *db_guard = Some(db);
+                        drop(db_guard);
+                        FOk!(())
+                    })
+                    .boxed()
+            })
+            .boxed()
+    }
+
+    pub fn join(&self, username: String, password: String) -> TFutureResult<()> {
+        self.with_next_fut()
+            .and_then(move |turtl| -> TFutureResult<()> {
+                let turtl2 = turtl.clone();
+                User::join(turtl.clone(), &username, &password)
                     .and_then(move |_| -> TFutureResult<()> {
                         let db = ftry!(turtl2.create_user_db());
                         let mut db_guard = turtl2.db.write().unwrap();
@@ -459,7 +474,7 @@ impl Turtl {
 
     /// Load the profile from disk.
     ///
-    /// Meaning, we decrypt the keychain, boards, and personas and store them
+    /// Meaning, we decrypt the keychain, spaces, and boards and store them
     /// in-memory in our `turtl.profile` object.
     pub fn load_profile(&self) -> TFutureResult<()> {
         let user_key = {
@@ -474,9 +489,9 @@ impl Turtl {
             return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut keychain: Vec<KeychainEntry> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("keychain")))));
-        let mut boards: Vec<Board> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("boards")))));
-        let mut personas: Vec<Persona> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("personas")))));
+        let mut keychain: Vec<KeychainEntry> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("keychain"))))));
+        let mut spaces: Vec<Space> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("spaces"))))));
+        let mut boards: Vec<Board> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("boards"))))));
 
         // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
@@ -489,37 +504,30 @@ impl Turtl {
                 let turtl3 = turtl.clone();
                 // decrypt the keychain
                 protected::map_deserialize(turtl.as_ref(), keychain)
-                    .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Board>> {
+                    .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Space>> {
                         // set the keychain into the profile
                         let mut profile_guard = turtl1.profile.write().unwrap();
                         profile_guard.keychain.entries = keychain;
                         drop(profile_guard);
-
-                        // now decrypt the boards
-                        ftry!(turtl1.find_models_keys(&mut boards));
-                        protected::map_deserialize(turtl1.as_ref(), boards)
+                        // now decrypt the spaces
+                        ftry!(turtl1.find_models_keys(&mut spaces));
+                        protected::map_deserialize(turtl1.as_ref(), spaces)
                     })
-                    .and_then(move |boards: Vec<Board>| -> TFutureResult<Vec<Persona>> {
+                    .and_then(move |spaces: Vec<Space>| -> TFutureResult<Vec<Board>> {
                         // set the keychain into the profile
                         let mut profile_guard = turtl2.profile.write().unwrap();
+                        profile_guard.spaces = spaces;
+                        drop(profile_guard);
+                        // now decrypt the boards
+                        ftry!(turtl2.find_models_keys(&mut boards));
+                        protected::map_deserialize(turtl2.as_ref(), boards)
+                    })
+                    .and_then(move |boards: Vec<Board>| -> TFutureResult<()> {
+                        // set the keychain into the profile
+                        let mut profile_guard = turtl3.profile.write().unwrap();
                         profile_guard.boards = boards;
                         drop(profile_guard);
 
-                        // now decrypt the personas
-                        for persona in &mut personas { persona.set_key(Some(user_key.clone())); }
-                        protected::map_deserialize(turtl2.as_ref(), personas)
-                    })
-                    .and_then(move |mut personas: Vec<Persona>| -> TFutureResult<()> {
-                        // set the keychain into the profile
-                        let mut profile_guard = turtl3.profile.write().unwrap();
-                        if personas.len() > 0 {
-                            let mut into = Persona::new();
-                            mem::swap(&mut into, &mut personas[0]);
-                            profile_guard.persona = Some(into);
-                        } else {
-                            profile_guard.persona = None;
-                        }
-                        drop(profile_guard);
                         turtl3.events.trigger("profile:loaded", &jedi::obj());
                         FOk!(())
                     })
@@ -554,7 +562,7 @@ impl Turtl {
             return FErr!(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut notes: Vec<Note> = ftry!(jedi::from_val(jedi::to_val(&ftry!(db.all("notes")))));
+        let mut notes: Vec<Note> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("notes"))))));
         ftry!(self.find_models_keys(&mut notes));
         self.with_next_fut()
             .and_then(move |turtl| {
@@ -662,7 +670,6 @@ mod tests {
     use ::models::user::{self, User};
     use ::models::note::Note;
     use ::models::board::Board;
-    use ::models::persona::Persona;
     use ::util::stopper::Stopper;
 
     protected!{
@@ -692,7 +699,7 @@ mod tests {
         let note_key = Key::new(crypto::from_base64(&String::from("eVWebXDGbqzDCaYeiRVsZEHsdT5WXVDnL/DdmlbqN2c=")).unwrap());
         let board_key = Key::new(crypto::from_base64(&String::from("BkRzt6lu4YoTS9opB96c072y+kt+evtXv90+ZXHfsG8=")).unwrap());
         let enc_board = String::from(r#"{"body":"AAUCAAHeI0ysDNAenXpPAlOwQmmHzNWcohaCSmRXOPiRGVojaylzimiohTBSG2DyPnfsSXBl+LfxXhA=","keys":[],"user_id":"5244679b2b1375384f0000bc","id":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"}"#);
-        let enc_note = String::from(r#"{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"mod":1479425965,"keys":[{"b":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","k":"AAUCAAECDLI141jXNUwVadmvUuxXYtWZ+JL7450VjH1JURk0UigiIB2TQ2f5KiDGqZKUoHyxFXCaAeorkaXKxCaAqicISg=="}],"user_id":"5244679b2b1375384f0000bc","body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"}"#);
+        let enc_note = String::from(r#"{"board_id":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","mod":1479425965,"keys":[{"b":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","k":"AAUCAAECDLI141jXNUwVadmvUuxXYtWZ+JL7450VjH1JURk0UigiIB2TQ2f5KiDGqZKUoHyxFXCaAeorkaXKxCaAqicISg=="}],"user_id":"5244679b2b1375384f0000bc","body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"}"#);
         let mut board: Board = jedi::parse(&enc_board).unwrap();
         let mut note: Note = jedi::parse(&enc_note).unwrap();
 
@@ -764,9 +771,10 @@ mod tests {
         let stop = Arc::new(Stopper::new());
         stop.set(true);
 
-        let user_key = Key::new(crypto::from_base64(&String::from("EdFc225pnjtUVaH+YMApzOWL0OgFTsjn5YvPWbvpN1Q=")).unwrap());
-        let mut user: User = jedi::parse(&String::from(r#"{"keys":[],"settings":[{"key":"keys"}],"id":"5833e49e2b13751ab303f8b1","storage":104857600}"#)).unwrap();
-        user.do_login(user_key, String::from("AAUCAAEyYzY1ZjFkNjY5MzQ2YmE20RFp2guhlblECuXJF9/W/ylBaN15MOM5tjse8SlvL70my76088X8Fkkg08WOqkfY3+jyICX34UI9rWQfvWMxbTFbXZpJfDuWD+j+PExpCRp2PXZqmB14VhttKxGipxSe3gCl5ZHVjH4gWWw9CbD+1I0Agm0nul6MkzEdCQIByIB5yduoozthduWlpsJgz5nYOUo="));
+        let user_key = Key::new(crypto::from_base64(&String::from("sYIjvIDIEqcEbDOw7N+e61zqT1Z2Tgeu7++k8bqxJEc=")).unwrap());
+        let mut user: User = jedi::parse(&String::from(r#"{"id":"5897a27c2b137539ea00a77d","storage":104857600}"#)).unwrap();
+        let user_auth = String::from("AAUCAAFlNTk1NzM0OGY2ZTk2MWQ3l9HyiA+B8vtiI0V6X70LZDx60RfPbvciVPFyHROrXg7G32GKzT2/i83BXNMiLTKZInF/tO2BkdNn4yROW/rkP74dnkVk6v4WYzDTNkm1wWjgVnHGWVpCoUXVlx6NJjbuQgbZmL7L+RSvYOvXfkmDdsEpznPHKDTiHu0Q63erajyqRaIhCBweW81Ug3/yGquBxj4=");
+        user.do_login(user_key, user_auth);
 
         let mut turtl = with_test(false);
         turtl.user = RwLock::new(user);
@@ -777,13 +785,13 @@ mod tests {
         // load itself completely from the DB and deserialize successfully w/o
         // having access to any of the data we put in here.
         {
-            let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"body":"AAUCAAFqj/FnzMVEFk20i0f4d/NY6TTMZ9jrCRWhheu2LJ/oRZrnWkLBMDmHV6EkOiPWNYjJYw+7mLhqR/mXbZrdx/CMv/DhrNCBwnc1BvepuusmwS6NIfeO","type":"board","item_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab72a77af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0699c"},{"body":"AAUCAAGOoWbH1M2YgBdt6eaF8nlk7Dt52mpPp2ZF7uixMkVgk3h50kqKdBoIbkcQz3NqUQLO9XECPnwDLaxgZKhLk3IW+hzxYVEuzQxE93J/F6m6patHmftN","type":"note","item_id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","user_id":"5833e49e2b13751ab303f8b1","id":"01588ab7e3e8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069bd"},{"body":"AAUCAAEr0ky+zDcT0G+3lmZdGNsn6YXZZFDGreDzzESc8wOO+/tHmCK3RxV6aAEhtvCKSwsCbq/oylRIYZoGv1uwAnu7zQOAkzBH6ioStNYN/bmmsXlSllUK","type":"note","item_id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c","user_id":"5833e49e2b13751ab303f8b1","id":"01588abc24a8af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a2d"},{"body":"AAUCAAETC4kRU+NGZUE+0lXt2wXP+ENkOPOzZ5X39j6bRkeNbz0VY4+VwIkGjYLJh21+urVOmUWan7S9QE9z3U+jJV5qZZqCDHnwJjMg7ztDQmfqa/aLoS1k","type":"note","item_id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56","user_id":"5833e49e2b13751ab303f8b1","id":"01588abd7fe5af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a61"}]"#)).unwrap();
-            let personas: Vec<Persona> = jedi::parse(&String::from(r#"[{"user_id":"5833e49e2b13751ab303f8b1","email":"andrew+test@turtl.it","name":"Andrew Lyon","body":"AAUCAAGFeUICKVgIylzweY9G5cPDPrqueWkVcgcqrZXtpuWYtxZOoO8sa6pyKuzoSD487saGXSqxogx0Yza61rRMeM/gH9BUq5WCw+RnOxVOBuAzD0POEbJ2yWRHgGUGPBzD7WZvkWiMxfbncB5mEujv0103ZuGAoeA0d1cxKQfx8Ja1ZyZXGHv5","id":"01588ab51d51af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba068e5","pubkey":"so then, remember, *i* said... \"later dudes!!\""}]"#)).unwrap();
-            let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"body":"AAUCAAHEPNXZVpgP84GRN3xDVnlcMyo4DGiloJmJHLBkasXVFlQHsH3BUkmAA17rVkpZF9R/KBE7jwwBIW7O","keys":[],"user_id":"5833e49e2b13751ab303f8b1","id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"}]"#)).unwrap();
-            let notes: Vec<Note> = jedi::parse(&String::from(r#"[{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"mod":1479796124,"keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1"},{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"mod":1479796345,"keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAH4KSWqjSD6EYN0pUpjAufMhj/fQm1cfxaWlG9Q1+iedpR/efWGVTMFVwtUNLsM99Q1lmNz5+fmPqCAcdf2GRhyOw=="}],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAFyUX8bZlt7RaG8EZTIk0nVWUtqcOqI68DIX1gqhh6FEyArPwJRLCEgjQeERsVyegBf4kGQWTxcxE9FA59h/Dmb0yCtzYVlsKUB63I0FT3ZHbFSorNHisJI/ue+msiHarz5J2fQ9sYUAwHuPf7kVbIibVB6RkbZMHLcLCVHl8zoBP50YEoX+8j7S3MkIqqsfoU/txtprQXzkk2NNF5rm5C8KtAWSdaa/dz6ZObi/En/+2SknjJDMYh0JbCxM39wHoC48zP0gygy9PBuAql3Qp5FIVYXljWjwR9+7i17KsTreOa5gxMhRu3snMCefnhCbbnUnJWU0Vl4hbr+tvEfE+JJxxAvAq6t","id":"01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c"},{"boards":[],"mod":1479796427,"keys":[],"user_id":"5833e49e2b13751ab303f8b1","body":"AAUCAAFUt4EhaYvKe4zpbr6rnEeswZPtm98RVLdHn+Dml+RX8cTZpfJHuWUA7vkybCgI7RnLL+hvYODO9H25jtfgLBfx/IfSOO1AGC+q4vqZQptpxCkbkeLsKuZFp0JPMBKuz9xX5/MX/lFtk4OvVZhlo0f/XdPoVD+F36zw6gizO2oLYkFbQWiA5oOAQtuJtuRO41pyDh76ciCULgqTjChqO3c8hpaoklk=","id":"01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56"}]"#)).unwrap();
+            let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"type":"board","item_id":"015a10534f43b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901b2","body":"AAUCAAGPTF7oW45ES+n+0lVJcnrOxW5gbwYk5mLJ1lSs1FAD6VpNEV7d0q9yQdAB5hnlTk9yM8TYaVVmq2AjdXVeZkbYQA9trMQZdXwrqz+EZLa0sjhN/W9i","id":"015a10536984b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901ba","user_id":"5897a27c2b137539ea00a77d"},{"type":"board","item_id":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5","body":"AAUCAAFULkds49e7jMhfSmdnpr1iAEb4mSOLAq/7bktqiUw+fo+Vr4qrbOiVwBZI9MShfC1XWr1AWYfyfB5eSQppgdzCRgYWHxvzzbfYMTpwoJcfaGfH6xiA","id":"015a105381ccb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901d3","user_id":"5897a27c2b137539ea00a77d"},{"type":"space","item_id":"015a1054c65bb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e1","body":"AAUCAAEedoik2RcvQGLM4yYvHPDm7ErrjlQGrp3y6bf//XDsHKzwcrI+4CT3Wg9W75SXddF+4kk3h6GCjLo4coBHqXnsY978WWTqzImgMaXk3nS9+3o2Znhy","id":"015a1056404db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e3","user_id":"5897a27c2b137539ea00a77d"},{"type":"note","item_id":"015a105725ffb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901ef","body":"AAUCAAE69FJ9mWRvsiQOsIjTB6B1HoLWhBk2ETOjplNLf61zKr4FOkwVvMud5mqX83WusbtovNGGcqW2fknsiVkLZAwxApkiWR8s/rITZ4YhTLvihHhmwR7Z","id":"015a1059fee6b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901fb","user_id":"5897a27c2b137539ea00a77d"},{"type":"note","item_id":"015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211","body":"AAUCAAG0B4wGKxVcirY9kux58vxymBDJoC99VujFNcaTnu8BqZtaKFM+ACYqWHNUPpbqkH/TIt1wCkxGE05bUEhp7UVrm4nFRN8JbaKBG4pHLYy1+t2CTMQG","id":"015a105afe7eb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9021d","user_id":"5897a27c2b137539ea00a77d"},{"type":"note","item_id":"015a105b1dafb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90246","body":"AAUCAAEwdKz7v4jRwE2Qq3usi2aaCV9BmESD7vLOkTJDzU2hSVwosyFWxrLEfAYk8R8x9XR9dFmfGtNC0cL1zMZzklZY57yBgmCX9Ju4zmoRS5C5bW1Vz83k","id":"015a105b442ab6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90252","user_id":"5897a27c2b137539ea00a77d"}]"#)).unwrap();
+            let spaces: Vec<Space> = jedi::parse(&String::from(r#"[{"id":"015a1054c65bb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e1","body":"AAUCAAGCipmWS5ywu4O+OirUhZ/buwimSzQKMOJVfjE3DJrfcVJw2EOrMlipUlFYmjmshbYX117WlQ==","user_id":"5897a27c2b137539ea00a77d"}]"#)).unwrap();
+            let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"keys":[],"user_id":"5897a27c2b137539ea00a77d","body":"AAUCAAHJmBzjfB1qIpWY/T3wVPcYxrj6KABZrUAG5gHHPOdUaouz2hKPbkdU2C1MATuM2Q7T/A==","id":"015a10534f43b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901b2"},{"keys":[],"user_id":"5897a27c2b137539ea00a77d","body":"AAUCAAHz2Gvszvv9lPaww/GoJ8/t7fAmXGrxIPoUdTRHVTwl07cq23mg6F0xolee/4v3D0K5FSOaeZaKawrNc+YcV3s=","id":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5"}]"#)).unwrap();
+            let notes: Vec<Note> = jedi::parse(&String::from(r#"[{"mod":1486333616,"keys":[{"b":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5","k":"AAUCAAE6F6rFjwn3LzlqDtaGk3qOXewSrV71LcS5G2go5EMGcaY/k7V4tYkcYB8kmUmAcFezUBuhfG3EWCsRSgf3V7+NSQ=="}],"user_id":"5897a27c2b137539ea00a77d","body":"AAUCAAF+t+NvCEfMCA580A0M4e0HxHBo+UBPiU0tLluju4gDYRH0c5CqxHcOqC/+rSQpIpql8FkBji9UVQvvUA3FqcpRg0VEis4ptAsE/4cc0H+1nxnTb8GkPNjs/M7zXgo3vxm9kSY3ChXegomYBTkoom8O/namIiNiydzC0pSVXkWlMPtp9FMN8BEhD5TJvE9phBnxORpz/GqE3yg/wfTwNuND5fpb0Lic0SDLHfe1fVMq6eqNbhXXCkc5+ynkS9LjcVtaggOGYg==","id":"015a105725ffb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901ef","board_id":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5","space_id":"015a1054c65bb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e1"},{"mod":1486333781,"keys":[{"b":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5","k":"AAUCAAEWj1hWQKMmeb1vtn2yr15dLLjpJZL6fzqaz3Y9yCXQhWTWhMXPu0dP49Xl1dinaRvCr4KVadbRgw2c6B3h+KvklQ=="}],"user_id":"5897a27c2b137539ea00a77d","body":"AAUCAAG3T7Olqr0BffKxTZhv1nG60NX8e0GHb7qoV+FRKSTWs7GraIn5oeJVa2DMKyIUPKKfnh9ozJ8K4STC8whcgH59J15YPStodC+Qf8QG1MhWIScUu9PxLKJ6Yw5yyf71/TIXjKP1hj38kk8qkOufGJurSAOhQoUM0YkdZ2/1hAIvR5sEdaYldm9cWmVWbp0VfKlo6RvZgs1ZQc8V57Oi2geycnUTsdqve2OP3i6N6L1lvbcnkdjYPDz/VHjcRCE1sODkUcZtHz1uwnrMASNssbZ7XHWya3lFGS2t0k2GIofhfixfgLUA/cveNDvsWziaojWKMiDP03C3iEWuSXEid8+LgB1txvOXzO8zoPHTWs/+mdiylP138G8ttwhCAnqEkd0=","id":"015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211","board_id":"015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5","space_id":"015a1054c65bb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e1"},{"mod":1486333102,"keys":[{"b":"015a10534f43b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901b2","k":"AAUCAAGX6aQGVo+B8guA8rHUPc5+Z+NSW1QDZM/BI9TLx7W3jDnx0Lp7aX9YbT915bi7DFUSrZ4C5gu1Pa4IFpJRNEfF8w=="}],"user_id":"5897a27c2b137539ea00a77d","body":"AAUCAAHqU7lGQFSd2i5PDr3pSRmOxcgAOW3IFkQcn4gU8GINA1s97M0Whyy4/4MkVSWj8dFCfPdZySCVWrbNcZhpkjBTvmvgG/aI55keLRx5aY6jJ8iC0K2NP3bQ+Go0ZCWLGU99oWQfnTeA8GBTHrZ54y+jxX3Bk/VZ9pJmv4KslS1nVRQ65YvZ3umjyJNcBwMjIhQ=","id":"015a105b1dafb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90246","board_id":"015a10534f43b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901b2","space_id":"015a1054c65bb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901e1"}]"#)).unwrap();
 
             for entry in &keychain { db.save(entry).unwrap(); }
-            for persona in &personas { db.save(persona).unwrap(); }
+            for space in &spaces { db.save(space).unwrap(); }
             for board in &boards { db.save(board).unwrap(); }
             for note in &notes { db.save(note).unwrap(); }
         }
@@ -798,10 +806,10 @@ mod tests {
         let runme = turtl.load_profile()
             .and_then(move |_| {
                 let profile_guard = turtl2.profile.read().unwrap();
-                assert_eq!(profile_guard.keychain.entries.len(), 4);
-                assert_eq!(profile_guard.boards.len(), 1);
-                assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Things I hate"));
-                assert!(profile_guard.persona.is_some());
+                assert_eq!(profile_guard.keychain.entries.len(), 6);
+                assert_eq!(profile_guard.spaces.len(), 1);
+                assert_eq!(profile_guard.boards.len(), 2);
+                assert_eq!(profile_guard.boards[1].title.as_ref().unwrap(), &String::from("things i dont like"));
                 turtl2.index_notes()
             })
             .and_then(move |_| {
@@ -815,28 +823,20 @@ mod tests {
                 // this stuff is mostly covered in the search tests, but let's
                 // just make sure here.
 
-                let qry = parserrr(r#"{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"]}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c"), String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
+                let qry = parserrr(r#"{"boards":["015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5"]}"#);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211"), String::from("015a105725ffb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901ef")]);
 
                 let qry = parserrr(r#"{"text":"story deployment"}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1")]);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211")]);
 
                 let qry = parserrr(r#"{"text":"story baby"}"#);
                 assert_eq!(search.find(&qry).unwrap().len(), 0);
 
-                let qry = parserrr(r#"{"text":"confederate"}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588abc6345af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a56")]);
-
-                let qry = parserrr(r#"{"tags":["morons"]}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("01588ab8f907af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06a0c")]);
-
                 assert_eq!(
                     search.tags_by_frequency(&Vec::new(), 9999).unwrap(),
                     vec![
-                        (String::from("annoying"), 1),
-                        (String::from("death penalty"), 1),
                         (String::from("morons"), 1),
-                        (String::from("pro-life"), 1),
+                        (String::from("programmers"), 1),
                         (String::from("story"), 1),
                     ]
                 );

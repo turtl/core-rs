@@ -20,7 +20,7 @@
 //! models so they don't go around spraying their private fields into debug
 //! logs.
 
-use ::std::collections::{HashMap, BTreeMap};
+use ::std::collections::{HashMap};
 use ::std::fmt;
 use ::std::sync::{Arc, RwLock};
 
@@ -29,7 +29,7 @@ use ::futures::Future;
 use ::encoding::{Encoding, DecoderTrap};
 use ::encoding::all::ISO_8859_1;
 
-use ::jedi::{self, Value};
+use ::jedi::{self, Value, Map as JsonMap};
 
 use ::error::{TResult, TError, TFutureResult};
 use ::turtl::Turtl;
@@ -128,9 +128,8 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
 
 /// Allows a model to expose a key search
 pub trait Keyfinder {
-    /// Grabs a model's key search (if any...most models will just store their
-    /// key in the keychain or the user object). This is mainly used for things
-    /// like Note, which will often search in boards for a key.
+    /// Grabs a model's key search. This is mainly used for things like Note,
+    /// which will often search in boards for a key.
     ///
     /// Note that we actually use the Keychain object for searching here, which
     /// is distinct from the original Turtl method of building a separate search
@@ -200,9 +199,9 @@ pub trait Protected: Model + fmt::Debug {
     fn set_body(&mut self, body: String);
 
     /// Get a set of fields and return them as a JSON Value
-    fn get_fields(&self, fields: &Vec<&str>) -> BTreeMap<String, Value> {
-        let mut map: BTreeMap<String, jedi::Value> = BTreeMap::new();
-        let data = jedi::to_val(self);
+    fn get_fields(&self, fields: &Vec<&str>) -> TResult<JsonMap<String, Value>> {
+        let mut map: JsonMap<String, jedi::Value> = JsonMap::new();
+        let data = jedi::to_val(self)?;
         for field in fields {
             let val = jedi::walk(&[field], &data);
             match val {
@@ -210,17 +209,17 @@ pub trait Protected: Model + fmt::Debug {
                 Err(..) => {}
             }
         }
-        map
+        Ok(map)
     }
 
     /// Get a set of fields and return them as a JSON Value
-    fn get_serializable_data(&self, private: bool) -> Value {
+    fn get_serializable_data(&self, private: bool) -> TResult<Value> {
         let fields = if private {
             self.private_fields()
         } else {
             self.public_fields()
         };
-        let mut map = self.get_fields(&fields);
+        let mut map = self.get_fields(&fields)?;
         let submodels = self.submodel_fields();
         // shove in our submodels' public/private data
         for field in submodels {
@@ -230,30 +229,30 @@ pub trait Protected: Model + fmt::Debug {
                 Err(..) => {},
             }
         }
-        Value::Object(map)
+        Ok(Value::Object(map))
     }
 
     /// Grab all public fields for this model as a json Value
     ///
     /// NOTE: Don't use this directly. Use `data_for_storage()` instead!
-    fn _public_data(&self) -> Value {
+    fn _public_data(&self) -> TResult<Value> {
         self.get_serializable_data(false)
     }
 
     /// Grab all private fields for this model as a json Value
     ///
     /// NOTE: Don't use this directly. Use `data()` instead!
-    fn _private_data(&self) -> Value {
+    fn _private_data(&self) -> TResult<Value> {
         self.get_serializable_data(true)
     }
 
     /// Grab a JSON Value representation of ALL this model's data
-    fn data(&self) -> Value {
-        jedi::to_val(self)
+    fn data(&self) -> TResult<Value> {
+        Ok(jedi::to_val(self)?)
     }
 
     /// Grab all public fields for this model as a JSON Value.
-    fn data_for_storage(&self) -> Value {
+    fn data_for_storage(&self) -> TResult<Value> {
         self._public_data()
     }
 
@@ -266,7 +265,7 @@ pub trait Protected: Model + fmt::Debug {
     /// __NEVER__ use this function to save data to disk or transmit over a
     /// network connection.
     fn stringify_unsafe(&self) -> TResult<String> {
-        jedi::stringify(&self.data()).map_err(|e| toterr!(e))
+        jedi::stringify(&self.data()?).map_err(|e| toterr!(e))
     }
 
     /// Return a JSON dump of all public fields. Really, this is a wrapper
@@ -275,7 +274,7 @@ pub trait Protected: Model + fmt::Debug {
     /// Use this function for sending a model to an *untrusted* source, such as
     /// saving to disk or over a network connection.
     fn stringify_for_storage(&self) -> TResult<String> {
-        jedi::stringify(&self.data_for_storage()).map_err(|e| toterr!(e))
+        jedi::stringify(&self.data_for_storage()?).map_err(|e| toterr!(e))
     }
 
     /// "Serializes" a model...returns all public data with an *encrypted* set
@@ -295,7 +294,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => &fakeid,
             };
-            let data = self._private_data();
+            let data = self._private_data()?;
             let json = jedi::stringify(&data)?;
 
             let key = match self.key() {
@@ -306,7 +305,7 @@ pub trait Protected: Model + fmt::Debug {
         }
         let body_base64 = crypto::to_base64(&body)?;
         self.set_body(body_base64);
-        Ok(self.data_for_storage())
+        Ok(self.data_for_storage()?)
     }
 
     /// "DeSerializes" a model...takes the `body` field, decrypts it, and sets
@@ -351,7 +350,7 @@ pub trait Protected: Model + fmt::Debug {
             },
         };
         self.set_multi_recursive(parsed)?;
-        Ok(self.data())
+        Ok(self.data()?)
     }
 
     /// Given a set of keydata, replace the self.keys object
@@ -505,7 +504,7 @@ macro_rules! protected {
                     if field == fix_type!(stringify!($submodel_field)) {
                         match self.$submodel_field.as_ref() {
                             Some(ref x) => {
-                                return Ok(x.get_serializable_data(private));
+                                return Ok(x.get_serializable_data(private)?);
                             },
                             None => return Ok(::jedi::Value::Null),
                         }
@@ -577,7 +576,7 @@ macro_rules! protected {
 
             fn clone(&self) -> ::error::TResult<Self> {
                 let mut model = $name::new();
-                model.set_multi_recursive(self.data())?;
+                model.set_multi_recursive(self.data()?)?;
                 let key = self.key().map(|x| x.clone());
                 model.set_key(key);
                 Ok(model)
@@ -664,7 +663,7 @@ mod tests {
         dog.id = Some(String::from("123"));
         dog.size = Some(42i64);
         dog.name = Some(String::from("barky"));
-        assert_eq!(jedi::stringify(&dog.data_for_storage()).unwrap(), r#"{"body":null,"id":"123","keys":null,"size":42}"#);
+        assert_eq!(jedi::stringify(&dog.data_for_storage().unwrap()).unwrap(), r#"{"body":null,"id":"123","keys":null,"size":42}"#);
         assert_eq!(dog.stringify_for_storage().unwrap(), r#"{"body":null,"id":"123","keys":null,"size":42}"#);
     }
 
@@ -695,10 +694,10 @@ mod tests {
 
     #[test]
     fn set_multi_recursive_test() {
-        let val: Value = jedi::parse(&String::from(r#"{"boards":["01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994"],"body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","color":null,"embed":null,"file":null,"has_file":null,"id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"mod":1479796124,"password":null,"tags":null,"text":null,"title":null,"type":null,"url":null,"user_id":"5833e49e2b13751ab303f8b1","username":null}"#)).unwrap();
+        let val: Value = jedi::parse(&String::from(r#"{"board_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","color":null,"embed":null,"file":null,"has_file":null,"id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"mod":1479796124,"password":null,"tags":null,"text":null,"title":null,"type":null,"url":null,"user_id":"5833e49e2b13751ab303f8b1","username":null}"#)).unwrap();
         let mut note = Note::new();
         note.set_multi_recursive(val).unwrap();
-        assert_eq!(note.boards, Some(vec![String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")]));
+        assert_eq!(note.board_id, Some(String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")));
     }
 
     #[test]
@@ -720,7 +719,7 @@ mod tests {
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
         let mut dog2 = Dog::new();
-        dog2.set_multi(dog.data_for_storage()).unwrap();
+        dog2.set_multi(dog.data_for_storage().unwrap()).unwrap();
         assert_eq!(dog.stringify_for_storage().unwrap(), dog2.stringify_for_storage().unwrap());
         dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);

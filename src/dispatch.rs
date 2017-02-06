@@ -52,14 +52,39 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     .map(move |_| {
                         debug!("dispatch({}) -- user:login success", mid);
                         match turtl1.msg_success(&mid, jedi::obj()) {
-                            Err(e) => error!("dispatch -- problem sending login message: {}", e),
+                            Err(e) => error!("dispatch -- problem sending user:login message: {}", e),
                             _ => ()
                         }
                     })
                     .map_err(move |e| {
                         turtl2.api.clear_auth();
                         match turtl2.msg_error(&mid2, &e) {
-                            Err(e) => error!("dispatch -- problem sending login message: {}", e),
+                            Err(e) => error!("dispatch -- problem sending user:login message: {}", e),
+                            _ => ()
+                        }
+                    });
+                util::future::run(runme);
+                Ok(())
+            },
+            "user:join" => {
+                let username = jedi::get(&["2"], &data)?;
+                let password = jedi::get(&["3"], &data)?;
+                let turtl1 = turtl.clone();
+                let turtl2 = turtl.clone();
+                let mid = mid.clone();
+                let mid2 = mid.clone();
+                let runme = turtl.join(username, password)
+                    .map(move |_| {
+                        debug!("dispath({}) -- user:join sucess", mid);
+                        match turtl1.msg_success(&mid, jedi::obj()) {
+                            Err(e) => error!("dispatch -- problem sending user:join message: {}", e),
+                            _ => ()
+                        }
+                    })
+                    .map_err(move |e| {
+                        turtl2.api.clear_auth();
+                        match turtl2.msg_error(&mid2, &e) {
+                            Err(e) => error!("dispatch -- problem sending user:join message: {}", e),
                             _ => ()
                         }
                     });
@@ -92,9 +117,6 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     });
                 util::future::run(runme);
                 Ok(())
-            },
-            "user:join" => {
-                turtl.msg_success(&mid, jedi::obj())
             },
             "app:wipe-local-data" => {
                 match turtl.wipe_local_data() {
@@ -157,7 +179,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 }
                 util::sleep(10);
                 turtl.events.trigger("sync:shutdown", &Value::Bool(true));
-                turtl.events.trigger("app:shutdown", &jedi::to_val(&()));
+                turtl.events.trigger("app:shutdown", &jedi::to_val(&())?);
                 Ok(())
             },
             "profile:get-notes" => {
@@ -168,7 +190,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let turtl2 = turtl.clone();
                 let runme = turtl.load_notes(&note_ids)
                     .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
-                        FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
+                        FOk!(ftry!(turtl1.msg_success(&mid1, ftry!(jedi::to_val(&notes)))))
                     })
                     .or_else(move |e| -> TFutureResult<()> {
                         match turtl2.msg_error(&mid2, &e) {
@@ -194,7 +216,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 let turtl2 = turtl.clone();
                 let runme = turtl.load_notes(&note_ids)
                     .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
-                        FOk!(ftry!(turtl1.msg_success(&mid1, jedi::to_val(&notes))))
+                        FOk!(ftry!(turtl1.msg_success(&mid1, ftry!(jedi::to_val(&notes)))))
                     })
                     .or_else(move |e| -> TFutureResult<()> {
                         match turtl2.msg_error(&mid2, &e) {

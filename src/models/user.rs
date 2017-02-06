@@ -158,6 +158,10 @@ impl User {
         try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 1)
     }
 
+    pub fn join(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
+        FOk!(())
+    }
+
     /// Static method to log a user out
     pub fn logout(turtl: TurtlWrap) -> TResult<()> {
         let mut user_guard = turtl.user.write().unwrap();

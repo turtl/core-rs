@@ -60,7 +60,7 @@ impl PartialEq for Key {
 }
 
 impl ser::Serialize for Key {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer:S) -> Result<S::Ok, S::Error>
         where S: ser::Serializer
     {
         let base64: String = match ::crypto::to_base64(self.data()) {
@@ -72,14 +72,14 @@ impl ser::Serialize for Key {
 }
 
 impl de::Deserialize for Key {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: de::Deserializer
     {
         de::Deserialize::deserialize(deserializer)
             .and_then(|x| {
                 match ::crypto::from_base64(&x) {
                     Ok(x) => Ok(Key::new(x)),
-                    Err(_) => return Err(::serde::de::Error::invalid_value("Key.deserialize() -- invalid base64")),
+                    Err(_) => return Err(de::Error::invalid_value(de::Unexpected::Str(&x.as_str()), &"Key.deserialize() -- invalid base64")),
                 }
             })
     }

@@ -17,7 +17,7 @@ use ::models;
 struct Handlers {
     user: models::user::User,
     keychain: models::keychain::KeychainEntry,
-    persona: models::persona::Persona,
+    space: models::space::Space,
     board: models::board::Board,
     note: models::note::Note,
     file: models::file::FileData,
@@ -53,7 +53,7 @@ impl SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::KeychainEntry::new(),
-            persona: models::persona::Persona::new(),
+            space: models::space::Space::new(),
             board: models::board::Board::new(),
             note: models::note::Note::new(),
             file: models::file::FileData::new(),
@@ -161,7 +161,7 @@ impl SyncIncoming {
         match sync_item.type_.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, sync_item),
             "keychain" => self.handlers.keychain.incoming(&self.db, sync_item),
-            "persona" => self.handlers.persona.incoming(&self.db, sync_item),
+            "space" => self.handlers.space.incoming(&self.db, sync_item),
             "board" => self.handlers.board.incoming(&self.db, sync_item),
             "note" => self.handlers.note.incoming(&self.db, sync_item),
             "file" => self.handlers.file.incoming(&self.db, sync_item),
