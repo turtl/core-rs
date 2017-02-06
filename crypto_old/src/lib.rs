@@ -1,3 +1,8 @@
+//! NOTE: as of turtl v0.7, this module is deprecated and should only be used to
+//! import old profiles to the new system (ie, decrypt-only)
+//!
+//! ----------------------------------------------------------------------------
+//!
 //! A higher-level turtl-core-specific cryptographic module.
 //!
 //! We make extensive use of the wrapped crypto primitives in the crypto::low
@@ -8,10 +13,21 @@
 //! from/to [Turtl's standard format](https://turtl.it/docs/security/encryption-specifics/).
 
 #[macro_use]
+extern crate crypto as rust_crypto;
+extern crate gcrypt;
+extern crate jedi;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate quick_error;
+extern crate rustc_serialize as serialize;
+extern crate serde;
+
+#[macro_use]
 mod low;
 mod key;
 
-pub use ::crypto::low::{
+pub use ::low::{
     CResult,
     CryptoError,
     PadMode,
@@ -23,7 +39,7 @@ pub use ::crypto::low::{
     from_base64,
     secure_compare
 };
-pub use ::crypto::key::Key;
+pub use ::key::Key;
 
 /// Stores our current crypto version. This gets encoded into a header in the
 /// ciphertext and lets the crypto module know how to handle the message.

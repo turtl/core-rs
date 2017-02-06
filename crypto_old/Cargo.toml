@@ -1,0 +1,20 @@
+[package]
+name = "crypto_old"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+build = "build.rs"
+
+[lib]
+name = "crypto_old"
+crate-type = ["rlib"]
+doctest = false				# these annoy me
+
+[dependencies]
+gcrypt = "0.3.0"
+jedi = { path = "../jedi" }
+lazy_static = "0.2.1"
+quick-error = "1.1.0"
+rust-crypto = "0.2.36"
+rustc-serialize = "0.3.19"
+serde = "0.9.6"
+

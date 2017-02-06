@@ -2,7 +2,7 @@
 
 use ::serde::{ser, de};
 
-use ::crypto::{self, CResult};
+use ::CResult;
 
 /// A type we'll use to represent crypto keys
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl Key {
 
     /// Create a new random key
     pub fn random() -> CResult<Key> {
-        Ok(Key::new(crypto::low::rand_bytes(32)?))
+        Ok(Key::new(::low::rand_bytes(32)?))
     }
 
     /// Return a ref to this key's data
@@ -63,7 +63,7 @@ impl ser::Serialize for Key {
     fn serialize<S>(&self, serializer:S) -> Result<S::Ok, S::Error>
         where S: ser::Serializer
     {
-        let base64: String = match ::crypto::to_base64(self.data()) {
+        let base64: String = match ::to_base64(self.data()) {
             Ok(x) => x,
             Err(e) => return Err(ser::Error::custom(format!("Key.serialize() -- error converting to base64: {}", e))),
         };
@@ -77,7 +77,7 @@ impl de::Deserialize for Key {
     {
         de::Deserialize::deserialize(deserializer)
             .and_then(|x| {
-                match ::crypto::from_base64(&x) {
+                match ::from_base64(&x) {
                     Ok(x) => Ok(Key::new(x)),
                     Err(_) => return Err(de::Error::invalid_value(de::Unexpected::Str(&x.as_str()), &"Key.deserialize() -- invalid base64")),
                 }

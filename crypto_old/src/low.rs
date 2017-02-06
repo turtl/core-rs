@@ -9,7 +9,7 @@
 //!   the rest of turtl-core)
 //!
 //! For a higher-level set of turtl-core crypto, check out one module up,
-//! ::crypto.
+//! ::crypto_old.
 //!
 //! Also note that a goal of this module is to only wrap *one* underlying crypto
 //! lib, but thanks to various issues with PBKDF2 (which MUST be supported for

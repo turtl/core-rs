@@ -1,11 +1,10 @@
 [workspace]
-members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi"]
+members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi", "crypto_old"]
 
 [package]
 name = "turtl_core"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
-build = "build.rs"
 
 [lib]
 name = "turtl_core"
@@ -17,12 +16,12 @@ carrier = { path = "carrier" }
 config = { path = "config" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.2.10"
+crypto_old = { path = "crypto_old" }
 dumpy = { path = "dumpy" }
 encoding = "0.2.33"
 fern = "0.3.5"
 futures = "0.1.7"
 futures-cpupool = "0.1.2"
-gcrypt = "0.3.0"
 hyper = "0.9.10"
 jedi = { path = "jedi" }
 lazy_static = "0.2.1"
@@ -31,8 +30,6 @@ num_cpus = "1.1.0"
 quick-error = "1.1.0"
 regex = "0.1.77"
 rusqlite = "0.7.3"
-rust-crypto = "0.2.36"
-rustc-serialize = "0.3.19"
 serde = "0.9.6"
 serde_derive = "0.9.6"
 serde_json = "0.9.5"
@@ -44,6 +41,6 @@ time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get ti
 #default = ["openssl/pkcs5_pbkdf2_hmac"]
 
 #[target.'cfg(windows)']
-#rustc-link-search = ["c:/Windows/System32"]
+#rustc-link-search = ["c:/lib","c:/Windows/System32"]
 #rustc-link = ["mswsock"]
 
