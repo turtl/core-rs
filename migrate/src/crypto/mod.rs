@@ -13,21 +13,10 @@
 //! from/to [Turtl's standard format](https://turtl.it/docs/security/encryption-specifics/).
 
 #[macro_use]
-extern crate crypto as rust_crypto;
-extern crate gcrypt;
-extern crate jedi;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate quick_error;
-extern crate rustc_serialize as serialize;
-extern crate serde;
-
-#[macro_use]
 mod low;
 mod key;
 
-pub use ::low::{
+pub use ::crypto::low::{
     CResult,
     CryptoError,
     PadMode,
@@ -39,7 +28,7 @@ pub use ::low::{
     from_base64,
     secure_compare
 };
-pub use ::key::Key;
+pub use ::crypto::key::Key;
 
 /// Stores our current crypto version. This gets encoded into a header in the
 /// ciphertext and lets the crypto module know how to handle the message.

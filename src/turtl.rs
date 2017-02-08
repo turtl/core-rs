@@ -180,6 +180,7 @@ impl Turtl {
             .boxed()
     }
 
+    /*
     pub fn join(&self, username: String, password: String) -> TFutureResult<()> {
         self.with_next_fut()
             .and_then(move |turtl| -> TFutureResult<()> {
@@ -196,6 +197,7 @@ impl Turtl {
             })
             .boxed()
     }
+    */
 
     /// Log a user out
     pub fn logout(&self) -> TFutureResult<()> {

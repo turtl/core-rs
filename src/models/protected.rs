@@ -59,14 +59,14 @@ pub fn detect_old_format(data: &String) -> TResult<Vec<u8>> {
 // -----------------------------------------------------------------------------
 /// Decrypt an encrypted key, generally as part of a Protected.keys collection
 pub fn decrypt_key(decrypting_key: &Key, encrypted_key: &String) -> TResult<Key> {
-    let raw = detect_old_format(encrypted_key)?;
-    let decrypted = crypto::decrypt(decrypting_key, &raw)?;
+    let raw = crypto::from_base64(encrypted_key)?;
+    let decrypted = crypto::decrypt(decrypting_key, raw)?;
     Ok(Key::new(decrypted))
 }
 
 /// Encrypt a decrypted key, mainly for storage self-decrypting keys with models
 pub fn encrypt_key(encrypting_key: &Key, key_to_encrypt: Key) -> TResult<String> {
-    let encrypted = crypto::encrypt(encrypting_key, key_to_encrypt.into_data(), crypto::CryptoOp::new("aes", "gcm")?)?;
+    let encrypted = crypto::encrypt(encrypting_key, key_to_encrypt.into_data(), crypto::CryptoOp::new("chacha20poly1305")?)?;
     let converted = crypto::to_base64(&encrypted)?;
     Ok(converted)
 }
@@ -301,7 +301,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::serialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            body = crypto::encrypt(&key, Vec::from(json.as_bytes()), CryptoOp::new("aes", "gcm")?)?;
+            body = crypto::encrypt(&key, Vec::from(json.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
         }
         let body_base64 = crypto::to_base64(&body)?;
         self.set_body(body_base64);
@@ -331,7 +331,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
-            crypto::decrypt(key, &body)?
+            crypto::decrypt(key, body)?
         };
         let json_str: String = match String::from_utf8(json_bytes) {
             Ok(x) => x,

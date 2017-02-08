@@ -1,5 +1,5 @@
 [workspace]
-members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi", "crypto_old"]
+members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi", "migrate"]
 
 [package]
 name = "turtl_core"
@@ -16,7 +16,6 @@ carrier = { path = "carrier" }
 config = { path = "config" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.2.10"
-crypto_old = { path = "crypto_old" }
 dumpy = { path = "dumpy" }
 encoding = "0.2.33"
 fern = "0.3.5"
@@ -26,14 +25,18 @@ hyper = "0.9.10"
 jedi = { path = "jedi" }
 lazy_static = "0.2.1"
 log = "0.3.6"
+migrate = { path = "migrate" }
 num_cpus = "1.1.0"
 quick-error = "1.1.0"
 regex = "0.1.77"
 rusqlite = "0.7.3"
+rustc-serialize = "0.3.19"
 serde = "0.9.6"
 serde_derive = "0.9.6"
 serde_json = "0.9.5"
 serde_yaml = "0.6.0"
+#sodiumoxide = { git = "https://github.com/orthecreedence/sodiumoxide", branch = "aeads" }
+sodiumoxide = { path = "sodiumoxide-aead" }
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
 [features]

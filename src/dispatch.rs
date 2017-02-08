@@ -66,6 +66,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 util::future::run(runme);
                 Ok(())
             },
+            /*
             "user:join" => {
                 let username = jedi::get(&["2"], &data)?;
                 let password = jedi::get(&["3"], &data)?;
@@ -91,6 +92,7 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 util::future::run(runme);
                 Ok(())
             },
+            */
             "user:logout" => {
                 let turtl1 = turtl.clone();
                 let turtl2 = turtl.clone();

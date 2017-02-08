@@ -81,8 +81,8 @@ impl Api {
     }
 
     /// Set the API's authentication
-    pub fn set_auth(&self, auth: String) -> TResult<()> {
-        let auth_str = String::from("user:") + &auth;
+    pub fn set_auth(&self, username: String, auth: String) -> TResult<()> {
+        let auth_str = format!("{}:{}", username, auth);
         let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
         let ref mut config_guard = self.config.write().unwrap();
         config_guard.auth = Some(String::from("Basic ") + &base_auth);

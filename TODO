@@ -1,24 +1,28 @@
 v0.7:
-- add concept of spaces
-- remove personas
+- use libsodium for everything
+  - https://github.com/orthecreedence/sodiumoxide
 - does subkey storage system make sense?
   - the "s"/"b" etc shit...can we restructure?
 - get rid of sync.immediate
-- no more boards owning boards.
-- boards: pull keys from parent space
-- notes: pull keys from parent space
-- note must be in exactly one board
 - send username/salt when joining
 - only store space keys in keychain. everything else should be subkeys
-- use libsodium for everything
-  - https://github.com/orthecreedence/sodiumoxide
 - MsgPack for core <--> client comm
   - https://github.com/3Hren/msgpack-rust
   - https://github.com/kawanet/msgpack-lite
+- migration crate
+  - move old crypto, old user keygen/authgen to migration crate
+  - check_account() -- checks old login on old server, signals "valid" or not
+  - migrate_account() -- takes older server, old login, new server, new login
+    - download data
+	- decrypt keychain/boards
+	- create a default space "Personal" or some shit
+	- move all boards into the new space
+	- move all notes into the new space
 
 user:
 - join
 - password change
+  - regen salt
 - email change
 
 sync:

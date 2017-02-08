@@ -2,7 +2,6 @@ extern crate carrier;
 extern crate clouseau;
 extern crate config;
 extern crate crossbeam;
-extern crate crypto_old as crypto;
 extern crate dumpy;
 extern crate encoding;
 extern crate fern;
@@ -15,22 +14,26 @@ extern crate jedi;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate migrate;
 extern crate num_cpus;
 #[macro_use]
 extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
+extern crate rustc_serialize as serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_yaml;
+extern crate sodiumoxide;
 extern crate time;
 
 #[macro_use]
 pub mod error;
 #[macro_use]
 mod util;
+mod crypto;
 mod messaging;
 mod api;
 #[macro_use] mod sync;
