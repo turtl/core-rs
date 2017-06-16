@@ -157,7 +157,7 @@ macro_rules! FErr {
 }
 
 /// A helper to make trying stuff in futures easier
-#[mecro_export]
+#[macro_export]
 macro_rules! ftry {
     ($ex:expr) => {
         match $ex {

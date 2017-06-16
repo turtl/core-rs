@@ -5,5 +5,5 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
 quick-error = "1.1.0"
-rusqlite = "0.7.3"
+rusqlite = "0.7.4"
 

@@ -25,11 +25,11 @@ hyper = "0.9.10"
 jedi = { path = "jedi" }
 lazy_static = "0.2.1"
 log = "0.3.6"
-migrate = { path = "migrate" }
+#migrate = { path = "migrate" }
 num_cpus = "1.1.0"
 quick-error = "1.1.0"
 regex = "0.1.77"
-rusqlite = "0.7.3"
+rusqlite = "0.7.4"
 rustc-serialize = "0.3.19"
 serde = "0.9.6"
 serde_derive = "0.9.6"

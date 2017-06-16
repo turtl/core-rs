@@ -738,21 +738,21 @@ mod tests {
 
     #[test]
     fn decrypts_utf8() {
-        let mut note: Note = jedi::parse(&String::from(r#"{"mod":1483131901,"body":"AAUCAAEObzrvy7WvU5VkmuIrWPWN3A0iz6v62nNA7LCiLI7TjG/UwRfheNcLtHvrhP2JGvBZfkz52grYDL9NoebzuLIs9AYikI2GWMer0EJ4YoSGcHIrCPk=","keys":[]}"#)).unwrap();
-        let key = Key::new(crypto::from_base64(&String::from("0A+odOOFcqMpqCLQoadIOzpSbQFkgLOwp3dOrK9OTbI=")).unwrap());
+        let mut note: Note = jedi::parse(&String::from(r#"{"file":{},"keys":[],"mod":1497591878,"body":"AAYBAAyZMe0/PtetSCRpgCeWmVcktlI7UOvBTDK1Qfp9TQhEd50kt9178KJKm+ziqTZG8yGI96Jug1CwZdBp9xYt"}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("1cHWM/ueCmo+uDCy8B6aUtmFKuZ84viEp035eMS+d4E=")).unwrap());
         note.set_key(Some(key));
         note.deserialize().unwrap();
-        assert_eq!(note.text.unwrap(), "omg \u{b7} lol");
+        assert_eq!(note.title.unwrap(), "you are \u{2620}");
     }
 
     #[test]
     fn decrypts_clones() {
-        let mut note: Note = jedi::parse(&String::from(r#"{"mod":1483131901,"body":"AAUCAAEObzrvy7WvU5VkmuIrWPWN3A0iz6v62nNA7LCiLI7TjG/UwRfheNcLtHvrhP2JGvBZfkz52grYDL9NoebzuLIs9AYikI2GWMer0EJ4YoSGcHIrCPk=","keys":[]}"#)).unwrap();
-        let key = Key::new(crypto::from_base64(&String::from("0A+odOOFcqMpqCLQoadIOzpSbQFkgLOwp3dOrK9OTbI=")).unwrap());
+        let mut note: Note = jedi::parse(&String::from(r#"{"file":{},"keys":[],"mod":1497591729,"body":"AAYBAAygUSffKsAjvFREorN5J4S7aa37LYThwRJGkI/LjOPyJpwJ+rIUIXmMQKWS7XsJ4MR6UM+GQsA/9LMoWJb47VF4QP844QY="}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("By7HSFoGiEaNA41hgC83GWH1x6SeP9wtZWOEZYwjnKQ=")).unwrap());
         note.set_key(Some(key));
         let mut note_clone = note.clone().unwrap();
         note_clone.deserialize().unwrap();
-        assert_eq!(note_clone.title.unwrap(), "utf8 stuff");
+        assert_eq!(note_clone.title.unwrap(), "Sexrobot, sexrobot.");
     }
 
     #[test]

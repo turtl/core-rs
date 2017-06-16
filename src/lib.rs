@@ -14,7 +14,7 @@ extern crate jedi;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
-extern crate migrate;
+//extern crate migrate;
 extern crate num_cpus;
 #[macro_use]
 extern crate quick_error;
