@@ -33,7 +33,7 @@ fn generate_key(username: &String, password: &String, version: u16) -> TResult<K
     let key: Key = match version {
         0 => {
             let hashme = format!("v{}/{}", version, username);
-            let salt = crypto::sha256(hashme.as_bytes())?;
+            let salt = crypto::sha512(hashme.as_bytes())?;
             crypto::gen_key(password.as_bytes(), &salt[0..crypto::KEYGEN_SALT_LEN], crypto::KEYGEN_OPS_DEFAULT, crypto::KEYGEN_MEM_DEFAULT)?
         },
         _ => return Err(TError::NotImplemented),
@@ -49,9 +49,9 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
             let key = generate_key(username, password, version)?;
             let nonce_len = crypto::noncelen();
             let nonce = (crypto::sha512(username.as_bytes())?)[0..nonce_len].to_vec();
-            let pw_hash = crypto::to_hex(&crypto::sha256(&password.as_bytes())?)?;
+            let pw_hash = crypto::to_hex(&crypto::sha512(&password.as_bytes())?)?;
             let user_record = String::from(&pw_hash[..]);
-            let op = crypto::CryptoOp::new_with_iv("chacha20poly1305", nonce)?;
+            let op = crypto::CryptoOp::new_with_nonce("chacha20poly1305", nonce)?;
             let auth_bin = crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op)?;
             let auth = crypto::to_hex(&auth_bin)?;
             (key, auth)
@@ -165,3 +165,17 @@ impl User {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    //! Tests for our high-level Crypto module interface.
+
+    use super::*;
+
+    #[test]
+    pub fn authgen() {
+        let username = String::from("andrew@lyonbros.com");
+        let password = String::from("slippy");
+        let (_key, auth) = generate_auth(&username, &password, 0).unwrap();
+        assert_eq!(auth, "000601000c9af06607bbb78b0cab4e01f29a8d06da9a65e5698768b88ac4f4c04002c96fcfcb18a1644d5ba2546901452d0ebd6c162fe494997b52660d9d190ed525076523a1a576ea7596fdaec2e0f0606f3290bd6e5815f76889a4eada71fc20dad21703453928c74db36880cf6035922e3f7093ed1eef01a630750ebd8d64baaf34e325536011de40f3a72a4d95155ca32e851257d8bc7736d2d41c92213e93");
+    }
+}
