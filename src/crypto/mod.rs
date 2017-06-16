@@ -16,6 +16,7 @@ pub use ::crypto::low::{
     from_hex,
     to_base64,
     from_base64,
+    HMAC_KEYLEN,
     KEYGEN_SALT_LEN,
     KEYGEN_OPS_DEFAULT,
     KEYGEN_MEM_DEFAULT,
@@ -53,8 +54,7 @@ impl CryptoOp {
     }
 
     /// Create a new crypto op with a algorith/nonce
-    #[allow(dead_code)]
-    pub fn new_with_iv(algorithm: &'static str, nonce: Vec<u8>) -> CResult<CryptoOp> {
+    pub fn new_with_nonce(algorithm: &'static str, nonce: Vec<u8>) -> CResult<CryptoOp> {
         let mut op = CryptoOp::new(algorithm)?;
         op.nonce = Some(nonce);
         Ok(op)
@@ -248,11 +248,84 @@ pub fn gen_key(password: &[u8], salt: &[u8], cpu: usize, mem: usize) -> CResult<
     Ok(Key::new(low::gen_key(password, salt, cpu, mem)?))
 }
 
-/// Generate a random hex string (64 bytes). In Turtl js, this was done by
-/// hashing a time value concatenated with a UUID, but why bother when we can
-/// just generate the "hash" directly by converting 32 random bytes to a hex
-/// string?
+/// Generate a random hex string (64 bytes).
 pub fn random_hash() -> CResult<String> {
     low::to_hex(&low::rand_bytes(32)?)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for our high-level Crypto module interface.
+
+    use super::*;
+    use ::crypto::low::chacha20poly1305 as aead;
+
+    const TEST_ITERATIONS: usize = 32;
+
+    #[test]
+    /// Makes sure our cipher/block/padding indexes are correct. New values can be
+    /// added to these arrays, but *MUST* be tested here. Note that we also test for
+    /// existence of specific values at specific indexes so re-ordering of these
+    /// arrays will make our test fail.
+    fn indexes_are_correct() {
+        assert_eq!(super::SYM_ALGORITHM.len(), 1);
+        assert_eq!(super::SYM_ALGORITHM[0], "chacha20poly1305");
+    }
+
+    #[test]
+    fn can_gen_keys() {
+        let username = String::from("andrew@thillygooth.com");
+        let password = String::from("this is definitely not the password i use for my bank account. no sir.");
+        let salt = Vec::from(&(sha512(username.as_bytes()).unwrap())[0..KEYGEN_SALT_LEN]);
+
+        let key = gen_key(password.as_bytes(), salt.as_slice(), KEYGEN_OPS_DEFAULT, KEYGEN_MEM_DEFAULT).unwrap();
+        let keystr = to_hex(key.data()).unwrap();
+        assert_eq!(keystr, "f36850e9bd90afc3413a89693bf71ebdf347f3727bad9b4487e249bb21ca28f1");
+    }
+
+    #[test]
+    fn can_encrypt_latest() {
+        let key = Key::new(from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap());
+        let nonce = Vec::from(&sha512(String::from("omg wtff").as_bytes()).unwrap()[0..aead::noncelen()]);
+        let plain = String::from(r#"{"title":"libertarian quotes","body":"Moreover, the institution of child labor is an honorable one, with a long and glorious history of good works. And the villains of the piece are not the employers, but rather those who prohibit the free market in child labor. These do-gooders are responsible for the untold immiseration of those who are thus forced out of employment. Although the harm done was greater in the past, when great poverty made widespread child labor necessary, there are still people in dire straits today. Present prohibitions of child labor are thus an unconscionable interference with their lives.","tags":["moron"],"mod":1468007942,"created":1468007942.493,"keys":[]}"#);
+        let op = CryptoOp::new_with_nonce("chacha20poly1305", nonce).unwrap();
+        let enc = encrypt(&key, Vec::from(plain.as_bytes()), op).unwrap();
+        let enc_str = to_base64(&enc).unwrap();
+        assert_eq!(enc_str, "AAYBAAzGNuOg4N1zkQ2BlAiBbjNiYibICOs1NW18Jh/QfvdS+fR70+5kMnNCjXUSND05fU3m/FrcFZKPd3yQAl5gsP+4hWqkbWd+6/ip6HISeEz0NPBNTCWedSVgKYiEdnORSoiunl4l61vBmsyzQGnQl8fCYuerTLeGpq6j6Y5fBVmqmjWbmc5zeKqmg+LTfFUq9iNg5HoUPVKfjVm1aYlFG/fjMSk25j5zIgecFHAJOlQqtHXXPPCxwYLBoHBPsZE3kMu8jzE1QO8SAPOPyp2o3pD8fX1OhvqRHL/W34dqQzasmrscgvdvAy69l6nwbByOsjwvNSm2jWiNWGqFqxLgLXLy00r8A3E3hBDtQur4uo6Vs9ZSYn4mfLjEAyhyUsZeaoti8pKK5FVcJA9a//Blztbdmd8SPysXxks/6RvHIjy+aRCVxs/8Bw2Mv+AiSZ59dohNN4OUoVy3hNXk0RfdCDakw5AVq7xocAwmMLZeoWUgUt+Nb8ntt5W8KpfZVGMuxqIQoJoRMG7kf6TEHpL4vBOmosV0MwtLWkXwyXsx+zkP3GRw9mIcCkm5wEWpELYYzrOLmVQs4QHMetWsmyfTFOFlzVFPl7ctKlKuUOfbKETmrafvCNmoeOAWn58CXeEsD06ejrlg9zuPf5Vc3eIMSJ+EKIy8/eMLLFIDEzYkutqOfZoG6LJgevbgivLV7oXnG4kBF5pGVvwnpED4fTUFCFnc+MWATCN9aIJ58aLIdmF7TLYQwwXwNyyo9MvTJn/sEVjsbX/kpYrtknW1pjJ44e11du2Q5GpJXA4630g7BOOxooYTQgumoo/P3pPJnLjt9TJWPw7Q2h5rb2tqJowhltN19upncbOwMl1HPJcCqtOZOmttskMiDZGAjytiGOuD15TnfDUoZu3b97x0O6Nzm3RxGGBg4kQjC0q0RW0700EGGeCaiq9XAfUFIsS5XQ==");
+    }
+
+    #[test]
+    fn can_gen_random_keys() {
+        // test a number of hashes
+        for _ in 0..TEST_ITERATIONS {
+            let key = Key::random().unwrap();
+            assert_eq!(key.data().len(), aead::keylen());
+        }
+    }
+
+    #[test]
+    fn can_gen_random_nonce() {
+        // test a number of hashes
+        for _ in 0..TEST_ITERATIONS {
+            let nonce = aead::random_nonce().unwrap();
+            assert_eq!(nonce.len(), aead::noncelen());
+        }
+    }
+
+    #[test]
+    fn can_gen_random_hash() {
+        // test a number of hashes
+        for _ in 0..TEST_ITERATIONS {
+            let hash = random_hash().unwrap();
+            assert_eq!(hash.len(), 64);
+            for chr in hash.chars() {
+                let cint = chr as u32;
+                assert!(
+                    (cint >= ('0' as u32) && cint <= ('9' as u32)) ||
+                    (cint >= ('a' as u32) && cint <= ('f' as u32))
+                );
+            }
+        }
+    }
 }
 
