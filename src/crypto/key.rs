@@ -21,7 +21,7 @@ impl Key {
 
     /// Create a new random key
     pub fn random() -> CResult<Key> {
-        Ok(Key::new(::crypto::low::rand_bytes(32)?))
+        Ok(Key::new(::crypto::low::chacha20poly1305::random_key()?))
     }
 
     /// Return a ref to this key's data
