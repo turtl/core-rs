@@ -8,6 +8,8 @@ use ::sodiumoxide::crypto::auth as sodium_auth;
 use ::sodiumoxide::crypto::pwhash;
 use ::crypto::error::{CResult, CryptoError};
 
+/// Abstract the size of hmac keys
+pub const HMAC_KEYLEN: usize = sodium_auth::KEYBYTES;
 /// Abstract the size of salts in our KDF
 pub const KEYGEN_SALT_LEN: usize = 32;
 /// Abstract the ops limit for key generation (524288)
@@ -272,9 +274,9 @@ mod tests {
     fn can_hmac_256() {
         let data = get_string("zoning is communism");
         let keystr = get_string("kill your workforce");
-        let key = keystr.as_bytes();
-        let res = to_hex(&hmac(&key, &data.as_bytes()).unwrap()).unwrap();
-        assert_eq!(res, "b1a698ee4ea7105e79723dfbab65912dffa01c822038b24fbf413a587f241f10");
+        let key = sha512(keystr.as_bytes()).unwrap();
+        let res = to_hex(&hmac(&key[0..HMAC_KEYLEN], &data.as_bytes()).unwrap()).unwrap();
+        assert_eq!(res, "9308b40116068920c7cea98aa5bbc340cfabdaa27316413804050cfc6a7b4873");
     }
 
     #[test]
@@ -301,17 +303,30 @@ mod tests {
         let password = String::from("not at all, to some extent (always the same), very much so, don't know");
         let salt = sha256(String::from("don't know").as_bytes()).unwrap();
         let key = gen_key(password.as_bytes(), &salt[0..KEYGEN_SALT_LEN], KEYGEN_OPS_DEFAULT, KEYGEN_MEM_DEFAULT).unwrap();
+        // TODO: verify independently
         assert_eq!(key, vec![191, 247, 89, 55, 132, 218, 68, 194, 90, 194, 233, 50, 99, 98, 25, 230, 102, 217, 215, 59, 136, 61, 249, 107, 127, 124, 62, 119, 145, 56, 216, 191]);
     }
 
     #[test]
     fn can_encrypt_chacha20poly1305() {
-        panic!("guess not");
+        let key = from_base64(&String::from("v/dZN4TaRMJawukyY2IZ5mbZ1zuIPflrf3w+d5E42L8=")).unwrap();
+        let plaintext = get_string("minimum wage");
+        let nonce: Vec<u8> = vec![235, 108, 139, 46, 102, 80, 89, 151, 101, 191, 11, 130];
+        let mut auth: Vec<u8> = vec![0, 6, 4, 0, 1, 0, 2, nonce.len() as u8];
+        auth.append(&mut nonce.clone());
+        let enc = chacha20poly1305::encrypt(key.as_slice(), nonce.as_slice(), auth.as_slice(), plaintext.as_bytes()).unwrap();
+        assert_eq!(to_base64(&enc).unwrap(), "fL/qHHkkvTiLo8a7xcUJKOyiXZGhAUW8OLXDXB4D5KQ1JGbRenWpxiuGw/bLIWin3/7ZgDTQJ7TuH9CvPJF07HQBMdGaeM8hjhJQxtDLmcM/ntGCXXQ8+3dk5u1u1Wru2P5QBjuCHWaN9ccRc8wlMLr2r5MWdED6nAIEDa8nUvxQaOLlMRSp8TGGAGKi2e4+vg==");
     }
 
     #[test]
     fn can_decrypt_chacha20poly1305() {
-        panic!("guess not");
+        let key = from_base64(&String::from("v/dZN4TaRMJawukyY2IZ5mbZ1zuIPflrf3w+d5E42L8=")).unwrap();
+        let ciphertext = from_base64(&String::from("fL/qHHkkvTiLo8a7xcUJKOyiXZGhAUW8OLXDXB4D5KQ1JGbRenWpxiuGw/bLIWin3/7ZgDTQJ7TuH9CvPJF07HQBMdGaeM8hjhJQxtDLmcM/ntGCXXQ8+3dk5u1u1Wru2P5QBjuCHWaN9ccRc8wlMLr2r5MWdED6nAIEDa8nUvxQaOLlMRSp8TGGAGKi2e4+vg==")).unwrap();
+        let nonce: Vec<u8> = vec![235, 108, 139, 46, 102, 80, 89, 151, 101, 191, 11, 130];
+        let mut auth: Vec<u8> = vec![0, 6, 4, 0, 1, 0, 2, nonce.len() as u8];
+        auth.append(&mut nonce.clone());
+        let dec = chacha20poly1305::decrypt(key.as_slice(), nonce.as_slice(), auth.as_slice(), ciphertext.as_slice()).unwrap();
+        assert_eq!(String::from_utf8(dec).unwrap(), get_string("minimum wage"));
     }
 
     #[test]
