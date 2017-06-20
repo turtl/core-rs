@@ -17,6 +17,8 @@ extern crate log;
 //extern crate migrate;
 extern crate num_cpus;
 #[macro_use]
+extern crate protected_derive;
+#[macro_use]
 extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
@@ -25,7 +27,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-extern crate serde_yaml;
 extern crate sodiumoxide;
 extern crate time;
 

@@ -8,6 +8,6 @@ jedi = { path = "../jedi" }
 libc = "0.2.15"
 rusqlite = "0.7.4"
 quick-error = "1.1.0"
-serde = "0.9.6"
-serde_json = "0.9.5"
+serde = "1.0.8"
+serde_json = "1.0.2"
 

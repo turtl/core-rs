@@ -8,7 +8,7 @@ use ::std::io::prelude::*;
 use ::std::env;
 use ::std::sync::RwLock;
 
-use ::jedi::{JSONError, Value, Serialize, Deserialize};
+use ::jedi::{JSONError, Value, Serialize, DeserializeOwned};
 
 pub type TResult<T> = Result<T, JSONError>;
 
@@ -39,7 +39,7 @@ fn load_config() -> TResult<Value> {
 }
 
 /// get a string value from our config
-pub fn get<T: Deserialize>(keys: &[&str]) -> TResult<T> {
+pub fn get<T: DeserializeOwned>(keys: &[&str]) -> TResult<T> {
     let guard = (*CONFIG).read().unwrap();
     jedi::get(keys, &guard)
         .map_err(|e| From::from(e))

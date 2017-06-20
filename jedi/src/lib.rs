@@ -13,7 +13,7 @@ use ::serde_json::Error as SerdeJsonError;
 use ::serde_yaml::Error as SerdeYamlError;
 pub use ::serde_json::Value;
 pub use ::serde_json::Map;
-pub use ::serde::de::Deserialize;
+pub use ::serde::de::{Deserialize, DeserializeOwned};
 pub use ::serde::ser::Serialize;
 
 quick_error! {
@@ -78,12 +78,12 @@ macro_rules! jedi_value_wrapper {
 }
 
 /// Parse a JSON string and return a Result<Value>
-pub fn parse<T: Deserialize>(string: &String) -> JResult<T> {
+pub fn parse<T: DeserializeOwned>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
 }
 
 /// Parse a JSON byte array and return a Result<Value>
-pub fn parse_bytes<T: Deserialize>(bytes: &[u8]) -> JResult<T> {
+pub fn parse_bytes<T: DeserializeOwned>(bytes: &[u8]) -> JResult<T> {
     serde_json::from_slice(bytes).map_err(JSONError::Parse)
 }
 
@@ -104,7 +104,7 @@ pub fn to_val<T: Serialize>(obj: &T) -> JResult<Value> {
 }
 
 /// Turn a JSON Value into a object that implements Deserialize
-pub fn from_val<T: Deserialize>(val: Value) -> JResult<T> {
+pub fn from_val<T: DeserializeOwned>(val: Value) -> JResult<T> {
     serde_json::from_value(val).map_err(|e| JSONError::Stringify(e))
 }
 
@@ -195,7 +195,7 @@ pub fn walk_mut<'a>(keys: &[&str], data: &'a mut Value) -> JResult<&'a mut Value
 /// let name = get(&["user", "name"], &parsed).unwrap();
 /// println!("name is {}", name);
 /// ```
-pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
+pub fn get<T: DeserializeOwned>(keys: &[&str], value: &Value) -> JResult<T> {
     match walk(keys, value) {
         Ok(ref x) => {
             match serde_json::from_value((*x).clone()) {
@@ -210,7 +210,7 @@ pub fn get<T: Deserialize>(keys: &[&str], value: &Value) -> JResult<T> {
 /// A lot like `get()`, in fact under the hood uses `get()`, except it converts
 /// all errors into a None value. Really nice for quick "does this object have
 /// this key path?" one-offs.
-pub fn get_opt<T: Deserialize>(keys: &[&str], value: &Value) -> Option<T> {
+pub fn get_opt<T: DeserializeOwned>(keys: &[&str], value: &Value) -> Option<T> {
     match get(keys, value) {
         Ok(x) => Some(x),
         Err(_) => None,
