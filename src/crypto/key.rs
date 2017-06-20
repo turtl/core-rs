@@ -72,7 +72,7 @@ impl ser::Serialize for Key {
     }
 }
 
-impl de::Deserialize for Key {
+impl de::DeserializeOwned for Key {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: de::Deserializer
     {

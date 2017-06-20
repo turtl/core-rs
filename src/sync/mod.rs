@@ -78,17 +78,14 @@ impl Default for SyncData {
     fn default() -> SyncData { SyncData(jedi::obj()) }
 }
 
-serializable!{
-    /// Define a container for our sync records
-    #[derive(Debug)]
-    pub struct SyncRecord {
-        ()
-        id: String,
-        action: String,
-        sync_ids: Option<Vec<String>>,
-        type_: String,
-        data: SyncData,
-    }
+/// Define a container for our sync records
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SyncRecord {
+    id: String,
+    action: String,
+    sync_ids: Option<Vec<String>>,
+    type_: String,
+    data: SyncData,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects

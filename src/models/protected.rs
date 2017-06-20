@@ -83,7 +83,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     // this gets replaced, iteratively, as we loop
     let mut final_future = FOk!(());
     let ref work = turtl.work;
-    for mut model in vec {
+    for model in vec {
         let pusher = mapped.clone();
         // don't bother with models that don't have a key...
         if model.key().is_none() {
@@ -99,8 +99,8 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
-                ftry!(model.set_multi_recursive(item_mapped));
-                vec_guard.push(model);
+                let des_model = Model::clone_from::<T>(item_mapped);
+                vec_guard.push(des_model);
                 FOk!(())
             })
             .or_else(move |e| -> TFutureResult<()> {
@@ -176,9 +176,6 @@ pub trait Protected: Model + fmt::Debug {
 
     /// Deserializes our submodels
     fn deserialize_submodels(&mut self) -> TResult<()>;
-
-    /// Like Model::set_multi(), but sets data into submodels
-    fn set_multi_recursive(&mut self, data: ::jedi::Value) -> TResult<()>;
 
     /// Clone this protected model
     fn clone(&self) -> TResult<Self>;
@@ -308,11 +305,9 @@ pub trait Protected: Model + fmt::Debug {
         Ok(self.data_for_storage()?)
     }
 
-    /// "DeSerializes" a model...takes the `body` field, decrypts it, and sets
-    /// the values in the decrypted JSON dump back into the model.
-    ///
-    /// It returns the Value of all fields.
-    fn deserialize(&mut self) -> TResult<Value> {
+    /// "DeSerializes" a model...takes the `body` field, decrypts it, and
+    /// returns a JSON Value of the public/private fields.
+    fn deserialize(&self) -> TResult<Value> {
         if self.key().is_none() {
             return Err(TError::MissingData(format!("protected.deserialize() -- missing key for {} model {:?} missing key", self.model_type(), self.id())));
         }
@@ -349,7 +344,6 @@ pub trait Protected: Model + fmt::Debug {
                 return Err(From::from(e));
             },
         };
-        self.set_multi_recursive(parsed)?;
         Ok(self.data()?)
     }
 
@@ -381,235 +375,25 @@ pub trait Protected: Model + fmt::Debug {
 /// NOTE that the `id` and `body` fields are always prepended to the public
 /// field list as `id: String` and `body: String` so don't include the id/body
 /// fields in your public/private field lists. OR ELSE.
-///
-/// # Examples
-///
-/// ```
-/// # #[macro_use] mod models;
-/// # fn main() {
-/// protected!(Squirrel, (size: i64), (name: String), ());
-/// # }
-/// ```
 #[macro_export]
 macro_rules! protected {
     (
         $(#[$struct_meta:meta])*
         pub struct $name:ident {
-            ( $( $pub_field:ident: $pub_type:ty ),* ),
-            ( $( $priv_field:ident: $priv_type:ty ),* ),
-            ( $( $extra_field:ident: $extra_type:ty ),* )
+            $( $inner:tt )*
         }
     ) => {
-        protected! {
-            $(#[$struct_meta])*
-            pub struct $name {
-                ( $( $pub_field: $pub_type ),* ),
-                ( $( $priv_field: $priv_type ),* ),
-                ( $( $extra_field: $extra_type ),* ),
-                ( )
-            }
-        }
-    };
-
-    // struct implementation
-    (
-        $(#[$struct_meta:meta])*
-        pub struct $name:ident {
-            ( $( $pub_field:ident: $pub_type:ty ),* ),
-            ( $( $priv_field:ident: $priv_type:ty ),* ),
-            ( $( $extra_field:ident: $extra_type:ty ),* ),
-            ( $( $submodel_field:ident ),* )
-        }
-    ) => {
-        // define the struct
         model! {
             $(#[$struct_meta])*
+            #[derive(Protected)]
             pub struct $name {
-                (
-                    $( $extra_field: $extra_type, )*
-                    _shared: bool,
-                    _key: Option<::crypto::Key>
-                )
+                #[serde(skip)]
+                _key: Option<::crypto::Key>,
 
-                $( $pub_field: $pub_type, )*
-                $( $priv_field: $priv_type, )*
                 keys: Vec<::std::collections::HashMap<String, String>>,
                 body: String, 
-            }
-        }
 
-        // run our implementations
-        protected!([IMPL ( $name ), ( $( $pub_field ),* ), ( $( $priv_field ),* ), ( $( $extra_field ),* ), ( $( $submodel_field ),* )]);
-    };
-
-    // protected implementation
-    (
-        [IMPL ( $name:ident ),
-              ( $( $pub_field:ident ),* ),
-              ( $( $priv_field:ident ),* ),
-              ( $( $extra_field:ident ),* ),
-              ( $( $submodel_field:ident ),* ) ]
-
-    ) => {
-        // make sure printing out a model doesn't leak data
-        impl ::std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                let fakeid = String::from("<no id>");
-                let id = match self.id() {
-                    Some(x) => x,
-                    None => &fakeid,
-                };
-                write!(f, "{}: ({})", self.model_type(), id)
-            }
-        }
-
-        impl Protected for $name {
-            fn key<'a>(&'a self) -> Option<&'a ::crypto::Key> {
-                self._key.as_ref()
-            }
-
-            fn set_key(&mut self, key: Option<::crypto::Key>) {
-                self._key = key;
-                self._set_key_on_submodels();
-            }
-
-            fn model_type(&self) -> &str {
-                stringify!($name)
-            }
-
-            fn public_fields(&self) -> Vec<&'static str> {
-                vec![
-                    "id",
-                    "body",
-                    "keys",
-                    $( fix_type!(stringify!($pub_field)), )*
-                ]
-            }
-
-            fn private_fields(&self) -> Vec<&'static str> {
-                vec![
-                    $( fix_type!(stringify!($priv_field)), )*
-                ]
-            }
-
-            fn submodel_fields(&self) -> Vec<&'static str> {
-                vec![
-                    $( fix_type!(stringify!($submodel_field)), )*
-                ]
-            }
-
-            #[allow(unused_variables)]  // required in case we have no submodels
-            fn submodel_data(&self, field: &str, private: bool) -> ::error::TResult<::jedi::Value> {
-                $(
-                    if field == fix_type!(stringify!($submodel_field)) {
-                        match self.$submodel_field.as_ref() {
-                            Some(ref x) => {
-                                return Ok(x.get_serializable_data(private)?);
-                            },
-                            None => return Ok(::jedi::Value::Null),
-                        }
-                    }
-                )*
-                Err(::error::TError::MissingField(format!("The field {} wasn't found in this model", field)))
-            }
-
-            fn _set_key_on_submodels(&mut self) {
-                if self.key().is_none() { return; }
-                $(
-                    {
-                        let key = self.key().unwrap().clone();
-                        match self.$submodel_field.as_mut() {
-                            Some(ref mut x) => x.set_key(Some(key)),
-                            None => {},
-                        }
-                    }
-                )*
-            }
-
-            fn serialize_submodels(&mut self) -> ::error::TResult<()> {
-                $(
-                    match self.$submodel_field.as_mut() {
-                        Some(ref mut x) => {
-                            x.serialize()?;
-                        },
-                        None => {},
-                    }
-                )*
-                Ok(())
-            }
-
-            fn deserialize_submodels(&mut self) -> ::error::TResult<()> {
-                $(
-                    match self.$submodel_field.as_mut() {
-                        Some(ref mut x) => {
-                            if x.get_body().is_some() {
-                                x.deserialize()?;
-                            }
-                        },
-                        None => {},
-                    }
-                )*
-                Ok(())
-            }
-
-            #[allow(unused_mut)]
-            fn set_multi_recursive(&mut self, data: ::jedi::Value) -> ::error::TResult<()> {
-                let mut hash = match data {
-                    ::jedi::Value::Object(x) => x,
-                    _ => return Err(::error::TError::BadValue(String::from("protected.set_multi() -- invalid JSON object"))),
-                };
-                $(
-                    match hash.remove(&String::from(stringify!($submodel_field))) {
-                        Some(x) => {
-                            if self.$submodel_field.is_none() {
-                                // a bit hacky, but honestly not sure how else to get a
-                                // new instance
-                                self.$submodel_field = Some(::jedi::parse(&String::from("{}")).unwrap());
-                            }
-                            self.$submodel_field.as_mut().unwrap().set_multi(x)?;
-                        },
-                        None => {},
-                    }
-                )*
-                self.set_multi(::jedi::Value::Object(hash))
-            }
-
-            fn clone(&self) -> ::error::TResult<Self> {
-                let mut model = $name::new();
-                model.set_multi_recursive(self.data()?)?;
-                let key = self.key().map(|x| x.clone());
-                model.set_key(key);
-                Ok(model)
-            }
-
-            fn generate_key(&mut self) -> ::error::TResult<&::crypto::Key> {
-                if self.key().is_none() {
-                    let key = ::crypto::Key::random()?;
-                    self.set_key(Some(key));
-                }
-                Ok(self.key().unwrap())
-            }
-
-            fn get_keys<'a>(&'a self) -> Option<&'a Vec<::std::collections::HashMap<String, String>>> {
-                match self.keys {
-                    Some(ref x) => Some(x),
-                    None => None,
-                }
-            }
-
-            fn set_keys(&mut self, keydata: Vec<::std::collections::HashMap<String, String>>) {
-                self.keys = Some(keydata);
-            }
-
-            fn get_body<'a>(&'a self) -> Option<&'a String> {
-                match self.body {
-                    Some(ref x) => Some(x),
-                    None => None,
-                }
-            }
-
-            fn set_body(&mut self, body: String) {
-                self.body = Some(body);
+                $( $inner )*
             }
         }
     }
@@ -624,23 +408,34 @@ mod tests {
     use ::models::keychain::KeyRef;
     use ::models::note::Note;
 
-    protected!{
+    protected! {
+        #[derive(Serialize, Deserialize)]
         pub struct Dog {
-            ( size: i64 ),
-            ( name: String,
-              type_: String,
-              tags: Vec<String> ),
-            ( active: bool )
+            #[serde(skip)]
+            active: bool,
+
+            #[protected_field(public)]
+            size: Option<i64>,
+
+            #[protected_field(private)]
+            name: Option<String>,
+            #[serde(rename = "type")]
+            #[protected_field(private)]
+            type_: Option<String>,
+            #[protected_field(private)]
+            tags: Option<Vec<String>>,
         }
     }
 
-    protected!{
+    protected! {
+        #[derive(Serialize, Deserialize)]
         pub struct Junkyard {
-            ( name: String ),
+            #[protected_field(public)]
+            name: String,
+
             // Uhhh, I'm sorry. Is this not a junkyard?!
-            ( dog: Dog ),
-            ( ),
-            ( dog )
+            #[protected_field(private, submodel)]
+            dog: Dog,
         }
     }
 
@@ -693,11 +488,13 @@ mod tests {
     }
 
     #[test]
-    fn set_multi_recursive_test() {
+    fn clones() {
         let val: Value = jedi::parse(&String::from(r#"{"board_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","color":null,"embed":null,"file":null,"has_file":null,"id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"mod":1479796124,"password":null,"tags":null,"text":null,"title":null,"type":null,"url":null,"user_id":"5833e49e2b13751ab303f8b1","username":null}"#)).unwrap();
         let mut note = Note::new();
-        note.set_multi_recursive(val).unwrap();
-        assert_eq!(note.board_id, Some(String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")));
+        note.key = Key::random();
+        let note2 = note.clone();
+        assert_eq!(note2.board_id, Some(String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")));
+        assert_eq!(note.key, note2.key);
     }
 
     #[test]
@@ -718,8 +515,7 @@ mod tests {
         }
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
-        let mut dog2 = Dog::new();
-        dog2.set_multi(dog.data_for_storage().unwrap()).unwrap();
+        let mut dog2 = Dog::clone_from::<Dog>(dog.data_for_storage().unwrap()).unwrap();
         assert_eq!(dog.stringify_for_storage().unwrap(), dog2.stringify_for_storage().unwrap());
         dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);

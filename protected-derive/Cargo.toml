@@ -1,0 +1,12 @@
+[package]
+name = "protected_derive"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+
+[lib]
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+quote = "0.3.15"
+syn = "0.11.11"

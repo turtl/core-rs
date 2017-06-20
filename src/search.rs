@@ -15,24 +15,21 @@ use ::models::model;
 use ::models::note::Note;
 use ::models::file::File;
 
-serializable! {
-    /// A query builder
-    #[derive(Debug)]
-    pub struct Query {
-        ()
-        text: Option<String>,
-        notes: Vec<String>,
-        boards: Vec<String>,
-        tags: Vec<String>,
-        exclude_tags: Vec<String>,
-        type_: Option<String>,
-        has_file: Option<bool>,
-        color: Option<i32>,
-        sort: String,
-        sort_direction: String,
-        page: i32,
-        per_page: i32,
-    }
+/// A query builder
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Query {
+    text: Option<String>,
+    notes: Vec<String>,
+    boards: Vec<String>,
+    tags: Vec<String>,
+    exclude_tags: Vec<String>,
+    type_: Option<String>,
+    has_file: Option<bool>,
+    color: Option<i32>,
+    sort: String,
+    sort_direction: String,
+    page: i32,
+    per_page: i32,
 }
 
 /// Holds the state for our search

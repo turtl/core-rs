@@ -74,7 +74,7 @@ quick_error! {
 macro_rules! toterr {
     ($e:expr) => (
         {
-            let err: TError = From::from($e);
+            let err: ::error::TError = From::from($e);
             err
         }
     )
@@ -83,8 +83,8 @@ macro_rules! toterr {
 /// A macro to make it easy to create From impls for TError
 macro_rules! from_err {
     ($t:ty) => (
-        impl From<$t> for TError {
-            fn from(err: $t) -> TError {
+        impl From<$t> for ::error::TError {
+            fn from(err: $t) -> ::error::TError {
                 TError::Boxed(Box::new(err))
             }
         }

@@ -3,18 +3,15 @@
 
 use ::jedi::Value;
 
-serializable!{
-    /// Defines a sync item, the standard format used to sync data between the
-    /// API and the app.
-    #[derive(Debug)]
-    pub struct SyncItem {
-        ()
-        id: String,
-        action: String,
-        type_: String,
-        user_id: Option<String>,
-        missing: Option<bool>,
-        data: Option<Value>,
-    }
+/// Defines a sync item, the standard format used to sync data between the
+/// API and the app.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SyncItem {
+    id: String,
+    action: String,
+    type_: String,
+    user_id: Option<String>,
+    missing: Option<bool>,
+    data: Option<Value>,
 }
 

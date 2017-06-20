@@ -6,20 +6,28 @@ use ::error::{TResult, TFutureResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
 use ::models::model::Model;
+use ::models::file::File;
 use ::models::protected::{Keyfinder, Protected};
 use ::futures::Future;
 use ::turtl::TurtlWrap;
 use ::api::ApiReq;
 use ::util::event::Emitter;
 
-protected!{
+protected! {
+    #[derive(Serialize, Deserialize)]
     pub struct User {
-        ( storage: i64 ),
-        ( settings: Value ),
-        (
-            auth: Option<String>,
-            logged_in: bool
-        )
+        #[serde(skip)]
+        auth: Option<String>,
+        #[serde(skip)]
+        logged_in: bool,
+
+        #[protected_field(public)]
+        storage: Option<i64>,
+        #[protected_field(public, submodel)]
+        file: Option<File>,
+
+        #[protected_field(private)]
+        settings: Option<String>,
     }
 }
 

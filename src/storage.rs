@@ -159,12 +159,16 @@ mod tests {
     use ::models::model::{self, Model};
     use ::models::protected::Protected;
 
-    protected!{
+    protected! {
+        #[derive(Serialize, Deserialize)]
         pub struct Shiba {
-            ( color: String ),
-            ( name: String,
-              tags: Vec<String> ),
-            ( )
+            #[protected_field(public)]
+            color: String ,
+
+            #[protected_field(private)]
+            name: String,
+            #[protected_field(private)]
+            tags: Vec<String>,
         }
     }
     make_storable!(Shiba, "shibas");

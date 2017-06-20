@@ -57,13 +57,19 @@ pub fn keyref_from_encrypted(keydata: &HashMap<String, String>) -> KeyRef<String
     KeyRef::empty()
 }
 
-protected!{
+protected! {
+    #[derive(Serialize, Deserialize)]
     pub struct KeychainEntry {
-        ( type_: String,
-          item_id: String,
-          user_id: String ),
-        ( k: Key ),
-        ( )
+        #[serde(rename = "type")]
+        #[protected_field(public)]
+        type_: String,
+        #[protected_field(public)]
+        item_id: String,
+        #[protected_field(public)]
+        user_id: String,
+
+        #[protected_field(private)]
+        k: Key,
     }
 }
 

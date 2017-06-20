@@ -8,27 +8,38 @@ use ::models::storable::Storable;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
-protected!{
+protected! {
     /// Defines the object we find inside of Note.File (a description of the
     /// note's file with no actual file data...name, mime type, etc).
+    #[derive(Serialize, Deserialize)]
     pub struct File {
-        ( size: u64,
-          has_data: bool ),
-        ( name: String,
-          type_: String,
-          meta: Value ),
-        ( )
+        #[protected_field(public)]
+        size: u64,
+        #[protected_field(public)]
+        has_data: bool,
+
+        #[protected_field(private)]
+        name: Option<String>,
+        #[serde(rename = "type")]
+        #[protected_field(private)]
+        type_: Option<String>,
+        #[protected_field(private)]
+        meta: Option<Value>,
     }
 }
 
-protected!{
+protected! {
     /// Defines the object that holds actual file body data separately from the
     /// metadata that lives in the Note object.
+    #[derive(Serialize, Deserialize)]
     pub struct FileData {
-        ( note_id: String,
-          has_data: bool ),
-        ( data: Vec<u8> ),
-        ( )
+        #[protected_field(public)]
+        note_id: String,
+        #[protected_field(public)]
+        has_data: bool,
+
+        #[protected_field(private)]
+        data: Option<Vec<u8>>,
     }
 }
 

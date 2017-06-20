@@ -9,7 +9,7 @@ use ::std::sync::RwLock;
 
 use ::time;
 use ::serde::ser::Serialize;
-use ::serde::de::Deserialize;
+use ::serde::de::DeserializeOwned;
 use ::jedi::{self, Value};
 
 use ::error::{TError, TResult};
@@ -101,23 +101,21 @@ pub fn id_timestamp(id: &String) -> TResult<i64> {
 
 /// The model trait defines an interface for (de)serializable objects that track
 /// their changes via eventing.
-pub trait Model: Emitter + Serialize + Deserialize {
-    /// Get the fields in this model
-    fn fields(&self) -> Vec<&'static str>;
-
+pub trait Model: Emitter + Serialize + DeserializeOwned {
     /// Get this model's ID
     fn id<'a>(&'a self) -> Option<&'a String>;
-
-    /// Merge another model of the same type into this one.
-    ///
-    /// In most cases, you will probably want to use set_multi instead.
-    fn merge_in(&mut self, model: Self);
 
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
         jedi::stringify(self).map_err(|e| toterr!(e))
     }
 
+    /// Create a new model from a JSON dump.
+    fn clone_from<T: DeserializeOwned>(data: Value) -> TResult<T> {
+        jedi::from_val(data).map_err(|e| toterr!(e))
+    }
+
+    /*
     /// Given a JSON object value, set all the applicable fields into this
     /// model.
     fn set_multi(&mut self, data: Value) -> TResult<()> {
@@ -130,38 +128,33 @@ pub trait Model: Emitter + Serialize + Deserialize {
         self.merge_in(tmp_model);
         Ok(())
     }
+    */
 }
 
 #[macro_export]
-/// Defines a model given a set of serializable fields, and also fields that
-/// exist under the model that are NOT meant to be serialized.
+/// Defines a model. Adds a few fields to a struct def that models user, and
+/// runs some simple impls for us.
 macro_rules! model {
     (
         $(#[$struct_meta:meta])*
         pub struct $name:ident {
-            ($( $unserialized:ident: $unserialized_type:ty ),*)
-            $( $field:ident: $field_type:ty, )*
+            $( $inner:tt )*
         }
     ) => {
-        serializable! {
-            $(#[$struct_meta])*
-            pub struct $name {
-                ( $( $unserialized: $unserialized_type, )*
-                  _emitter: ::util::event::EventEmitter )
-                id: Option<String>,
-                $( $field: Option<$field_type>, )*
-            }
+        $(#[$struct_meta])*
+        #[derive(Default)]
+        pub struct $name {
+            _emitter: ::util::event::EventEmitter,
+            id: Option<String>,
+            $( $inner )*
         }
 
         impl $name {
             #[allow(dead_code)]
-            pub fn new() -> $name {
-                $name {
-                    id: None,
-                    $( $field: None, )*
-                    $( $unserialized: Default::default(), )*
-                    _emitter: ::util::event::EventEmitter::new(),
-                }
+            pub fn new() -> Self {
+                let mut model = Default::default();
+                model._emitter = ::util::event::EventEmitter::new();
+                model
             }
 
             #[allow(dead_code)]
@@ -185,26 +178,11 @@ macro_rules! model {
         }
 
         impl ::models::model::Model for $name {
-            fn fields(&self) -> Vec<&'static str> {
-                vec![ $( stringify!($field) ),* ]
-            }
-
             fn id<'a>(&'a self) -> Option<&'a String> {
                 match self.id {
                     Some(ref x) => Some(x),
                     None => None,
                 }
-            }
-
-            fn merge_in(&mut self, mut model: Self) {
-                if model.id.is_some() {
-                    self.id = ::std::mem::replace(&mut model.id, None);
-                }
-                $(
-                    if model.$field.is_some() {
-                        self.$field = ::std::mem::replace(&mut model.$field, None);
-                    }
-                )*
             }
         }
 
@@ -224,12 +202,12 @@ mod tests {
     use ::error::TResult;
 
     model! {
+        #[derive(Serialize, Deserialize)]
         pub struct Rabbit {
-            ()
-            name: String,
-            type_: String,
-            city: String,
-            chews_on_things_that_dont_belong_to_him: bool,
+            name: Option<String>,
+            type_: Option<String>,
+            city: Option<String>,
+            chews_on_things_that_dont_belong_to_him: Option<bool>,
         }
     }
 
@@ -267,17 +245,11 @@ mod tests {
         rabbit.city = Some(String::from("santa cruz"));
 
         let val: Value = jedi::parse(&String::from(r#"{"id":"6969","name":"slappy","city":"duluth"}"#)).unwrap();
-        rabbit.set_multi(val).unwrap();
+        let rabbit2: Rabbit = Rabbit::clone_from(val).unwrap();
 
-        assert_eq!(rabbit.id, Some(String::from("6969")));
-        assert_eq!(rabbit.name, Some(String::from("slappy")));
-        assert_eq!(rabbit.city, Some(String::from("duluth")));
-
-        let rabbit2: Rabbit = jedi::parse(&String::from(r#"{"id":"4242","city":"santa cruz"}"#)).unwrap();
-        rabbit.merge_in(rabbit2);
-        assert_eq!(rabbit.id, Some(String::from("4242")));
-        assert_eq!(rabbit.name, Some(String::from("slappy")));
-        assert_eq!(rabbit.city, Some(String::from("santa cruz")));
+        assert_eq!(rabbit2.id, Some(String::from("6969")));
+        assert_eq!(rabbit2.name, Some(String::from("slappy")));
+        assert_eq!(rabbit2.city, Some(String::from("duluth")));
     }
 
     #[test]

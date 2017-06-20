@@ -16,8 +16,8 @@ extern crate lazy_static;
 extern crate log;
 //extern crate migrate;
 extern crate num_cpus;
-//#[macro_use]
-//extern crate protected_derive;
+#[macro_use]
+extern crate protected_derive;
 #[macro_use]
 extern crate quick_error;
 extern crate regex;

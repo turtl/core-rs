@@ -7,25 +7,42 @@ use ::models::keychain::Keychain;
 use ::models::file::File;
 use ::sync::item::SyncItem;
 
-protected!{
+protected! {
+    #[derive(Serialize, Deserialize)]
     pub struct Note {
-        ( user_id: String,
-          space_id: String,
-          board_id: String,
-          file: File,
-          has_file: bool,
-          mod_: i64 ),
-        ( type_: String,
-          title: String,
-          tags: Vec<String>,
-          url: String,
-          username: String,
-          password: String,
-          text: String,
-          embed: String,
-          color: i64 ),
-        ( ),
-        ( file )
+        #[protected_field(public)]
+        space_id: String,
+        #[protected_field(public)]
+        board_id: Option<String>,
+        #[protected_field(public)]
+        user_id: String,
+        #[protected_field(public, submodel)]
+        file: Option<File>,
+        #[protected_field(public)]
+        has_file: bool,
+        #[serde(rename = "mod")]
+        #[protected_field(public)]
+        mod_: i64,
+
+        #[serde(rename = "type")]
+        #[protected_field(private)]
+        type_: Option<String>,
+        #[protected_field(private)]
+        title: Option<String>,
+        #[protected_field(private)]
+        tags: Option<Vec<String>>,
+        #[protected_field(private)]
+        url: Option<String>,
+        #[protected_field(private)]
+        username: Option<String>,
+        #[protected_field(private)]
+        password: Option<String>,
+        #[protected_field(private)]
+        text: Option<String>,
+        #[protected_field(private)]
+        embed: Option<String>,
+        #[protected_field(private)]
+        color: Option<i64>,
     }
 }
 

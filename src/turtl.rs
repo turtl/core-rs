@@ -674,11 +674,14 @@ mod tests {
     use ::models::board::Board;
     use ::util::stopper::Stopper;
 
-    protected!{
+    protected! {
+        #[derive(Serialize, Deserialize)]
         pub struct Dog {
-            ( user_id: String ),
-            ( name: String ),
-            ( )
+            #[protected_field(public)]
+            user_id: String,
+
+            #[protected_field(private)]
+            name: String,
         }
     }
 

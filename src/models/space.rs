@@ -1,11 +1,14 @@
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
-protected!{
+protected! {
+    #[derive(Serialize, Deserialize)]
     pub struct Space {
-        ( user_id: String ),
-        ( title: String ),
-        ( )
+        #[protected_field(public)]
+        user_id: String,
+
+        #[protected_field(private)]
+        title: Option<String>
     }
 }
 

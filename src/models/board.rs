@@ -5,13 +5,18 @@ use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::Keychain;
 use ::turtl::Turtl;
 
-protected!{
+protected! {
+    #[derive(Serialize, Deserialize)]
     pub struct Board {
-        ( user_id: String,
-          space_id: String,
-          meta: Value ),
-        ( title: String ),
-        ( )
+        #[protected_field(public)]
+        user_id: String,
+        #[protected_field(public)]
+        space_id: String,
+        #[protected_field(public)]
+        meta: Option<Value>,
+
+        #[protected_field(private)]
+        title: Option<String>,
     }
 }
 
