@@ -11,38 +11,38 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct Note {
         #[protected_field(public)]
-        space_id: String,
+        pub space_id: String,
         #[protected_field(public)]
-        board_id: Option<String>,
+        pub board_id: Option<String>,
         #[protected_field(public)]
-        user_id: String,
+        pub user_id: String,
         #[protected_field(public, submodel)]
-        file: Option<File>,
+        pub file: Option<File>,
         #[protected_field(public)]
-        has_file: bool,
+        pub has_file: bool,
         #[serde(rename = "mod")]
         #[protected_field(public)]
-        mod_: i64,
+        pub mod_: i64,
 
         #[serde(rename = "type")]
         #[protected_field(private)]
-        type_: Option<String>,
+        pub type_: Option<String>,
         #[protected_field(private)]
-        title: Option<String>,
+        pub title: Option<String>,
         #[protected_field(private)]
-        tags: Option<Vec<String>>,
+        pub tags: Option<Vec<String>>,
         #[protected_field(private)]
-        url: Option<String>,
+        pub url: Option<String>,
         #[protected_field(private)]
-        username: Option<String>,
+        pub username: Option<String>,
         #[protected_field(private)]
-        password: Option<String>,
+        pub password: Option<String>,
         #[protected_field(private)]
-        text: Option<String>,
+        pub text: Option<String>,
         #[protected_field(private)]
-        embed: Option<String>,
+        pub embed: Option<String>,
         #[protected_field(private)]
-        color: Option<i64>,
+        pub color: Option<i64>,
     }
 }
 

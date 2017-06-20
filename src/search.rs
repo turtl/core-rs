@@ -18,18 +18,18 @@ use ::models::file::File;
 /// A query builder
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Query {
-    text: Option<String>,
-    notes: Vec<String>,
-    boards: Vec<String>,
-    tags: Vec<String>,
-    exclude_tags: Vec<String>,
-    type_: Option<String>,
-    has_file: Option<bool>,
-    color: Option<i32>,
-    sort: String,
-    sort_direction: String,
-    page: i32,
-    per_page: i32,
+    pub text: Option<String>,
+    pub notes: Vec<String>,
+    pub boards: Vec<String>,
+    pub tags: Vec<String>,
+    pub exclude_tags: Vec<String>,
+    pub type_: Option<String>,
+    pub has_file: Option<bool>,
+    pub color: Option<i32>,
+    pub sort: String,
+    pub sort_direction: String,
+    pub page: i32,
+    pub per_page: i32,
 }
 
 /// Holds the state for our search
@@ -63,8 +63,8 @@ impl Search {
         };
         let board_id = get_field!(note, board_id, String::from(""));
         let board_id = if board_id == "" { None } else { Some(board_id) };
-        let has_file = get_field!(note, has_file, false);
-        let mod_ = get_field!(note, mod_, id_mod) as i64;
+        let has_file = note.has_file;
+        let mod_ = note.mod_;
         let type_ = get_field!(note, type_, String::from("text"));
         let color = get_field!(note, color, 0);
         self.idx.conn.execute("INSERT INTO notes (id, board_id, has_file, mod, type, color) VALUES (?, ?, ?, ?, ?, ?)", &[&id, &board_id, &has_file, &mod_, &type_, &color])?;

@@ -5,24 +5,24 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct Invite {
         #[protected_field(public)]
-        space_id: String,
+        pub space_id: String,
         #[protected_field(public)]
-        from_user_id: String,
+        pub from_user_id: String,
         #[protected_field(public)]
-        from_username: String,
+        pub from_username: String,
         #[protected_field(public)]
-        to_user: String,
+        pub to_user: String,
         #[protected_field(public)]
-        role: String,
+        pub role: String,
         #[protected_field(public)]
-		is_passphrase_protected: bool,
+		pub is_passphrase_protected: bool,
         #[protected_field(public)]
-		is_pubkey_protected: bool,
+		pub is_pubkey_protected: bool,
         #[protected_field(public)]
-		title: String,
+		pub title: String,
 
         #[protected_field(private)]
-        message: Option<String>,    // base64
+        pub message: Option<String>,    // base64
     }
 }
 

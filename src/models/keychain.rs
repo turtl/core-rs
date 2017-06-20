@@ -62,14 +62,14 @@ protected! {
     pub struct KeychainEntry {
         #[serde(rename = "type")]
         #[protected_field(public)]
-        type_: String,
+        pub type_: String,
         #[protected_field(public)]
-        item_id: String,
+        pub item_id: String,
         #[protected_field(public)]
-        user_id: String,
+        pub user_id: String,
 
         #[protected_field(private)]
-        k: Key,
+        pub k: Key,
     }
 }
 

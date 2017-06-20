@@ -7,11 +7,11 @@ use ::jedi::Value;
 /// API and the app.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncItem {
-    id: String,
-    action: String,
-    type_: String,
-    user_id: Option<String>,
-    missing: Option<bool>,
-    data: Option<Value>,
+    pub id: String,
+    pub action: String,
+    pub type_: String,
+    pub user_id: Option<String>,
+    pub missing: Option<bool>,
+    pub data: Option<Value>,
 }
 

@@ -17,17 +17,17 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct User {
         #[serde(skip)]
-        auth: Option<String>,
+        pub auth: Option<String>,
         #[serde(skip)]
-        logged_in: bool,
+        pub logged_in: bool,
 
         #[protected_field(public)]
-        storage: Option<i64>,
+        pub storage: Option<i64>,
         #[protected_field(public, submodel)]
-        file: Option<File>,
+        pub file: Option<File>,
 
         #[protected_field(private)]
-        settings: Option<String>,
+        pub settings: Option<String>,
     }
 }
 

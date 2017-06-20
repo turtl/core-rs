@@ -163,12 +163,12 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Shiba {
             #[protected_field(public)]
-            color: String ,
+            pub color: Option<String>,
 
             #[protected_field(private)]
-            name: String,
+            pub name: Option<String>,
             #[protected_field(private)]
-            tags: Vec<String>,
+            pub tags: Option<Vec<String>>,
         }
     }
     make_storable!(Shiba, "shibas");

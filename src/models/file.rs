@@ -14,17 +14,17 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct File {
         #[protected_field(public)]
-        size: u64,
+        pub size: u64,
         #[protected_field(public)]
-        has_data: bool,
+        pub has_data: bool,
 
         #[protected_field(private)]
-        name: Option<String>,
+        pub name: Option<String>,
         #[serde(rename = "type")]
         #[protected_field(private)]
-        type_: Option<String>,
+        pub type_: Option<String>,
         #[protected_field(private)]
-        meta: Option<Value>,
+        pub meta: Option<Value>,
     }
 }
 
@@ -34,12 +34,12 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct FileData {
         #[protected_field(public)]
-        note_id: String,
+        pub note_id: String,
         #[protected_field(public)]
-        has_data: bool,
+        pub has_data: bool,
 
         #[protected_field(private)]
-        data: Option<Vec<u8>>,
+        pub data: Option<Vec<u8>>,
     }
 }
 

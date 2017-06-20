@@ -5,10 +5,10 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct Space {
         #[protected_field(public)]
-        user_id: String,
+        pub user_id: String,
 
         #[protected_field(private)]
-        title: Option<String>
+        pub title: Option<String>
     }
 }
 

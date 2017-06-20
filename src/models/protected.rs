@@ -99,7 +99,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
-                let des_model = Model::clone_from::<T>(item_mapped);
+                let des_model = ftry!(Model::clone_from::<T>(item_mapped));
                 vec_guard.push(des_model);
                 FOk!(())
             })
@@ -412,18 +412,18 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Dog {
             #[serde(skip)]
-            active: bool,
+            pub active: bool,
 
             #[protected_field(public)]
-            size: Option<i64>,
+            pub size: Option<i64>,
 
             #[protected_field(private)]
-            name: Option<String>,
+            pub name: Option<String>,
             #[serde(rename = "type")]
             #[protected_field(private)]
-            type_: Option<String>,
+            pub type_: Option<String>,
             #[protected_field(private)]
-            tags: Option<Vec<String>>,
+            pub tags: Option<Vec<String>>,
         }
     }
 
@@ -431,11 +431,11 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Junkyard {
             #[protected_field(public)]
-            name: String,
+            pub name: String,
 
             // Uhhh, I'm sorry. Is this not a junkyard?!
             #[protected_field(private, submodel)]
-            dog: Dog,
+            pub dog: Dog,
         }
     }
 

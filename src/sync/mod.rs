@@ -81,11 +81,11 @@ impl Default for SyncData {
 /// Define a container for our sync records
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncRecord {
-    id: String,
-    action: String,
-    sync_ids: Option<Vec<String>>,
-    type_: String,
-    data: SyncData,
+    pub id: String,
+    pub action: String,
+    pub sync_ids: Option<Vec<String>>,
+    pub type_: String,
+    pub data: SyncData,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects

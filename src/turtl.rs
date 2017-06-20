@@ -678,10 +678,10 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Dog {
             #[protected_field(public)]
-            user_id: String,
+            pub user_id: String,
 
             #[protected_field(private)]
-            name: String,
+            pub name: String,
         }
     }
 

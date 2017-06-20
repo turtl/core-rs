@@ -142,17 +142,18 @@ macro_rules! model {
         }
     ) => {
         $(#[$struct_meta])*
-        #[derive(Default)]
         pub struct $name {
-            _emitter: ::util::event::EventEmitter,
-            id: Option<String>,
+            #[serde(skip)]
+            pub _emitter: ::util::event::EventEmitter,
+
+            pub id: Option<String>,
             $( $inner )*
         }
 
         impl $name {
             #[allow(dead_code)]
             pub fn new() -> Self {
-                let mut model = Default::default();
+                let mut model: Self = Default::default();
                 model._emitter = ::util::event::EventEmitter::new();
                 model
             }

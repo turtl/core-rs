@@ -63,6 +63,7 @@ fn find_protected_fields<'a>(body: &'a syn::Body, field_type: &str) -> Vec<&'a s
 
 fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
     let name = &ast.ident;
+    /*
     let field_idents: Vec<&syn::Ident> = match ast.body {
         syn::Body::Struct(ref data) => {
             data.fields().into_iter()
@@ -79,6 +80,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
         }
         _ => panic!("You can only use #[derive(Protected)] on Structs"),
     };
+    */
 
     let public_fields: Vec<&syn::Ident> = find_protected_fields(&ast.body, "public");
     let private_fields: Vec<&syn::Ident> = find_protected_fields(&ast.body, "private");
@@ -190,7 +192,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
             }
 
             fn clone(&self) -> ::error::TResult<Self> {
-                let mut model = Model::clone_from::<Self>(::jedi::to_val(self).map_err(|e| toterr!(e)))?;
+                let mut model = Model::clone_from::<Self>(::jedi::to_val(self).map_err(|e| toterr!(e))?)?;
                 let key = self.key().map(|x| x.clone());
                 model.set_key(key);
                 Ok(model)

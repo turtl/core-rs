@@ -9,14 +9,14 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct Board {
         #[protected_field(public)]
-        user_id: String,
+        pub user_id: String,
         #[protected_field(public)]
-        space_id: String,
+        pub space_id: String,
         #[protected_field(public)]
-        meta: Option<Value>,
+        pub meta: Option<Value>,
 
         #[protected_field(private)]
-        title: Option<String>,
+        pub title: Option<String>,
     }
 }
 
