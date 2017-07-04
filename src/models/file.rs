@@ -13,16 +13,20 @@ protected! {
     /// note's file with no actual file data...name, mime type, etc).
     #[derive(Serialize, Deserialize)]
     pub struct File {
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
-        pub size: u64,
+        pub size: Option<u64>,
+        #[serde(default)]
         #[protected_field(public)]
-        pub has_data: bool,
+        pub has_data: i8,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub name: Option<String>,
-        #[serde(rename = "type")]
+        #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub type_: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub meta: Option<Value>,
     }
@@ -38,6 +42,7 @@ protected! {
         #[protected_field(public)]
         pub has_data: bool,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub data: Option<Vec<u8>>,
     }

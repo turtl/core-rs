@@ -9,6 +9,7 @@ pub mod thredder;
 pub mod stopper;
 #[macro_use]
 pub mod macros;
+pub mod ser;
 
 /// Go to sleeeeep
 pub fn sleep(millis: u64) {

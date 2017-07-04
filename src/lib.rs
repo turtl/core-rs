@@ -55,7 +55,7 @@ use ::std::panic;
 
 use ::jedi::Value;
 
-use ::error::{TError, TResult};
+use ::error::TResult;
 use ::util::event::Emitter;
 use ::util::stopper::Stopper;
 use ::util::thredder::Pipeline;

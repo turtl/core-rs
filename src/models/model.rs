@@ -111,24 +111,9 @@ pub trait Model: Emitter + Serialize + DeserializeOwned {
     }
 
     /// Create a new model from a JSON dump.
-    fn clone_from<T: DeserializeOwned>(data: Value) -> TResult<T> {
+    fn clone_from(data: Value) -> TResult<Self> {
         jedi::from_val(data).map_err(|e| toterr!(e))
     }
-
-    /*
-    /// Given a JSON object value, set all the applicable fields into this
-    /// model.
-    fn set_multi(&mut self, data: Value) -> TResult<()> {
-        // if we have a null, just return
-        match data {
-            Value::Null => return Ok(()),
-            _ => {},
-        }
-        let tmp_model: Self = jedi::from_val(data)?;
-        self.merge_in(tmp_model);
-        Ok(())
-    }
-    */
 }
 
 #[macro_export]
@@ -142,6 +127,7 @@ macro_rules! model {
         }
     ) => {
         $(#[$struct_meta])*
+        #[derive(Default)]
         pub struct $name {
             #[serde(skip)]
             pub _emitter: ::util::event::EventEmitter,
@@ -153,22 +139,14 @@ macro_rules! model {
         impl $name {
             #[allow(dead_code)]
             pub fn new() -> Self {
-                let mut model: Self = Default::default();
-                model._emitter = ::util::event::EventEmitter::new();
-                model
+                Default::default()
             }
 
             #[allow(dead_code)]
-            pub fn new_with_id() -> $name {
+            pub fn new_with_id() -> ::error::TResult<$name> {
                 let mut model = Self::new();
-                model.id = match ::models::model::cid() {
-                    Ok(x) => Some(x),
-                    Err(e) => {
-                        error!("model::new() -- problem generating cid: {}", e);
-                        None
-                    },
-                };
-                model
+                model.id = Some(::models::model::cid()?);
+                Ok(model)
             }
         }
 
@@ -186,12 +164,6 @@ macro_rules! model {
                 }
             }
         }
-
-        impl ::std::default::Default for $name {
-            fn default() -> Self {
-                $name::new()
-            }
-        }
     }
 }
 
@@ -203,9 +175,10 @@ mod tests {
     use ::error::TResult;
 
     model! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize)]
         pub struct Rabbit {
             name: Option<String>,
+            #[serde(rename = "type")]
             type_: Option<String>,
             city: Option<String>,
             chews_on_things_that_dont_belong_to_him: Option<bool>,
@@ -221,7 +194,7 @@ mod tests {
         pretest();
         let rabbit = Rabbit::new();
         assert_eq!(rabbit.id, None);
-        let rabbit = Rabbit::new_with_id();
+        let rabbit = Rabbit::new_with_id().unwrap();
         assert!(rabbit.id.is_some());
     }
 

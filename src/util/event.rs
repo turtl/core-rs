@@ -174,6 +174,12 @@ impl Default for EventEmitter {
     }
 }
 
+impl ::std::fmt::Debug for EventEmitter {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "<emitter>")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

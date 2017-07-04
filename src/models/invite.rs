@@ -6,6 +6,7 @@ protected! {
     pub struct Invite {
         #[protected_field(public)]
         pub space_id: String,
+        #[serde(with = "::util::ser::int_converter")]
         #[protected_field(public)]
         pub from_user_id: String,
         #[protected_field(public)]
@@ -21,6 +22,7 @@ protected! {
         #[protected_field(public)]
 		pub title: String,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub message: Option<String>,    // base64
     }

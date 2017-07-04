@@ -6,7 +6,6 @@ use ::error::{TResult, TFutureResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
 use ::models::model::Model;
-use ::models::file::File;
 use ::models::protected::{Keyfinder, Protected};
 use ::futures::Future;
 use ::turtl::TurtlWrap;
@@ -21,11 +20,11 @@ protected! {
         #[serde(skip)]
         pub logged_in: bool,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub storage: Option<i64>,
-        #[protected_field(public, submodel)]
-        pub file: Option<File>,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub settings: Option<String>,
     }

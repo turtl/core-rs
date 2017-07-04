@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn saves_retrieves_models() {
         let storage = pretest();
-        let mut model = Shiba::new_with_id();
+        let mut model = Shiba::new_with_id().unwrap();
         let key = model.generate_key().unwrap().clone();
         model.color = Some(String::from("sesame"));
         model.name = Some(String::from("Kofi"));
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn deletes_models() {
         let storage = pretest();
-        let mut model = Shiba::new_with_id();
+        let mut model = Shiba::new_with_id().unwrap();
         model.generate_key().unwrap();
         model.color = Some(String::from("sesame"));
         model.name = Some(String::from("Kofi"));

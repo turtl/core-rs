@@ -12,35 +12,47 @@ protected! {
     pub struct Note {
         #[protected_field(public)]
         pub space_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub board_id: Option<String>,
+        #[serde(with = "::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public, submodel)]
         pub file: Option<File>,
+        #[serde(default)]
         #[protected_field(public)]
         pub has_file: bool,
-        #[serde(rename = "mod")]
+        #[serde(rename = "mod", default)]
         #[protected_field(public)]
         pub mod_: i64,
 
-        #[serde(rename = "type")]
+        #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub type_: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub title: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub tags: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub username: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub password: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub text: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub embed: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub color: Option<i64>,
     }
@@ -66,13 +78,11 @@ make_basic_sync_model!{ Note,
 }
 
 impl Keyfinder for Note {
-    fn get_key_search(&self, turtl: &Turtl) -> Keychain {
+    fn get_key_search(&self, turtl: &Turtl) -> TResult<Keychain> {
         let mut keychain = Keychain::new();
         let mut space_ids: Vec<String> = Vec::new();
         let mut board_ids: Vec<String> = Vec::new();
-        if self.space_id.is_some() {
-            space_ids.push(self.space_id.as_ref().unwrap().clone());
-        }
+        space_ids.push(self.space_id.clone());
         if self.board_id.is_some() {
             board_ids.push(self.board_id.as_ref().unwrap().clone());
         }
@@ -98,7 +108,7 @@ impl Keyfinder for Note {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
                 if !space_ids.contains(space_id) { continue; }
-                keychain.add_key(&user_id, space_id, space.key().unwrap(), &ty);
+                keychain.add_key(&user_id, space_id, space.key().unwrap(), &ty)?;
             }
         }
         if board_ids.len() > 0 {
@@ -108,10 +118,10 @@ impl Keyfinder for Note {
                 if board.id().is_none() || board.key().is_none() { continue; }
                 let board_id = board.id().unwrap();
                 if !board_ids.contains(board_id) { continue; }
-                keychain.add_key(&user_id, board_id, board.key().unwrap(), &ty);
+                keychain.add_key(&user_id, board_id, board.key().unwrap(), &ty)?;
             }
         }
-        keychain
+        Ok(keychain)
     }
 }
 

@@ -84,6 +84,7 @@ pub struct SyncRecord {
     pub id: String,
     pub action: String,
     pub sync_ids: Option<Vec<String>>,
+    #[serde(rename = "type")]
     pub type_: String,
     pub data: SyncData,
 }

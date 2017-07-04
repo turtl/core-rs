@@ -83,10 +83,11 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     // this gets replaced, iteratively, as we loop
     let mut final_future = FOk!(());
     let ref work = turtl.work;
-    for model in vec {
+    for mut model in vec {
         let pusher = mapped.clone();
         // don't bother with models that don't have a key...
         if model.key().is_none() {
+            warn!("map_deserialize: model {:?} has no key", model.id());
             let mut vec_guard = pusher.write().unwrap();
             vec_guard.push(model);
             continue;
@@ -99,8 +100,8 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             .and_then(move |item_mapped: Value| -> TFutureResult<()> {
                 // push our mapped item into our final vec
                 let mut vec_guard = pusher.write().unwrap();
-                let des_model = ftry!(Model::clone_from::<T>(item_mapped));
-                vec_guard.push(des_model);
+                ftry!(model.merge_fields(&item_mapped));
+                vec_guard.push(model);
                 FOk!(())
             })
             .or_else(move |e| -> TFutureResult<()> {
@@ -134,8 +135,8 @@ pub trait Keyfinder {
     /// Note that we actually use the Keychain object for searching here, which
     /// is distinct from the original Turtl method of building a separate search
     /// object. Much cleaner now.
-    fn get_key_search(&self, _: &Turtl) -> Keychain {
-        Keychain::new()
+    fn get_key_search(&self, _: &Turtl) -> TResult<Keychain> {
+        Ok(Keychain::new())
     }
 }
 
@@ -195,6 +196,10 @@ pub trait Protected: Model + fmt::Debug {
     /// Set the model's body data
     fn set_body(&mut self, body: String);
 
+    /// Given a set of data, set all public/private fields from THIS model that
+    /// exist in the data into the model.
+    fn merge_fields(&mut self, data: &Value) -> TResult<()>;
+
     /// Get a set of fields and return them as a JSON Value
     fn get_fields(&self, fields: &Vec<&str>) -> TResult<JsonMap<String, Value>> {
         let mut map: JsonMap<String, jedi::Value> = JsonMap::new();
@@ -222,7 +227,11 @@ pub trait Protected: Model + fmt::Debug {
         for field in submodels {
             let val: TResult<Value> = self.submodel_data(field, private);
             match val {
-                Ok(v) => { map.insert(String::from(field), v); },
+                Ok(v) => {
+                    if !v.is_null() {
+                        map.insert(String::from(field), v);
+                    }
+                },
                 Err(..) => {},
             }
         }
@@ -307,7 +316,7 @@ pub trait Protected: Model + fmt::Debug {
 
     /// "DeSerializes" a model...takes the `body` field, decrypts it, and
     /// returns a JSON Value of the public/private fields.
-    fn deserialize(&self) -> TResult<Value> {
+    fn deserialize(&mut self) -> TResult<Value> {
         if self.key().is_none() {
             return Err(TError::MissingData(format!("protected.deserialize() -- missing key for {} model {:?} missing key", self.model_type(), self.id())));
         }
@@ -344,7 +353,8 @@ pub trait Protected: Model + fmt::Debug {
                 return Err(From::from(e));
             },
         };
-        Ok(self.data()?)
+        self.merge_fields(&parsed)?;
+        Ok(self._private_data()?)
     }
 
     /// Given a set of keydata, replace the self.keys object
@@ -390,8 +400,8 @@ macro_rules! protected {
                 #[serde(skip)]
                 _key: Option<::crypto::Key>,
 
-                keys: Vec<::std::collections::HashMap<String, String>>,
-                body: String, 
+                keys: Option<Vec<::std::collections::HashMap<String, String>>>,
+                body: Option<String>, 
 
                 $( $inner )*
             }
@@ -402,7 +412,7 @@ macro_rules! protected {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi::{self, Value};
+    use ::jedi;
     use ::crypto::{self, Key};
     use ::models::model::Model;
     use ::models::keychain::KeyRef;
@@ -431,11 +441,11 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Junkyard {
             #[protected_field(public)]
-            pub name: String,
+            pub name: Option<String>,
 
             // Uhhh, I'm sorry. Is this not a junkyard?!
             #[protected_field(private, submodel)]
-            pub dog: Dog,
+            pub dog: Option<Dog>,
         }
     }
 
@@ -481,20 +491,20 @@ mod tests {
 
     #[test]
     fn deserializes_keys() {
-        let json = String::from(r#"{"board_id":"519164b92b13753e54000007","body":"AAUCAAHn4jcumLj19fAg31bFdfcmEUzg2zrPajj+9qGcRyrptjLYIaeMW+FvJ7RyNDLdV1f+LdWafl7k7CQRlf1KtgkYPfpFITS0N1MZQrAhxSvzc92mUT9Z7vDhs7n4wGREqIMNBpzZyPz/nUF3QPm6RpsNRhnqhq5NE3m0W0VrdKd8S9vQs5GxGtL+C+vYUiYmcmxH8X0OMkgeDxTpm5DX+YTbfzD0b/R/v4gRlW0hg0pcfVFe41OPB9xfS0KbLcsezEnddx7D8k6qeSlTqBjYnSu4fvsM5jWB2MQZ6EgOMZWLhsUfXt/36yRsRHAe2DolcAFceVpcOxaE6TZuX7QfrAjokSyIBk1MWhxJ7460QDDWMHS8jhhsx6O7p9glO+KG9AQ72AfYI4Mwsl4L","id":"56443924cd2249420a000dce","keys":[{"b":"519164b92b13753e54000007","k":"AAUCAAHg4Oe2Qcpatv19Pxc5VXuYnKSYvaYppRds6MazwqqX7MWeaRCJvakpAxpzc6ure5lEFh+sCdJfQRU1jAGnTiLJtQ=="}],"mod":1447311652,"user_id":"517c06912b13753915000001"}"#);
+        let json = String::from(r#"{"id":"015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","user_id":51,"file":{},"keys":[{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAzSgseWF4MMXhZ8RDg3igwoghg9vAdlwaG70EwncM9odiZ6rQq5U/Dv1ZXTUgOGolwEGZ7PjFYw8IJhQ10="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAysMP4OBviiXtL86+pmH2jpIYH9D5AsbpLTQ7GoTXsugfvyM3hhJuUNsBQlPVtbOqATaS87Mx3sDnQXEFQ="}],"mod":1498539524,"body":"AAYBAAzH4KVxGsdEq2PhfjX6dTSmPiVye8gv+Yp457UiYEce5jrL6T1K4WyNnvZizqeKOPGyMnqAtBxxNrClfwV4YVdlNDAQQAKQSSln+K0CvSgcIdC8mRCHqOobFWazYy7pS1SlKrNz9tBnJXjvJOzjRjI4GAGVVNj9t2YoJfFFDVFi1slTEC8SRDXj82AvaYIoGjF1bnw0FY4d3AOiigdJa4s5VRbsGG/75djUinn0i1avSqfdm5E="}"#);
         let note: Note = jedi::parse(&json).unwrap();
         let keys = note.get_keys();
-        assert!(keys.is_some());
+        assert_eq!(keys.unwrap().len(), 2);
     }
 
     #[test]
     fn clones() {
-        let val: Value = jedi::parse(&String::from(r#"{"board_id":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","body":"AAUCAAHyrflOwSatekp9uWRciF52AReRCbH8SnxWIQWWbvpg8okcD4ugdhPqdsLl7a0zHVyKvHwDprfAJixlYecrx8X6I3R/9HdZ+JyNTI2JLxKJWcc5YMFIfpNeEcHZgomnTAplBpR420e+NddpSSeLGp6/EZHPLnBMzwkITSR8i1YPJx2jya8gLvrOkqb9tfLh4snpbx+B7yJkGTzrXPsqQBC8fuNVtmzh4uV5b0swBE0uE5sRw9+TQBvcP7TIP2Oq4t8NEGptY5Raqt+MauZWybP+3+2165JFR+JW+eNn2vw9af3XmKY06D0g3gzBF2gyKTvtRRs7eQ7UC7ckl/It8vE0NbE=","color":null,"embed":null,"file":null,"has_file":null,"id":"01588ab73d32af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba069b1","keys":[{"b":"01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994","k":"AAUCAAEYrjFG1IY44n0n09Ex6fUbsJMwHrkQiOgkXCx1/7sjcLn+2tk1zoPDgpujO05uFV9+m1g92AvFy4H0rzoNQhtxPw=="}],"mod":1479796124,"password":null,"tags":null,"text":null,"title":null,"type":null,"url":null,"user_id":"5833e49e2b13751ab303f8b1","username":null}"#)).unwrap();
-        let mut note = Note::new();
-        note.key = Key::random();
-        let note2 = note.clone();
-        assert_eq!(note2.board_id, Some(String::from("01588ab62d05af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba06994")));
-        assert_eq!(note.key, note2.key);
+        let mut note: Note = jedi::parse(&String::from(r#"{"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":null,"user_id":51,"file":{},"keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592545,"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl"}"#)).unwrap();
+        note.generate_key().unwrap();
+        let note2 = note.clone().unwrap();
+        assert_eq!(note2.space_id, String::from("015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"));
+        assert_eq!(note2.board_id, None);
+        assert_eq!(note.key(), note2.key());
     }
 
     #[test]
@@ -515,7 +525,7 @@ mod tests {
         }
         assert_eq!(&body, dog.body.as_ref().unwrap());
 
-        let mut dog2 = Dog::clone_from::<Dog>(dog.data_for_storage().unwrap()).unwrap();
+        let mut dog2 = Dog::clone_from(dog.data_for_storage().unwrap()).unwrap();
         assert_eq!(dog.stringify_for_storage().unwrap(), dog2.stringify_for_storage().unwrap());
         dog2.set_key(Some(key.clone()));
         assert_eq!(dog2.size.unwrap(), 69);
@@ -534,21 +544,22 @@ mod tests {
 
     #[test]
     fn decrypts_utf8() {
-        let mut note: Note = jedi::parse(&String::from(r#"{"file":{},"keys":[],"mod":1497591878,"body":"AAYBAAyZMe0/PtetSCRpgCeWmVcktlI7UOvBTDK1Qfp9TQhEd50kt9178KJKm+ziqTZG8yGI96Jug1CwZdBp9xYt"}"#)).unwrap();
-        let key = Key::new(crypto::from_base64(&String::from("1cHWM/ueCmo+uDCy8B6aUtmFKuZ84viEp035eMS+d4E=")).unwrap());
+        let mut note: Note = jedi::parse(&String::from(r#"{"id":"015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","user_id":51,"file":{},"keys":[{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAyAjxgMehPHn+xMYOAW8/aGgxRrQN8FvB/lQoI2uX7khX8eQi2un4eFa73kboM6UAiCvSKGnmX9DNIwGk4="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAy/IWmcQN42Iva4LqNg0eDAIU4slpoAZ/8487NJxXjISkd4HmOLxBPg/Lbf7pa5E/MB7pOsTHGLENcDoWw="},{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAyAjxgMehPHn+xMYOAW8/aGgxRrQN8FvB/lQoI2uX7khX8eQi2un4eFa73kboM6UAiCvSKGnmX9DNIwGk4="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAy/IWmcQN42Iva4LqNg0eDAIU4slpoAZ/8487NJxXjISkd4HmOLxBPg/Lbf7pa5E/MB7pOsTHGLENcDoWw="}],"mod":1498539524,"body":"AAYBAAw/xkOg209rBB+kSM2o8aKTvzsDuY0bcwN7W5zuwf+kFPCAEH/ERnxIbO1SOE4+Z3+WUwRDhsOSx9VR2gTON9bcMCWUiS1DP5oNWhLZ9HZxvF1dlpN6jnfTokeE7Aw0uVjIrSma3AW7vaA3tTokZdW9j7fpqzBYGZXrZT6+1/RAsKrHiayVGZdR//4iKoRZeysgsu8Hn6aaMhgJ+tSV9Kz7MZeKHJb2fxWVr1BTZQeRWoXKhjU="}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("VAkQBuwoPXAQdDOIHZ/ItNWL0xZh+qBT5GKtj92HZ/8=")).unwrap());
         note.set_key(Some(key));
         note.deserialize().unwrap();
-        assert_eq!(note.title.unwrap(), "you are \u{2620}");
+        assert_eq!(note.title.unwrap(), "\u{2620} my favorite site \u{2620}");
     }
 
     #[test]
     fn decrypts_clones() {
-        let mut note: Note = jedi::parse(&String::from(r#"{"file":{},"keys":[],"mod":1497591729,"body":"AAYBAAygUSffKsAjvFREorN5J4S7aa37LYThwRJGkI/LjOPyJpwJ+rIUIXmMQKWS7XsJ4MR6UM+GQsA/9LMoWJb47VF4QP844QY="}"#)).unwrap();
-        let key = Key::new(crypto::from_base64(&String::from("By7HSFoGiEaNA41hgC83GWH1x6SeP9wtZWOEZYwjnKQ=")).unwrap());
+        let mut note: Note = jedi::parse(&String::from(r#"{"id":"015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":null,"user_id":51,"file":{},"keys":[{"k":"AAYBAAw652QkoEkgpi6TYrW3TTmDGz6fJk2rIB+wP2aguuxXFZOd7AL9p/Ka2tQ0lpEYzoAQEV7e03CgIoTaA0I=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592783,"body":"AAYBAAzNUsLEsUAek2V9bm6mRl4gihS9R54JtmbdTriCIXMBjqBrs6BPwa+BYYh//z+ISzYqU2RsdZNMnPXDyzLnvNYu97wYIprQA4KhbZrQpYvlJSeYb/ZZOlv9fEwuz8nCvovl7gPFqpQNRNFfj+QRgTmuT6nq2E9C/5R/HFeKV7paD6/xquD1BkLGpsKDGzqG07q7UMABWjFEXeMszBanCLLVl/CPy7l04hV5f5kx"}"#)).unwrap();
+        let key = Key::new(crypto::from_base64(&String::from("smZYz6J4INwhVxJF5XcUyeojdOlKV0o7jKm4C2tJ7V0=")).unwrap());
         note.set_key(Some(key));
         let mut note_clone = note.clone().unwrap();
         note_clone.deserialize().unwrap();
-        assert_eq!(note_clone.title.unwrap(), "Sexrobot, sexrobot.");
+        assert_eq!(note_clone.type_.unwrap(), "text");
+        assert_eq!(note_clone.text.unwrap(), "PEOPLE TAKE U MORE SRSLY");
     }
 
     #[test]
@@ -567,8 +578,8 @@ mod tests {
         assert_eq!(junkyard2.dog.as_ref().unwrap().size.as_ref().unwrap(), &69);
         junkyard2.set_key(Some(junkyard.key().unwrap().clone()));
         junkyard2.deserialize().unwrap();
-        assert_eq!(junkyard2.dog.as_ref().unwrap().size.as_ref().unwrap(), &69);
         let mut dog = junkyard2.dog.as_mut().unwrap();
+        assert_eq!(dog.size.as_ref().unwrap(), &69);
         assert_eq!(dog.name.as_ref().unwrap(), &String::from("Gerard"));
         assert_eq!(dog.type_.as_ref().unwrap(), &String::from("chowchow"));
         assert_eq!(dog.size.as_ref().unwrap(), &69);

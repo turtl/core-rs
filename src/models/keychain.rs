@@ -1,5 +1,6 @@
 use ::std::collections::HashMap;
 
+use ::error::TResult;
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
@@ -46,8 +47,8 @@ pub fn keyref_from_encrypted(keydata: &HashMap<String, String>) -> KeyRef<String
         Some(x) => return KeyRef::new(x.clone(), String::from("b"), key),
         None => {},
     }
-    match keydata.get(&String::from("p")) {
-        Some(x) => return KeyRef::new(x.clone(), String::from("p"), key),
+    match keydata.get(&String::from("s")) {
+        Some(x) => return KeyRef::new(x.clone(), String::from("s"), key),
         None => {},
     }
     match keydata.get(&String::from("u")) {
@@ -65,17 +66,20 @@ protected! {
         pub type_: String,
         #[protected_field(public)]
         pub item_id: String,
+        #[serde(with = "::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
 
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
-        pub k: Key,
+        pub k: Option<Key>,
     }
 }
 
 make_storable!(KeychainEntry, "keychain");
 make_basic_sync_model!(KeychainEntry);
 
+#[derive(Debug)]
 pub struct Keychain {
     pub entries: Vec<KeychainEntry>,
 }
@@ -91,21 +95,21 @@ impl Keychain {
     }
 
     /// Add a key to the keychain
-    pub fn add_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String) {
-        let mut entry = KeychainEntry::new();
-        entry.type_ = Some(ty.clone());
-        entry.user_id = Some(user_id.clone());
-        entry.item_id = Some(item_id.clone());
+    pub fn add_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
+        let mut entry = KeychainEntry::new_with_id()?;
+        entry.type_ = ty.clone();
+        entry.user_id = user_id.clone();
+        entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
         self.entries.push(entry);
+        Ok(())
     }
 
     /// Find the key matching a given item id
     pub fn find_entry(&self, item_id: &String) -> Option<Key> {
         for entry in &self.entries {
-            if !entry.item_id.is_some() || !entry.k.is_some() { continue; }
-            let entry_item_id = entry.item_id.as_ref().unwrap();
-            if entry_item_id == item_id {
+            if !entry.k.is_some() { continue; }
+            if &entry.item_id == item_id {
                 return Some(entry.k.as_ref().unwrap().clone());
             }
         }
@@ -116,9 +120,8 @@ impl Keychain {
     pub fn find_all_entries(&self, item_id: &String) -> Vec<Key> {
         let mut found = Vec::with_capacity(2);
         for entry in &self.entries {
-            if !entry.item_id.is_some() || !entry.k.is_some() { continue; }
-            let entry_item_id = entry.item_id.as_ref().unwrap();
-            if entry_item_id == item_id {
+            if !entry.k.is_some() { continue; }
+            if &entry.item_id == item_id {
                 found.push(entry.k.as_ref().unwrap().clone());
             }
         }

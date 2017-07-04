@@ -378,7 +378,7 @@ impl Turtl {
         // unlike the old Turtl, if we find a key and it *fails*, we just keep
         // looping until we find a working match or we exhaust our search. this
         // is a much more versatile way of decrypting data.
-        let mut search = model.get_key_search(self);
+        let mut search = model.get_key_search(self)?;
 
         // grab the model.keys collection.
         let encrypted_keys: Vec<HashMap<String, String>> = match model.get_keys() {
@@ -401,7 +401,7 @@ impl Turtl {
         {
             let user_guard = self.user.read().unwrap();
             if user_guard.id().is_some() && user_guard.key().is_some() {
-                search.add_key(user_guard.id().unwrap(), user_guard.id().unwrap(), user_guard.key().unwrap(), &String::from("user"));
+                search.add_key(user_guard.id().unwrap(), user_guard.id().unwrap(), user_guard.key().unwrap(), &String::from("user"))?;
             }
         }
 
@@ -516,7 +516,7 @@ impl Turtl {
                         protected::map_deserialize(turtl1.as_ref(), spaces)
                     })
                     .and_then(move |spaces: Vec<Space>| -> TFutureResult<Vec<Board>> {
-                        // set the keychain into the profile
+                        // set the spaces into the profile
                         let mut profile_guard = turtl2.profile.write().unwrap();
                         profile_guard.spaces = spaces;
                         drop(profile_guard);
@@ -525,7 +525,7 @@ impl Turtl {
                         protected::map_deserialize(turtl2.as_ref(), boards)
                     })
                     .and_then(move |boards: Vec<Board>| -> TFutureResult<()> {
-                        // set the keychain into the profile
+                        // set the boards into the profile
                         let mut profile_guard = turtl3.profile.write().unwrap();
                         profile_guard.boards = boards;
                         drop(profile_guard);
@@ -678,10 +678,10 @@ mod tests {
         #[derive(Serialize, Deserialize)]
         pub struct Dog {
             #[protected_field(public)]
-            pub user_id: String,
+            pub user_id: Option<String>,
 
             #[protected_field(private)]
-            pub name: String,
+            pub name: Option<String>,
         }
     }
 
@@ -701,10 +701,10 @@ mod tests {
 
     #[test]
     fn finding_keys() {
-        let note_key = Key::new(crypto::from_base64(&String::from("eVWebXDGbqzDCaYeiRVsZEHsdT5WXVDnL/DdmlbqN2c=")).unwrap());
-        let board_key = Key::new(crypto::from_base64(&String::from("BkRzt6lu4YoTS9opB96c072y+kt+evtXv90+ZXHfsG8=")).unwrap());
-        let enc_board = String::from(r#"{"body":"AAUCAAHeI0ysDNAenXpPAlOwQmmHzNWcohaCSmRXOPiRGVojaylzimiohTBSG2DyPnfsSXBl+LfxXhA=","keys":[],"user_id":"5244679b2b1375384f0000bc","id":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"}"#);
-        let enc_note = String::from(r#"{"board_id":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","mod":1479425965,"keys":[{"b":"01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c","k":"AAUCAAECDLI141jXNUwVadmvUuxXYtWZ+JL7450VjH1JURk0UigiIB2TQ2f5KiDGqZKUoHyxFXCaAeorkaXKxCaAqicISg=="}],"user_id":"5244679b2b1375384f0000bc","body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"}"#);
+        let enc_board = String::from(r#"{"id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAz9znE+csObRfJh7v1+vILRefrGx/ZC97qtGetYvtPYr3gO4v4AnhWPP/z49ESptJ1aSIOWTzPKBt5B1fI=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAxEVD6FeHQaEl9yh3M9LVJTh0poYU8FA1SxwYVn/8N1SBNYBYzuWcfXMoTFrmz0CHum"}"#);
+        let enc_note = String::from(r#"{"id":"015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","user_id":51,"file":{},"keys":[{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAzSgseWF4MMXhZ8RDg3igwoghg9vAdlwaG70EwncM9odiZ6rQq5U/Dv1ZXTUgOGolwEGZ7PjFYw8IJhQ10="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAysMP4OBviiXtL86+pmH2jpIYH9D5AsbpLTQ7GoTXsugfvyM3hhJuUNsBQlPVtbOqATaS87Mx3sDnQXEFQ="}],"mod":1498539524,"body":"AAYBAAzH4KVxGsdEq2PhfjX6dTSmPiVye8gv+Yp457UiYEce5jrL6T1K4WyNnvZizqeKOPGyMnqAtBxxNrClfwV4YVdlNDAQQAKQSSln+K0CvSgcIdC8mRCHqOobFWazYy7pS1SlKrNz9tBnJXjvJOzjRjI4GAGVVNj9t2YoJfFFDVFi1slTEC8SRDXj82AvaYIoGjF1bnw0FY4d3AOiigdJa4s5VRbsGG/75djUinn0i1avSqfdm5E="}"#);
+        let board_key = Key::new(crypto::from_base64(&String::from("WOaCXXSuzs+8SiljyBdtqXE9XmQJP1uAY9DCK6EC4e8=")).unwrap());
+        let note_key = Key::new(crypto::from_base64(&String::from("VAkQBuwoPXAQdDOIHZ/ItNWL0xZh+qBT5GKtj92HZ/8=")).unwrap());
         let mut board: Board = jedi::parse(&enc_board).unwrap();
         let mut note: Note = jedi::parse(&enc_note).unwrap();
 
@@ -716,7 +716,7 @@ mod tests {
 
         // add the note's key as a direct entry to the keychain
         let mut profile_guard = turtl.profile.write().unwrap();
-        profile_guard.keychain.add_key(&user_id, note.id().unwrap(), &note_key, &String::from("note"));
+        profile_guard.keychain.add_key(&user_id, note.id().unwrap(), &note_key, &String::from("note")).unwrap();
         drop(profile_guard);
 
         // see if we can find the note as a direct entry
@@ -730,7 +730,7 @@ mod tests {
         let mut profile_guard = turtl.profile.write().unwrap();
         profile_guard.keychain.entries.clear();
         assert_eq!(profile_guard.keychain.entries.len(), 0);
-        profile_guard.keychain.add_key(&user_id, board.id().unwrap(), &board_key, &String::from("board"));
+        profile_guard.keychain.add_key(&user_id, board.id().unwrap(), &board_key, &String::from("board")).unwrap();
         assert_eq!(profile_guard.keychain.entries.len(), 1);
         drop(profile_guard);
 
@@ -793,7 +793,13 @@ mod tests {
             let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"id":"015bac22440b4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30020","type":"space","item_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"body":"AAYBAAwuE3ASfPUmqgFhjcllp4atv6bJ/hf1CUjfPuMs/g+0nDcrC6Ye6AAr26Gk/0LWwjB0mgT3/Bb/00SxFrM97YDA6EUs1xxNG2SKakMTz585vw=="},{"id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30028","type":"space","item_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"body":"AAYBAAwl4cOKFgxzAM8CFFCEiy4SKbC01qhtI40O7El7UG05UneASSsxdKN15bFZUAyD0TQPx/fEKf5zn251Bdmdl/mAw0aNKYX9/60/mpj17+6zsw=="},{"id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30030","type":"space","item_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"body":"AAYBAAwgRYgtpMVP2H66+WJd0BWEuN7Cqoh4TasleTl77Dim4gvOPIjq2pvtse+O0ywW0B98CCoo4wg5JP3UJKpb3On20fgPmx5sgxgSszk3IfU0ow=="},{"id":"015bae37fb224944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30048","type":"space","item_id":"015a8362721ab6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90026","user_id":51,"body":"AAYBAAw9t7R3TUCPVCYUyh4mqJK/OMUUJOnYZviN2yCdoD3JUA0c7mjfdmvYAnNmSYMdJgGAbyHYBYqR4KWwIxM9xhk5wAlF59ZKXc7r+ikfCltUYw=="},{"id":"015bb25a31c59097895e547164bd5935025703c9d5188f2be449364e26aa736e01a6f74ceaac00f4","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyp/Q4ry3GR1fU7034oy52mIccQ8I7U5ZPyRgFvaAX4QrlVCSa53Z7NLP1iZU7PW3bnV40rKdfGALIJ2zmo8pifWnItV+ChVScz4Hwy5PPTGg=="},{"id":"015bffa0d30d950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00b9","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwrVM4bcSP3qwkFEv5qAQSq7O5/8qBa2nZFPFQdB5ZGYc7Qa+GKB55H5l2F37s6QSa84n8FX6/tbTmwNqBSyEsNSAI9OHw0SyXUf9dugVzsPQ=="},{"id":"015bffa2ce42950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00fa","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwT5rBK44hbHZQOICE3FnzOw9B606+4gEl64YCWqqIN7Vwsr6x8Ff9XGvvwbOCJQyeWGM9tpLSIr5uwFuiYe9Mc13h4odPiCudlXXJzcz09Fg=="},{"id":"015c14254472cb9346f941d635d7cd81602dee4af381029f25e1d637ebce44b6170700262e0c0081","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyCp5xUilhR0WJt5r8IeV/dRvkFsoHjUC8k5Kc9Wy5YqN3+rzM7NHBmwivRNofr2DS22GrdkngVUhEOqjdgoc37djTTRumZDRjAwsw0f9Wpfg=="}]"#)).unwrap();
             let spaces: Vec<Space> = jedi::parse(&String::from(r#"[{"id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"members":[{"id":90,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"role":"owner","created":"2017-04-26T19:19:40.782Z","updated":"2017-04-26T19:19:40.782Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAzSnOFnsF8LgCqQbQDhjowbdfeuWYRfRevmY/ie0GOeJhEbxaaloFsT7wblZjYMGd+ocL0TKvUYqO0U/qJEwFM2Uh0="},{"id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"members":[{"id":91,"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"role":"owner","created":"2017-04-26T19:19:40.819Z","updated":"2017-04-26T19:19:40.819Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAweqy/gx9HTkvkQXNgCvSyVApuJKXEOJNTqlEU8udrW2qb5/gzjdn5dOh/fCI9HHUzyYysiFG739oLBTexxdg=="},{"id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"members":[{"id":92,"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"role":"owner","created":"2017-04-26T19:19:40.871Z","updated":"2017-04-26T19:19:40.871Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAzAf7huCdGhIfZ8LakfUsgOLXsKxsMkK1ulo7G+lTEElums6ViZ8SLxFUnF3kn1BDtbN29sT8NAxCDlKskFkg=="}]"#)).unwrap();
             let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAz9znE+csObRfJh7v1+vILRefrGx/ZC97qtGetYvtPYr3gO4v4AnhWPP/z49ESptJ1aSIOWTzPKBt5B1fI=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAxEVD6FeHQaEl9yh3M9LVJTh0poYU8FA1SxwYVn/8N1SBNYBYzuWcfXMoTFrmz0CHum"},{"id":"015bac2244f54944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30039","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAwYIRhvHsm43RJnwXRXCIGnzCs2e+eBW6Wzyr+ojo00PY123AmMGMSqq6IStUrSbteDdxG4iRZEyBJwY8g=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAyijrKoEz3RznfMJslv2qO17BqmiYP8SgDW1i/AkC/O50Y6jizxq2cljfwlwRn0"},{"id":"015bac2245044944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3003e","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAyr/nHZWKTTcsvdokRUReLnUDM60/D0BigVJ1sRcGZg3cQ1M0ocZzC45nehLqw5iJAO/N2RP/AKoKOqTio=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAzXFMlrh9a4hWujp2PKTeXoSMbfSwX2YpPgC6mg2IoUSfO4/NU8bbVQNTV+pG64PRBz"}]"#)).unwrap();
-            let notes: Vec<Note> = jedi::parse(&String::from(r#"[{"id":"015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":null,"user_id":51,"file":{},"keys":[{"k":"AAYBAAw652QkoEkgpi6TYrW3TTmDGz6fJk2rIB+wP2aguuxXFZOd7AL9p/Ka2tQ0lpEYzoAQEV7e03CgIoTaA0I=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592783,"body":"AAYBAAzNUsLEsUAek2V9bm6mRl4gihS9R54JtmbdTriCIXMBjqBrs6BPwa+BYYh//z+ISzYqU2RsdZNMnPXDyzLnvNYu97wYIprQA4KhbZrQpYvlJSeYb/ZZOlv9fEwuz8nCvovl7gPFqpQNRNFfj+QRgTmuT6nq2E9C/5R/HFeKV7paD6/xquD1BkLGpsKDGzqG07q7UMABWjFEXeMszBanCLLVl/CPy7l04hV5f5kx"},{"id":"015caf7b9db62af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a0209","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":null,"user_id":51,"file":{},"keys":[{"k":"AAYBAAytb/Tb4SgnddLJ3+Ony/WEeSMaTcz+CKSnwgFOR8kuxxcQWzSkFkjZleatGXXYgxtV81SX6ENda5AS3WE=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592733,"body":"AAYBAAxOpF7pzavu2oCX+PK3GwOz0XOd0swJiMJGsY9AOZror6aTF7UMYdCqzKODEYIt+af0DrusX6Di3o5X9JevOPPpGszFdXCG3AtAaK2CCgFgHzEnXul11rDZe/xDib4FM0LTRIJxbkbs3UpwZc/evI3xDta91907MrPDb+jYmd/lFH2byMWqcP6SWCbpRPhFouhGYwUKwz9dxNagP+IIu2+CQwaKeEvboz2XZFzakjyHsHzQ"},{"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":null,"user_id":51,"file":{},"keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592545,"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl"}]"#)).unwrap();
+            let notes: Vec<Note> = jedi::parse(&String::from(r#"[
+                {"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","mod":1497592545,"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl","keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"user_id":51,"board_id":null,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"},
+                {"body":"AAYBAAxn4lZjNtOesNLrTWFlvtU46XFdtlhkmw24SbWWWc7YlLYAfFfYBcTf9hAqzeTqWgiOM48Ln5+Iy6dnzBWWGoThV46arfPYBRwxXGpGLm/GRKnBpSwoGIJHc6l4pEgpUYn0ozU6hvxrLiFzTebWPZDGFQqJIT2uRC3Frzs/gtpn3cyec/alRtywrWzkRhIyXagHAoEI1sbGatojXD6f3YVQD9ZmF6qWvLNDTuP/qaCM/eM2Um/Nwzg=","id":"015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","user_id":51,"keys":[{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAzbm2cMWZVRzKHwY34FmdBwOpyzTusHMLbb07K60bvi8FaK7QaVzx1GQlds8R/qlb5shkaTw+7nhTTB6sA="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAzKi0OOAhS4eNCKJdeVt+P//PERRjgaMOBOdCxqfk9NIe6TEQW1Arx40c4YuVInAi9HhHTtuaWZ+rzydDk="}],"mod":1497592783},
+                {"body":"AAYBAAxc9IwivKewKefuur8wn/FNbzic0iumwistONOnzewNQLrkdNoAEzeVT4dHc7oDlwrks4XZ3p4k3rkYUVjBf7qvAysN66iriXZwATU4YggKN1jCl+SvseuXBaRd1dkhADiQ7FJ8p9v7CMI3acA+13J66D/l5TuN01tQU6bHtYghwGWzOw8rMRAYNBait36+3C0iKLeJ8TStROS6cM1SlrvjudaC1uv9YVkYdfdHGDi1kOWGtwb/N4XZi70=","id":"015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","board_id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","user_id":51,"keys":[{"s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","k":"AAYBAAznB2cCD5W7QiOmu83X1jLukrnwfONjTEhHF+V/IdHb4mAKGXisF3Sxy62kYP+4kC7Zi1vqQHTpGQ4ZPjM="},{"b":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","k":"AAYBAAwaJPw5RwH4vdAFFX2Cdwj/s6p4CKjhm2EtpmBsqKVDDP+gBGD1YOnWvXh/48WfCBY4uSQwPREadTjXhuA="}],"mod":1498539524},
+                {"body":"AAYBAAzn9I3n6W0LvYaek6b0a9DODt4OW2iBh6/FIRDjinOCjGCLy+Dmd6rGJ/nvQiBt16Gfz69UKtcEn5DG3yULKEi+1AOx8dL5nVa7Of6UCFMM65gFNso/pGXuQHzUO/yaIdzY/A36YExC+ZDmd+ypmDnnlOggfUv48YeENpIrTuWqKl0r1tW4kZtSGNLsLZLqiii5YP3eDiqY6U1MaM8A6vAwXvSfgBCuQmcDel1tTIkhKs1E19VemWSy4TV0Rp46M9cQ/hTIQOc0nFPZOZMpXq6AIj8gxjpwKdMk6sRLq5L2CjEQxN/RnAcry1pPlNMfhmSxYfZRvTbHbzgJ6XGsGNddCaRDZe+AWECqM4qCthaSW0buUL6U03cez1uW3poWjyNqPfZex4gI","id":"015d0aee51102af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a0249","space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","board_id":null,"user_id":51,"keys":[{"s":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","k":"AAYBAAyKhhYKuPhgjwa8F6HDpCZf6ICXguP4UigRSdqA4mMfn6rbMIa7S6UxTO2YM074fPSVK1+thohhyqlUMqY="}],"mod":1499126977},
+                {"file":{"body":"AAYBAAzodtG8+Uq9olvLXFY0bwdx37JhXJpLjVUHxDpTkwW2Ox7IXv9bJB0Zw6h1UNeoCjElX0eF4PjtKBt6ORyR+7e1vH7WCvDBeJXEHobyUPBRcFMEWbVIQpNl2RDtzQOLqjqj10O2B19K4Ujw6Z95gCL+0jIBE4L9PVXcQyN2Il5Po3i1NE6GR/lRSz8=","id":"015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5","size":174295,"has_data":2},"body":"AAYBAAxJgxn8iDMPMG/wE5q0V+NfIDfcCPv7rbijkovRC0rHQj81fjdDGCkG1RKKvTnUY2cqJ1ifGIAU9/DNwY3XtCQFEu29mdQIvAOBAOsv4t6OWR85JMCoTPbH3PBOlWpFiGiYr6u0zpMQD80vhmgXYCIpjz4p8nySgNQ9NWsLfDJQzzrAElp1na/fFt+YBhRF3CTY7l+8CL3uvOs=","id":"015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5","space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","board_id":null,"user_id":51,"has_file":true,"keys":[{"s":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","k":"AAYBAAy5kqVvdFgzGatNxyKDvi7+vXXfmKxEIvX3w5UdVO4H4xo45K/IOYyXqIx64d9p/kWos/RA9/kVlaDGPak="}],"mod":1499136849}
+            ]"#)).unwrap();
 
             for entry in &keychain { db.save(entry).unwrap(); }
             for space in &spaces { db.save(space).unwrap(); }
@@ -814,7 +820,7 @@ mod tests {
                 assert_eq!(profile_guard.keychain.entries.len(), 8);
                 assert_eq!(profile_guard.spaces.len(), 3);
                 assert_eq!(profile_guard.boards.len(), 3);
-                assert_eq!(profile_guard.boards[1].title.as_ref().unwrap(), &String::from("things i dont like"));
+                assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Bookmarks"));
                 turtl2.index_notes()
             })
             .and_then(move |_| {
@@ -828,21 +834,22 @@ mod tests {
                 // this stuff is mostly covered in the search tests, but let's
                 // just make sure here.
 
-                let qry = parserrr(r#"{"boards":["015a10537078b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901c5"]}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211"), String::from("015a105725ffb6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c901ef")]);
+                let qry = parserrr(r#"{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","boards":["015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034"]}"#);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"), String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b")]);
 
-                let qry = parserrr(r#"{"text":"story deployment"}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015a105a0e63b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90211")]);
+                let qry = parserrr(r#"{"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","text":"grandpa happy"}"#);
+                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5")]);
 
-                let qry = parserrr(r#"{"text":"story baby"}"#);
+                let qry = parserrr(r#"{"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","text":"grandpa happy"}"#);
                 assert_eq!(search.find(&qry).unwrap().len(), 0);
 
                 assert_eq!(
-                    search.tags_by_frequency(&Vec::new(), 9999).unwrap(),
+                    search.tags_by_frequency(&String::from("015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"), &Vec::new(), 9999).unwrap(),
                     vec![
-                        (String::from("morons"), 1),
-                        (String::from("programmers"), 1),
-                        (String::from("story"), 1),
+                        (String::from("fuck yeah"), 2),
+                        (String::from("america"), 1),
+                        (String::from("cult"), 1),
+                        (String::from("free market"), 1),
                     ]
                 );
                 FOk!(())
