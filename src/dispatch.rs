@@ -17,7 +17,11 @@ use ::util;
 use ::util::event::Emitter;
 use ::turtl::TurtlWrap;
 use ::search::Query;
+use ::models::user::User;
+use ::models::space::Space;
+use ::models::board::Board;
 use ::models::note::Note;
+use ::models::invite::Invite;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
@@ -184,6 +188,36 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                 turtl.events.trigger("app:shutdown", &jedi::to_val(&())?);
                 Ok(())
             },
+            "profile:sync:model" => {
+                let action: String = jedi::get(&["2"], &data)?;
+                let ty: String = jedi::get(&["3"], &data)?;
+                let mut db_guard = turtl.db.write().unwrap();
+                let db = match (*db_guard).as_mut() {
+                    Some(x) => x,
+                    None => return Err(TError::MissingField(String::from("dispatch: profile:sync:model -- turtl is missing `db` object"))),
+                };
+
+                match ty.as_ref() {
+                    "user" => {
+                        let model: User = jedi::get(&["4"], &data)?;
+                    },
+                    "space" => {
+                        let model: Space = jedi::get(&["4"], &data)?;
+                    },
+                    "board" => {
+                        let model: Board = jedi::get(&["4"], &data)?;
+                    },
+                    "note" => {
+                        let model: Note = jedi::get(&["4"], &data)?;
+                    },
+                    "invite" => {
+                        let model: Invite = jedi::get(&["4"], &data)?;
+                    },
+                    _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
+                }
+
+                Ok(())
+            },
             "profile:get-notes" => {
                 let note_ids = jedi::get(&["2"], &data)?;
                 let mid1 = mid.clone();
@@ -229,6 +263,18 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
                     });
                 util::future::run(runme);
                 Ok(())
+            },
+            "profile:get-tags" => {
+                let space_id: String = jedi::get(&["2"], &data)?;
+                let boards: Vec<String> = jedi::get(&["3"], &data)?;
+                let limit: i32 = jedi::get(&["4"], &data)?;
+                let search_guard = turtl.search.read().unwrap();
+                if search_guard.is_none() {
+                    return Err(TError::MissingField(String::from("dispatch: profile:find-notes -- turtl is missing `search` object")));
+                }
+                let search = search_guard.as_ref().unwrap();
+                let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
+                turtl.msg_success(&mid, jedi::to_val(&tags)?)
             },
             "ping" => {
                 info!("ping!");

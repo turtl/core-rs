@@ -1,14 +1,33 @@
 v0.7:
-- use libsodium for everything
-  - https://github.com/orthecreedence/sodiumoxide
-- does subkey storage system make sense?
-  - the "s"/"b" etc shit...can we restructure?
-- get rid of sync.immediate
+- syncing:
+  - add/edit/delete model (user, space, board, note, invite)
+    - (keychain managed internally)
+  - notify UI of API -> core sync
+  - notify UI of sync/login status
+  - notify core of UI data change
+    - reindex on note change
+  - track sync item failures via `freeze_sync_record`
+  - sync errors are now embedded in each failed sync item, no more passing errors
+    to `notify_sync_failure`
+  - generic sync endpoint for various objects
+    - add/edit/delete notes/boards/spaces/keychain/user/etc
+  - effective way to test sync via tests or at least client?
+  - outgoing file uploads
+    - can we do this without queuing? perhaps a stateless query that says
+      "here's all the notes w/ files i have, what are their file ids?"
+  	then compare the ids to what we have locally
+  - incoming file downloads
+    - store files in filesystem (not sqlite)
+    - filenames should be the <note.id>_<note.file.id>.enc
+- user
+  - change password
+  - delete account
+- get sync info (pending, failed)
+- share space
+- save file
+- send feedback
+- implement sync.immediate
 - send username/salt when joining
-- only store space keys in keychain. everything else should be subkeys
-- MsgPack for core <--> client comm
-  - https://github.com/3Hren/msgpack-rust
-  - https://github.com/kawanet/msgpack-lite
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
@@ -19,36 +38,14 @@ v0.7:
 	- move all boards into the new space
 	- move all notes into the new space
 
-user:
-- join
-- password change
-  - regen salt
-- email change
-
-sync:
-- track sync item failures via `freeze_sync_record`
-- sync errors are now embedded in each failed sync item, no more passing errors
-  to `notify_sync_failure`
-- generic sync endpoint for various objects
-  - add/edit/delete notes/boards/spaces/keychain/user/etc
-- notify UI of API -> core sync
-- notify UI of sync/login status
-- notify core of UI data change
-  - reindex on note change
-- effective way to test sync via tests or at least client?
-- outgoing file uploads
-  - can we do this without queuing? perhaps a stateless query that says
-    "here's all the notes w/ files i have, what are their file ids?"
-	then compare the ids to what we have locally
-- incoming file downloads
-  - store files in filesystem (not sqlite)
-  - filenames should be the <note.id>_<note.file.id>.enc
-
 models:
 - move over tests from JS
 
 invites:
 - NOTE: invite sending/accepting requires connection
 
-general:
+later:
+- MsgPack for core <--> client comm
+  - https://github.com/3Hren/msgpack-rust
+  - https://github.com/kawanet/msgpack-lite
 
