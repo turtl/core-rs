@@ -61,7 +61,7 @@ impl SyncOutgoing {
     }
 
     // TODO: mark the sync item as failed
-    fn freeze_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
+    fn freeze_sync_record(&self, _sync: &SyncRecord) -> TResult<()> {
         Ok(())
     }
 
