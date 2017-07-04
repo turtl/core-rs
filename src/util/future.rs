@@ -9,7 +9,7 @@ use ::std::sync::{Arc, RwLock};
 use ::std::thread;
 
 use ::futures::{Future, BoxFuture, Async};
-use ::futures::executor::{self, Spawn, Unpark};
+use ::futures::executor::{self, Spawn, Notify};
 use ::util;
 use ::util::thredder::Pipeline;
 
@@ -59,19 +59,20 @@ impl FutureCb {
 /// override telling the compiler as much.
 unsafe impl Sync for FutureCb {}
 
-/// A crude implementation of Unpark so we can drive our futures forward.
-struct ThreadUnpark { }
-impl ThreadUnpark {
-    fn new() -> ThreadUnpark { ThreadUnpark {} }
+/// A crude implementation of Notify so we can drive our futures forward.
+struct ThreadNotify { }
+impl ThreadNotify {
+    fn new() -> ThreadNotify { ThreadNotify {} }
 }
-impl Unpark for ThreadUnpark {
-    fn unpark(&self) { }
+impl Notify for ThreadNotify {
+    fn notify(&self, _id: usize) { }
 }
 
-/// Holds a future+task combo, using the Spawn/ThreadUnpark types.
+/// Holds a future+task combo, using the Spawn/ThreadNotify types.
 struct FutureTask {
+    id: usize,
     spawn: Spawn<BoxFuture<(), ()>>,
-    unpark: Arc<ThreadUnpark>,
+    notify: Arc<ThreadNotify>,
 }
 impl FutureTask {
     /// Create a new FutureTask, given a future.
@@ -80,18 +81,19 @@ impl FutureTask {
     {
         // cast the future to BoxFuture<(), ()>
         let future = future.map(|_| ()).map_err(|_| ()).boxed();
-        let unpark = Arc::new(ThreadUnpark::new());
+        let notify = Arc::new(ThreadNotify::new());
         // this creates our task/future combo
         let spawn = executor::spawn(future);
         FutureTask {
+            id: 0,
             spawn: spawn,
-            unpark: unpark,
+            notify: notify,
         }
     }
 
     /// Poll the Future/Task combo to drive it forward
     fn poll(&mut self) -> Result<Async<()>, ()> {
-        self.spawn.poll_future(self.unpark.clone())
+        self.spawn.poll_future_notify(&self.notify.clone(), self.id)
     }
 }
 

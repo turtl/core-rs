@@ -45,7 +45,14 @@ impl Pipeline {
     /// Return a future that resolves with a TurtlWrap object.
     pub fn next_fut(&self) -> TFutureResult<TurtlWrap> {
         let (fut_tx, fut_rx) = futures::oneshot::<TurtlWrap>();
-        self.next(move |turtl| { fut_tx.complete(turtl); });
+        self.next(move |turtl| {
+            match fut_tx.send(turtl) {
+                Ok(_) => {},
+                Err(_) => {
+                    error!("Pipeline::next_fut() -- receiver disappeared before `turtl` object could be sent");
+                }
+            };
+        });
         fut_rx
             .map_err(|_| TError::Msg(String::from("Pipeline::next_fut() -- future canceled")))
             .boxed()
