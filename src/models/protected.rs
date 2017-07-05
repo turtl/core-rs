@@ -22,10 +22,9 @@
 
 use ::std::collections::{HashMap};
 use ::std::fmt;
-use ::std::sync::{Arc, RwLock};
 
 use ::regex::Regex;
-use ::futures::Future;
+use ::futures::{future, Future};
 use ::encoding::{Encoding, DecoderTrap};
 use ::encoding::all::ISO_8859_1;
 
@@ -77,51 +76,55 @@ pub fn encrypt_key(encrypting_key: &Key, key_to_encrypt: Key) -> TResult<String>
 pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
     where T: Protected + Send + Sync + 'static
 {
-    debug!("protected::map_deserialize() -- starting on {} items", vec.len());
-    // this will hold the final result
-    let mapped = Arc::new(RwLock::new(Vec::new()));
-    // this gets replaced, iteratively, as we loop
-    let mut final_future = FOk!(());
-    let ref work = turtl.work;
-    for mut model in vec {
-        let pusher = mapped.clone();
-        // don't bother with models that don't have a key...
-        if model.key().is_none() {
-            warn!("map_deserialize: model {:?} has no key", model.id());
-            let mut vec_guard = pusher.write().unwrap();
-            vec_guard.push(model);
-            continue;
-        }
-        let mut model_clone = ftry!(model.clone());
-        let model_type = String::from(model.model_type());
-        let model_id = model.id().unwrap().clone();
-        // run the mapping, and store the resulting future
-        let future = work.run(move || model_clone.deserialize())
-            .and_then(move |item_mapped: Value| -> TFutureResult<()> {
-                // push our mapped item into our final vec
-                let mut vec_guard = pusher.write().unwrap();
-                ftry!(model.merge_fields(&item_mapped));
-                vec_guard.push(model);
-                FOk!(())
-            })
-            .or_else(move |e| -> TFutureResult<()> {
-                error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
-                FOk!(())
-            })
-            .boxed();
-        // join this most recent future with our previous results, throwing out
-        // the result values so's not to make the compiler flip its shit
-        final_future = final_future.join(future).map(|_| ()).boxed();
+    // Allows our future to collect a single result type which can then be
+    // filtered at the end so we only return models that successfully
+    // deserialized
+    enum DeserializeResult<T> {
+        Model(T),
+        Failed,
     }
-    // return our final result, unwrapping the vec we built from the confines of
-    // its concurrent prison before signing off.
-    final_future
-        .and_then(move |_| {
-            debug!("protected::map_deserialize() -- finishing");
-            match Arc::try_unwrap(mapped) {
-                Ok(x) => FOk!(x.into_inner().unwrap()),
-                Err(e) => FErr!(TError::BadValue(format!("protected::map_deserialize() -- error unwrapping final result from Arc: {:?}", e))),
+
+    debug!("protected::map_deserialize() -- starting on {} items", vec.len());
+    let ref work = turtl.work;
+    let futures = vec.into_iter()
+        .map(|mut model| {
+            // don't bother with models that don't have a key...
+            if model.key().is_none() {
+                warn!("map_deserialize: model {:?} has no key", model.id());
+                return FOk!(DeserializeResult::Failed);
             }
+            let mut model_clone = ftry!(model.clone());
+            let model_type = String::from(model.model_type());
+            let model_id = model.id().unwrap().clone();
+            // run the mapping, and store the resulting future
+            work.run(move || model_clone.deserialize())
+                .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
+                    ftry!(model.merge_fields(&item_mapped));
+                    FOk!(DeserializeResult::Model(model))
+                })
+                .or_else(move |e| -> TFutureResult<DeserializeResult<T>> {
+                    error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
+                    FOk!(DeserializeResult::Failed)
+                })
+                .boxed()
+        })
+        .collect::<Vec<_>>();
+    // wait for all our futures to finish. this will return them in order of
+    // starting (NOT order of completion).
+    future::join_all(futures)
+        .and_then(move |mapped| {
+            // only return the models that succeeded deserialization, preserving
+            // the order.
+            // TODO: benchmark if using an iterator is faster here
+            let mut final_models = Vec::with_capacity(mapped.len());
+            for result in mapped {
+                match result {
+                    DeserializeResult::Model(m) => { final_models.push(m) },
+                    DeserializeResult::Failed => {},
+                }
+            }
+            debug!("protected::map_deserialize() -- finishing");
+            FOk!(final_models)
         })
         .boxed()
 }
