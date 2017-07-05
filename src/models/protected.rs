@@ -96,7 +96,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             let mut model_clone = ftry!(model.clone());
             let model_type = String::from(model.model_type());
             let model_id = model.id().unwrap().clone();
-            // run the mapping, and store the resulting future
+            // run the deserialize, return the result into our future chain
             work.run(move || model_clone.deserialize())
                 .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
                     ftry!(model.merge_fields(&item_mapped));

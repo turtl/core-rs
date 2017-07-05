@@ -7,36 +7,41 @@ messaging:
 api:
   endpoint: "https://api.turtlapp.com/v2"
 
+sync:
+  enable_incoming: false
+  enable_outgoing: false
+
 schema:
-  users:
-  personas:
+  user:
+  keychain:
+    indexes:
+      - fields:
+        - item_id
   boards:
     indexes:
       - fields:
-          - user_id
+        - user_id
   notes:
     indexes:
       - fields:
-          - user_id
+        - user_id
       - fields:
-          - boards
+        - board_id
       - fields:
-          - has_file
+        - has_file
   invites:
   files:
     indexes:
       - fields:
-          - note_id
-      - fields:
-          - synced
-      - fields:
-          - has_data
+        - has_data
   sync_outgoing:
-    indexes: []
+    indexes:
+      - fields:
+        - failed
 
 # configuration for test client
 client:
   test:
-    username: slappy@turtl.it
+    username: slappy@turtlapp.com
     password: turtlesallthewaydown
 

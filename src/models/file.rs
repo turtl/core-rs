@@ -38,8 +38,6 @@ protected! {
     #[derive(Serialize, Deserialize)]
     pub struct FileData {
         #[protected_field(public)]
-        pub note_id: String,
-        #[protected_field(public)]
         pub has_data: bool,
 
         #[serde(skip_serializing_if = "Option::is_none")]
