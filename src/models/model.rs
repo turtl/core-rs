@@ -105,6 +105,9 @@ pub trait Model: Emitter + Serialize + DeserializeOwned {
     /// Get this model's ID
     fn id<'a>(&'a self) -> Option<&'a String>;
 
+    /// Generate an id for this model if it doesn't have one
+    fn generate_id<'a>(&'a mut self) -> TResult<&'a String>;
+
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
         jedi::stringify(self).map_err(|e| toterr!(e))
@@ -113,6 +116,11 @@ pub trait Model: Emitter + Serialize + DeserializeOwned {
     /// Create a new model from a JSON dump.
     fn clone_from(data: Value) -> TResult<Self> {
         jedi::from_val(data).map_err(|e| toterr!(e))
+    }
+
+    /// Determine if this model has been saved already or not
+    fn is_new(&self) -> bool {
+        self.id().is_none()
     }
 }
 
@@ -162,6 +170,13 @@ macro_rules! model {
                     Some(ref x) => Some(x),
                     None => None,
                 }
+            }
+
+            fn generate_id<'a>(&'a mut self) -> ::error::TResult<&'a String> {
+                if self.id.is_none() {
+                    self.id = Some(::models::model::cid()?);
+                }
+                Ok(self.id.as_ref().unwrap())
             }
         }
     }
