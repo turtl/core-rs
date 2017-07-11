@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn returns_correct_public_fields() {
         let dog = Dog::new();
-        assert_eq!(dog.public_fields(), ["id", "body", "keys", "size"]);
+        assert_eq!(dog.public_fields(), ["id", "keys", "body", "size"]);
     }
 
     #[test]
