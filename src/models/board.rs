@@ -1,10 +1,12 @@
 use ::jedi::Value;
 
 use ::error::TResult;
+use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::keychain::Keychain;
+use ::models::keychain::{Keychain, KeyRef};
 use ::turtl::Turtl;
+use ::sync::sync_model::MemorySaver;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -50,10 +52,27 @@ impl Keyfinder for Board {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
                 if !space_ids.contains(space_id) { continue; }
-                keychain.add_key(&user_id, space_id, space.key().unwrap(), &ty)?;
+                keychain.upsert_key(&user_id, space_id, space.key().unwrap(), &ty, None)?;
             }
         }
         Ok(keychain)
     }
+
+    fn get_keyrefs(&self, turtl: &Turtl) -> TResult<Vec<KeyRef<Key>>> {
+        let mut refs: Vec<KeyRef<Key>> = Vec::new();
+        let profile_guard = turtl.profile.read().unwrap();
+        for space in &profile_guard.spaces {
+            if space.id() == Some(&self.space_id) && space.key().is_some() {
+                refs.push(KeyRef {
+                    id: self.space_id.clone(),
+                    ty: String::from("s"),
+                    k: space.key().unwrap().clone(),
+                });
+            }
+        }
+        Ok(refs)
+    }
 }
+
+impl MemorySaver for Board {}
 

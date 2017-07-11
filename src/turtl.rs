@@ -364,7 +364,7 @@ impl Turtl {
         // check the keychain right off the bat. it's quick and easy, and most
         // entries are going to be here anyway
         if model.id().is_some() {
-            match keychain.find_entry(model.id().unwrap()) {
+            match keychain.find_key(model.id().unwrap()) {
                 Some(key) => return found_key(model, key),
                 None => {},
             }
@@ -401,7 +401,7 @@ impl Turtl {
         {
             let user_guard = self.user.read().unwrap();
             if user_guard.id().is_some() && user_guard.key().is_some() {
-                search.add_key(user_guard.id().unwrap(), user_guard.id().unwrap(), user_guard.key().unwrap(), &String::from("user"))?;
+                search.upsert_key(user_guard.id().unwrap(), user_guard.id().unwrap(), user_guard.key().unwrap(), &String::from("user"), None)?;
             }
         }
 
@@ -429,7 +429,7 @@ impl Turtl {
 
             // check if this object is in the keychain first. if so, we can use
             // its key to decrypt our encrypted key
-            match keychain.find_entry(object_id) {
+            match keychain.find_key(object_id) {
                 Some(decrypting_key) => {
                     match protected::decrypt_key(&decrypting_key, encrypted_key) {
                         Ok(key) => return found_key(model, key),
@@ -541,10 +541,10 @@ impl Turtl {
     /// Load/deserialize a set of notes by id.
     pub fn load_notes(&self, note_ids: &Vec<String>) -> TFutureResult<Vec<Note>> {
         let db_guard = self.db.read().unwrap();
-        if db_guard.is_none() {
-            return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object")));
-        }
-        let db = db_guard.as_ref().unwrap();
+        let db = match (*db_guard).as_ref() {
+            Some(x) => x,
+            None => return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
+        };
 
         let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
         ftry!(self.find_models_keys(&mut notes));
@@ -672,6 +672,7 @@ mod tests {
     use ::models::user::{self, User};
     use ::models::note::Note;
     use ::models::board::Board;
+    use ::sync::sync_model;
     use ::util::stopper::Stopper;
 
     protected! {
@@ -691,7 +692,7 @@ mod tests {
         let turtl = Turtl::new(Pipeline::new()).unwrap();
         if logged_in {
             let mut user_guard = turtl.user.write().unwrap();
-            let version = 0;    // version 0 is much quicker...
+            let version = 0;
             let (key, auth) = user::generate_auth(&String::from("timmy@killtheradio.net"), &String::from("gfffft"), version).unwrap();
             user_guard.id = Some(String::from("0158745252dbaf227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba033e1"));
             user_guard.do_login(key, auth);
@@ -716,7 +717,7 @@ mod tests {
 
         // add the note's key as a direct entry to the keychain
         let mut profile_guard = turtl.profile.write().unwrap();
-        profile_guard.keychain.add_key(&user_id, note.id().unwrap(), &note_key, &String::from("note")).unwrap();
+        profile_guard.keychain.upsert_key(&user_id, note.id().unwrap(), &note_key, &String::from("note"), None).unwrap();
         drop(profile_guard);
 
         // see if we can find the note as a direct entry
@@ -730,7 +731,7 @@ mod tests {
         let mut profile_guard = turtl.profile.write().unwrap();
         profile_guard.keychain.entries.clear();
         assert_eq!(profile_guard.keychain.entries.len(), 0);
-        profile_guard.keychain.add_key(&user_id, board.id().unwrap(), &board_key, &String::from("board")).unwrap();
+        profile_guard.keychain.upsert_key(&user_id, board.id().unwrap(), &board_key, &String::from("board"), None).unwrap();
         assert_eq!(profile_guard.keychain.entries.len(), 1);
         drop(profile_guard);
 
@@ -852,6 +853,78 @@ mod tests {
                         (String::from("free market"), 1),
                     ]
                 );
+                FOk!(())
+            })
+            .or_else(|e| -> TFutureResult<()> {
+                panic!("load profile error: {}", e);
+            })
+            .then(move |_| -> TFutureResult<()> {
+                stop2.set(false);
+                tx2.next(|_| {});
+                FOk!(())
+            });
+        util::future::run(runme);
+        util::future::start_poll(tx_main.clone());
+        while stop.running() {
+            let handler = tx_main.pop();
+            handler.call_box(turtl.clone());
+        }
+    }
+
+    #[test]
+    fn stores_models() {
+        let stop = Arc::new(Stopper::new());
+        stop.set(true);
+
+        let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
+        let mut user: User = jedi::parse(&String::from(r#"{"id":"51","storage":104857600}"#)).unwrap();
+        let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
+        user.do_login(user_key, user_auth);
+
+        let mut turtl = with_test(false);
+        turtl.user = RwLock::new(user);
+
+        let db = turtl.create_user_db().unwrap();
+        turtl.db = RwLock::new(Some(db));
+
+        let turtl: TurtlWrap = Arc::new(turtl);
+        let ref tx_main = turtl.tx_main;
+        let tx2 = turtl.tx_main.clone();
+        let stop2 = stop.clone();
+        let mut space: Space = jedi::parse(&String::from(r#"{
+            "user_id":69,
+            "title":"get a job"
+        }"#)).unwrap();
+        // save our space to "disk"
+        let space_val: Value = sync_model::save_model_sync(turtl.clone(), &mut space).unwrap();
+        let mut note: Note = jedi::parse(&String::from(r#"{
+            "user_id":69,
+            "space_id":"8884442",
+            "board_id":null,
+            "type":"bookmark",
+            "title":"my fav website LOL",
+            "tags":["website","bookmark","naturefresh milk"],
+            "url":"https://yvettesbridalformal.p1r8.net/",
+            "text":"v8!"
+        }"#)).unwrap();
+        let space_id: String = jedi::get(&["id"], &space_val).unwrap();
+        note.space_id = space_id.clone();
+        let turtl2 = turtl.clone();
+        // save our note to "disk"
+        let runme = sync_model::save_model(turtl.clone(), note)
+            .and_then(move |val: Value| -> TFutureResult<String> {
+                let saved_model: Note = jedi::from_val(val).unwrap();
+                assert!(saved_model.id().is_some());
+                assert_eq!(saved_model.space_id, space_id);
+                assert!(saved_model.get_body().is_some());
+                FOk!(saved_model.id().unwrap().clone())
+            })
+            .and_then(move |id: String| -> TFutureResult<Vec<Note>> {
+                turtl2.load_notes(&vec![id.clone()])
+            })
+            .and_then(|notes: Vec<Note>| -> TFutureResult<()> {
+                assert_eq!(notes.len(), 1);
+                assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
                 FOk!(())
             })
             .or_else(|e| -> TFutureResult<()> {

@@ -1,5 +1,6 @@
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
+use ::sync::sync_model::MemorySaver;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -32,4 +33,6 @@ make_storable!(Invite, "invites");
 make_basic_sync_model!(Invite);
 
 impl Keyfinder for Invite {}
+
+impl MemorySaver for Invite {}
 

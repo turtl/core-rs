@@ -133,13 +133,22 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
 /// Allows a model to expose a key search
 pub trait Keyfinder {
     /// Grabs a model's key search. This is mainly used for things like Note,
-    /// which will often search in boards for a key.
-    ///
-    /// Note that we actually use the Keychain object for searching here, which
-    /// is distinct from the original Turtl method of building a separate search
-    /// object. Much cleaner now.
+    /// which will often search in spaces/boards for a key.
     fn get_key_search(&self, _: &Turtl) -> TResult<Keychain> {
         Ok(Keychain::new())
+    }
+
+    /// When a model is about to be saved, it will often want to encrypt its
+    /// key with the keys of other objects and store it in itself (the concept
+    /// of subkeys). Here, we allow an override for this.
+    fn get_keyrefs(&self, _: &Turtl) -> TResult<Vec<KeyRef<Key>>> {
+        Ok(Vec::new())
+    }
+
+    /// Whether or not this model's key should be added directly to the user's
+    /// Keychain. Default to NO
+    fn add_to_keychain(&self) -> bool {
+        false
     }
 }
 
@@ -403,7 +412,9 @@ macro_rules! protected {
                 #[serde(skip)]
                 _key: Option<::crypto::Key>,
 
+                #[protected_field(public)]
                 keys: Option<Vec<::std::collections::HashMap<String, String>>>,
+                #[protected_field(public)]
                 body: Option<String>, 
 
                 $( $inner )*

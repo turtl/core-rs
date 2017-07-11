@@ -3,9 +3,11 @@ use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::keychain::Keychain;
+use ::models::keychain::{Keychain, KeyRef};
 use ::models::file::File;
+use ::crypto::Key;
 use ::sync::item::SyncItem;
+use ::sync::sync_model::MemorySaver;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -108,7 +110,7 @@ impl Keyfinder for Note {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
                 if !space_ids.contains(space_id) { continue; }
-                keychain.add_key(&user_id, space_id, space.key().unwrap(), &ty)?;
+                keychain.upsert_key(&user_id, space_id, space.key().unwrap(), &ty, None)?;
             }
         }
         if board_ids.len() > 0 {
@@ -118,10 +120,42 @@ impl Keyfinder for Note {
                 if board.id().is_none() || board.key().is_none() { continue; }
                 let board_id = board.id().unwrap();
                 if !board_ids.contains(board_id) { continue; }
-                keychain.add_key(&user_id, board_id, board.key().unwrap(), &ty)?;
+                keychain.upsert_key(&user_id, board_id, board.key().unwrap(), &ty, None)?;
             }
         }
         Ok(keychain)
     }
+
+    fn get_keyrefs(&self, turtl: &Turtl) -> TResult<Vec<KeyRef<Key>>> {
+        let mut refs: Vec<KeyRef<Key>> = Vec::new();
+        let profile_guard = turtl.profile.read().unwrap();
+        for space in &profile_guard.spaces {
+            if space.id() == Some(&self.space_id) && space.key().is_some() {
+                refs.push(KeyRef {
+                    id: self.space_id.clone(),
+                    ty: String::from("s"),
+                    k: space.key().unwrap().clone(),
+                });
+            }
+        }
+
+        match self.board_id {
+            Some(ref board_id) => {
+                for board in &profile_guard.boards {
+                    if board.id() == Some(board_id) && board.key().is_some() {
+                        refs.push(KeyRef {
+                            id: board_id.clone(),
+                            ty: String::from("b"),
+                            k: board.key().unwrap().clone(),
+                        });
+                    }
+                }
+            },
+            None => {},
+        }
+        Ok(refs)
+    }
 }
+
+impl MemorySaver for Note {}
 

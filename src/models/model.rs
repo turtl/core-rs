@@ -101,9 +101,12 @@ pub fn id_timestamp(id: &String) -> TResult<i64> {
 
 /// The model trait defines an interface for (de)serializable objects that track
 /// their changes via eventing.
-pub trait Model: Emitter + Serialize + DeserializeOwned {
+pub trait Model: Emitter + Serialize + DeserializeOwned + Default {
     /// Get this model's ID
     fn id<'a>(&'a self) -> Option<&'a String>;
+
+    /// Set this model's ID
+    fn set_id<'a>(&mut self, id: String);
 
     /// Generate an id for this model if it doesn't have one
     fn generate_id<'a>(&'a mut self) -> TResult<&'a String>;
@@ -170,6 +173,10 @@ macro_rules! model {
                     Some(ref x) => Some(x),
                     None => None,
                 }
+            }
+
+            fn set_id(&mut self, id: String) {
+                self.id = Some(id);
             }
 
             fn generate_id<'a>(&'a mut self) -> ::error::TResult<&'a String> {

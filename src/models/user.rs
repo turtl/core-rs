@@ -11,6 +11,7 @@ use ::futures::Future;
 use ::turtl::TurtlWrap;
 use ::api::ApiReq;
 use ::util::event::Emitter;
+use ::sync::sync_model::MemorySaver;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -34,6 +35,8 @@ make_storable!(User, "users");
 make_basic_sync_model!(User);
 
 impl Keyfinder for User {}
+
+impl MemorySaver for User {}
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16) -> TResult<Key> {

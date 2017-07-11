@@ -4,6 +4,8 @@ use ::error::TResult;
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
+use ::sync::sync_model::{self, MemorySaver};
+use ::turtl::TurtlWrap;
 
 /// Used as an easy object to reference other keys
 pub struct KeyRef<T> {
@@ -86,6 +88,8 @@ pub struct Keychain {
 
 impl Keyfinder for KeychainEntry {}
 
+impl MemorySaver for KeychainEntry {}
+
 impl Keychain {
     /// Create an empty Keychain
     pub fn new() -> Keychain {
@@ -94,26 +98,73 @@ impl Keychain {
         }
     }
 
-    /// Add a key to the keychain
-    pub fn add_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
-        let mut entry = KeychainEntry::new_with_id()?;
+    /// Upsert a key to the keychain
+    pub fn upsert_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String, sync_save: Option<TurtlWrap>) -> TResult<()> {
+        let remove = {
+            let existing = self.find_entry(item_id);
+            match existing {
+                Some(entry) => {
+                    if entry.k.is_some() && entry.k.as_ref().unwrap() == key {
+                        return Ok(());
+                    }
+                    true
+                },
+                None => false,
+            }
+        };
+        if remove { self.remove_entry(item_id, sync_save.clone())?; }
+        let mut entry = KeychainEntry::new();
         entry.type_ = ty.clone();
         entry.user_id = user_id.clone();
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
+        // if we're saving the model, persist it before adding to the keychain
+        match sync_save {
+            Some(turtl) => { sync_model::save_model_sync(turtl, &mut entry)?; },
+            None => { entry.generate_id()?; },
+        }
         self.entries.push(entry);
         Ok(())
     }
 
-    /// Find the key matching a given item id
-    pub fn find_entry(&self, item_id: &String) -> Option<Key> {
+    /// Remove a keychain entry
+    pub fn remove_entry(&mut self, item_id: &String, sync_save: Option<TurtlWrap>) -> TResult<()> {
+        match sync_save {
+            Some(turtl) => {
+                for entry in &mut self.entries {
+                    if &entry.item_id != item_id { continue; }
+                    sync_model::delete_model::<KeychainEntry>(turtl.clone(), entry.id().unwrap())?;
+                }
+            },
+            None => {},
+        }
+        self.entries.retain(|entry| {
+            &entry.item_id != item_id
+        });
+        Ok(())
+    }
+
+    /// Find the KeychainEntry matching the given item id
+    pub fn find_entry<'a>(&'a self, item_id: &String) -> Option<&'a KeychainEntry> {
         for entry in &self.entries {
-            if !entry.k.is_some() { continue; }
             if &entry.item_id == item_id {
-                return Some(entry.k.as_ref().unwrap().clone());
+                return Some(entry);
             }
         }
         None
+    }
+
+    /// Find the key matching a given item id
+    pub fn find_key(&self, item_id: &String) -> Option<Key> {
+        match self.find_entry(item_id) {
+            Some(entry) => {
+                if !entry.k.is_some() { return None; }
+                Some(entry.k.as_ref().unwrap().clone())
+            },
+            None => {
+                None
+            },
+        }
     }
 
     /// Find ALL matching keys for an object.

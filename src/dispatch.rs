@@ -22,6 +22,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
+use ::sync::sync_model;
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
@@ -191,30 +192,40 @@ pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
             "profile:sync:model" => {
                 let action: String = jedi::get(&["2"], &data)?;
                 let ty: String = jedi::get(&["3"], &data)?;
-                let mut db_guard = turtl.db.write().unwrap();
-                let db = match (*db_guard).as_mut() {
-                    Some(x) => x,
-                    None => return Err(TError::MissingField(String::from("dispatch: profile:sync:model -- turtl is missing `db` object"))),
-                };
 
-                match ty.as_ref() {
-                    "user" => {
-                        let model: User = jedi::get(&["4"], &data)?;
+                let runme = match action.as_ref() {
+                    "create" | "update" => {
+                        let turtl2 = turtl.clone();
+                        match ty.as_ref() {
+                            "user" => {
+                                let model: User = jedi::get(&["4"], &data)?;
+                                sync_model::save_model(turtl2, model)
+                            },
+                            "space" => {
+                                let model: Space = jedi::get(&["4"], &data)?;
+                                sync_model::save_model(turtl2, model)
+                            },
+                            "board" => {
+                                let model: Board = jedi::get(&["4"], &data)?;
+                                sync_model::save_model(turtl2, model)
+                            },
+                            "note" => {
+                                let model: Note = jedi::get(&["4"], &data)?;
+                                sync_model::save_model(turtl2, model)
+                            },
+                            "invite" => {
+                                let model: Invite = jedi::get(&["4"], &data)?;
+                                sync_model::save_model(turtl2, model)
+                            },
+                            _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
+                        }
                     },
-                    "space" => {
-                        let model: Space = jedi::get(&["4"], &data)?;
+                    "delete" => {
+                        FOk!(Value::Null)
                     },
-                    "board" => {
-                        let model: Board = jedi::get(&["4"], &data)?;
-                    },
-                    "note" => {
-                        let model: Note = jedi::get(&["4"], &data)?;
-                    },
-                    "invite" => {
-                        let model: Invite = jedi::get(&["4"], &data)?;
-                    },
-                    _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
-                }
+                    _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync action {}", action))),
+                };
+                util::future::run(runme);
 
                 Ok(())
             },

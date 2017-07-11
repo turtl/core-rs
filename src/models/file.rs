@@ -1,10 +1,7 @@
-use ::std::sync::Arc;
-
 use ::jedi::{self, Value};
 use ::error::TResult;
 use ::storage::Storage;
 use ::sync::item::SyncItem;
-use ::models::storable::Storable;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
@@ -65,10 +62,8 @@ make_basic_sync_model!{ FileData,
         Ok(sync_item)
     }
 
-    fn db_save<T>(&self, db: &Arc<Storage>, model: &T) -> TResult<()>
-        where T: Protected + Storable
-    {
-        db.save(model)
+    fn db_save(&self, db: &Storage) -> TResult<()> {
+        db.save(self)
         // TODO: add to file download queue
     }
 }
