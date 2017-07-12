@@ -8,15 +8,13 @@ use ::std::collections::HashMap;
 use ::std::fs;
 
 use ::regex::Regex;
-use ::futures::Future;
 use ::num_cpus;
 
 use ::jedi::{self, Value};
 use ::config;
 
-use ::error::{TResult, TFutureResult, TError};
+use ::error::{TResult, TError};
 use ::crypto::Key;
-use ::util;
 use ::util::event::{self, Emitter};
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -50,9 +48,6 @@ pub struct Turtl {
     /// Need to do some CPU-intensive work and have a Future finished when it's
     /// done? Send it here! Great for decrypting models.
     pub work: Thredder,
-    /// Need to do some I/O and have a Future finished when it's done? Send it
-    /// here! Great for API calls.
-    pub async: Thredder,
     /// Allows us to send messages to our UI
     pub msg: Messenger,
     /// A storage system dedicated to key-value data. This *must* be initialized
@@ -100,7 +95,6 @@ impl Turtl {
             api: api,
             msg: Messenger::new(),
             work: Thredder::new("work", num_workers as u32),
-            async: Thredder::new("async", 2),
             kv: kv,
             db: RwLock::new(None),
             search: RwLock::new(None),
@@ -163,21 +157,12 @@ impl Turtl {
     }
 
     /// Log a user in
-    pub fn login(&self, username: String, password: String) -> TFutureResult<()> {
-        self.with_next_fut()
-            .and_then(move |turtl| -> TFutureResult<()> {
-                let turtl2 = turtl.clone();
-                User::login(turtl.clone(), &username, &password)
-                    .and_then(move |_| -> TFutureResult<()> {
-                        let db = ftry!(turtl2.create_user_db());
-                        let mut db_guard = turtl2.db.write().unwrap();
-                        *db_guard = Some(db);
-                        drop(db_guard);
-                        FOk!(())
-                    })
-                    .boxed()
-            })
-            .boxed()
+    pub fn login(&self, username: String, password: String) -> TResult<()> {
+        User::login(self, &username, &password)?;
+        let db = self.create_user_db()?;
+        let mut db_guard = self.db.write().unwrap();
+        *db_guard = Some(db);
+        Ok(())
     }
 
     /*
@@ -200,116 +185,91 @@ impl Turtl {
     */
 
     /// Log a user out
-    pub fn logout(&self) -> TFutureResult<()> {
-        self.with_next_fut()
-            .and_then(|turtl| -> TFutureResult<()> {
-                turtl.events.trigger("sync:shutdown", &Value::Bool(false));
-                ftry!(User::logout(turtl.clone()));
-
-                // wipe the user db
-                let mut db_guard = turtl.db.write().unwrap();
-                *db_guard = None;
-                FOk!(())
-            })
-            .boxed()
-    }
-
-    /// Given that our API is synchronous but we need to not block the main
-    /// thread, we wrap it here such that we can do all the setup/teardown of
-    /// handing the Api object off to a closure that runs inside of our `async`
-    /// runner.
-    pub fn with_api<F>(&self, cb: F) -> TFutureResult<Value>
-        where F: FnOnce(Arc<Api>) -> TResult<Value> + Send + Sync + 'static
-    {
-        let api = self.api.clone();
-        self.async.run(move || {
-            cb(api)
-        })
+    pub fn logout(&self) -> TResult<()> {
+        self.events.trigger("sync:shutdown", &Value::Bool(false));
+        User::logout(self)?;
+        let mut db_guard = self.db.write().unwrap();
+        *db_guard = None;
+        Ok(())
     }
 
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
-    pub fn start_sync(&self) -> TResult<()> {
+    pub fn start_sync(turtl: TurtlWrap) -> TResult<()> {
         // create the ol' in/out (in/out) db connections for our sync system
-        let db_out = Arc::new(self.create_user_db()?);
-        let db_in = Arc::new(self.create_user_db()?);
+        let db_out = Arc::new(turtl.create_user_db()?);
+        let db_in = Arc::new(turtl.create_user_db()?);
         // start the sync, and save the resulting state into Turtl
-        let sync_state = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
+        let sync_state = sync::start(turtl.tx_main.clone(), turtl.sync_config.clone(), turtl.api.clone(), db_out, db_in)?;
         {
-            let mut state_guard = self.sync_state.write().unwrap();
+            let mut state_guard = turtl.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
         }
 
-        // set up some bindings to manage the sync system easier
-        self.with_next(|turtl| {
-            let turtl1 = turtl.clone();
-            turtl.events.bind_once("app:shutdown", move |_| {
-                turtl1.with_next(|turtl| {
-                    turtl.events.trigger("sync:shutdown", &jedi::obj());
-                });
-            }, "turtl:app:shutdown:sync");
+        let turtl1 = turtl.clone();
+        turtl.events.bind_once("app:shutdown", move |_| {
+            turtl1.events.trigger("sync:shutdown", &jedi::obj());
+        }, "turtl:app:shutdown:sync");
 
-            let sync_state1 = turtl.sync_state.clone();
-            let sync_state2 = turtl.sync_state.clone();
-            let sync_state3 = turtl.sync_state.clone();
-            turtl.events.bind_once("sync:shutdown", move |joinval| {
-                let join = match *joinval {
-                    Value::Bool(x) => x,
-                    _ => false,
-                };
-                let mut guard = sync_state1.write().unwrap();
-                if guard.is_some() {
-                    let state = guard.as_mut().unwrap();
-                    (state.shutdown)();
-                    if join {
-                        loop {
-                            let hn = state.join_handles.pop();
-                            match hn {
-                                Some(x) => match x.join() {
-                                    Ok(_) => (),
-                                    Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
-                                },
-                                None => break,
-                            }
+        let sync_state1 = turtl.sync_state.clone();
+        let sync_state2 = turtl.sync_state.clone();
+        let sync_state3 = turtl.sync_state.clone();
+        turtl.events.bind_once("sync:shutdown", move |joinval| {
+            let join = match *joinval {
+                Value::Bool(x) => x,
+                _ => false,
+            };
+            let mut guard = sync_state1.write().unwrap();
+            if guard.is_some() {
+                let state = guard.as_mut().unwrap();
+                (state.shutdown)();
+                if join {
+                    loop {
+                        let hn = state.join_handles.pop();
+                        match hn {
+                            Some(x) => match x.join() {
+                                Ok(_) => (),
+                                Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
+                            },
+                            None => break,
                         }
                     }
                 }
-                *guard = None;
-            }, "turtl:sync:shutdown");
-            turtl.events.bind("sync:pause", move |_| {
-                let guard = sync_state2.read().unwrap();
-                if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
-            }, "turtl:sync:pause");
-            turtl.events.bind("sync:resume", move |_| {
-                let guard = sync_state3.read().unwrap();
-                if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
-            }, "turtl:sync:resume");
-            let turtl2 = turtl.clone();
-            turtl.events.bind("sync:incoming:init:done", move |err| {
-                // don't load the profile if we didn't sync correctly
-                match *err {
-                    Value::Bool(_) => {},
-                    _ => return error!("turtl::sync:incoming:init:done -- sync error, skipping profile load"),
-                }
-                let turtl3 = turtl2.clone();
-                let turtl4 = turtl2.clone();
-                let runme = turtl2.load_profile()
-                    .and_then(move |_| {
-                        ftry!(Messenger::event("profile:loaded", jedi::obj()));
-                        turtl3.index_notes()
-                    })
-                    .and_then(|_| {
-                        ftry!(Messenger::event("profile:indexed", jedi::obj()));
-                        FOk!(())
-                    })
-                    .or_else(move |e| -> TFutureResult<()> {
-                        error!("turtl -- sync:load-profile: problem loading profile: {}", e);
-                        ftry!(turtl4.error_event(&e, "load_profile"));
-                        FOk!(())
-                    });
-                util::future::run(runme);
-            }, "sync:incoming:init:done");
-        });
+            }
+            *guard = None;
+        }, "turtl:sync:shutdown");
+        turtl.events.bind("sync:pause", move |_| {
+            let guard = sync_state2.read().unwrap();
+            if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
+        }, "turtl:sync:pause");
+        turtl.events.bind("sync:resume", move |_| {
+            let guard = sync_state3.read().unwrap();
+            if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
+        }, "turtl:sync:resume");
+        let turtl2 = turtl.clone();
+        turtl.events.bind("sync:incoming:init:done", move |err| {
+            // don't load the profile if we didn't sync correctly
+            match *err {
+                Value::Bool(_) => {},
+                _ => return error!("turtl::sync:incoming:init:done -- sync error, skipping profile load"),
+            }
+            let turtl3 = turtl2.clone();
+            let turtl4 = turtl2.clone();
+            turtl2.load_profile()
+                .and_then(move |_| {
+                    Messenger::event("profile:loaded", jedi::obj())?;
+                    turtl3.index_notes()
+                })
+                .and_then(|_| {
+                    Messenger::event("profile:indexed", jedi::obj())?;
+                    Ok(())
+                })
+                .or_else(move |e| -> TResult<()> {
+                    error!("turtl -- sync:load-profile: problem loading profile: {}", e);
+                    turtl4.error_event(&e, "load_profile")?;
+                    Ok(())
+                });
+        }, "sync:incoming:init:done");
         Ok(())
     }
 
@@ -478,140 +438,92 @@ impl Turtl {
     ///
     /// Meaning, we decrypt the keychain, spaces, and boards and store them
     /// in-memory in our `turtl.profile` object.
-    pub fn load_profile(&self) -> TFutureResult<()> {
+    pub fn load_profile(&self) -> TResult<()> {
         let user_key = {
             let user_guard = self.user.read().unwrap();
             match user_guard.key() {
                 Some(x) => x.clone(),
-                None => return FErr!(TError::MissingData(String::from("turtl.load_profile() -- missing user key"))),
+                None => return Err(TError::MissingData(String::from("turtl.load_profile() -- missing user key"))),
             }
         };
         let db_guard = self.db.write().unwrap();
         if db_guard.is_none() {
-            return FErr!(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
+            return Err(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut keychain: Vec<KeychainEntry> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("keychain"))))));
-        let mut spaces: Vec<Space> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("spaces"))))));
-        let mut boards: Vec<Board> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("boards"))))));
+        let mut keychain: Vec<KeychainEntry> = jedi::from_val(jedi::to_val(&db.all("keychain")?)?)?;
+        let mut spaces: Vec<Space> = jedi::from_val(jedi::to_val(&db.all("spaces")?)?)?;
+        let mut boards: Vec<Board> = jedi::from_val(jedi::to_val(&db.all("boards")?)?)?;
 
         // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
 
-        // grab a clonable turtl context
-        self.with_next_fut()
-            .and_then(move |turtl| {
-                let turtl1 = turtl.clone();
-                let turtl2 = turtl.clone();
-                let turtl3 = turtl.clone();
-                // decrypt the keychain
-                protected::map_deserialize(turtl.as_ref(), keychain)
-                    .and_then(move |keychain: Vec<KeychainEntry>| -> TFutureResult<Vec<Space>> {
-                        // set the keychain into the profile
-                        let mut profile_guard = turtl1.profile.write().unwrap();
-                        profile_guard.keychain.entries = keychain;
-                        drop(profile_guard);
-                        // now decrypt the spaces
-                        ftry!(turtl1.find_models_keys(&mut spaces));
-                        protected::map_deserialize(turtl1.as_ref(), spaces)
-                    })
-                    .and_then(move |spaces: Vec<Space>| -> TFutureResult<Vec<Board>> {
-                        // set the spaces into the profile
-                        let mut profile_guard = turtl2.profile.write().unwrap();
-                        profile_guard.spaces = spaces;
-                        drop(profile_guard);
-                        // now decrypt the boards
-                        ftry!(turtl2.find_models_keys(&mut boards));
-                        protected::map_deserialize(turtl2.as_ref(), boards)
-                    })
-                    .and_then(move |boards: Vec<Board>| -> TFutureResult<()> {
-                        // set the boards into the profile
-                        let mut profile_guard = turtl3.profile.write().unwrap();
-                        profile_guard.boards = boards;
-                        drop(profile_guard);
+        // decrypt the keychain
+        let keychain: Vec<KeychainEntry> = protected::map_deserialize(self, keychain)?;
+        let mut profile_guard = self.profile.write().unwrap();
+        profile_guard.keychain.entries = keychain;
+        drop(profile_guard);
 
-                        turtl3.events.trigger("profile:loaded", &jedi::obj());
-                        FOk!(())
-                    })
-                    .boxed()
-            })
-            .boxed()
+        // now decrypt the spaces
+        self.find_models_keys(&mut spaces)?;
+        let spaces: Vec<Space> = protected::map_deserialize(self, spaces)?;
+        // set the spaces into the profile
+        let mut profile_guard = self.profile.write().unwrap();
+        profile_guard.spaces = spaces;
+        drop(profile_guard);
+
+        // now decrypt the boards
+        self.find_models_keys(&mut boards)?;
+        let boards: Vec<Board> = protected::map_deserialize(self, boards)?;
+        // set the boards into the profile
+        let mut profile_guard = self.profile.write().unwrap();
+        profile_guard.boards = boards;
+        drop(profile_guard);
+
+        self.events.trigger("profile:loaded", &jedi::obj());
+        Ok(())
     }
 
     /// Load/deserialize a set of notes by id.
-    pub fn load_notes(&self, note_ids: &Vec<String>) -> TFutureResult<Vec<Note>> {
+    pub fn load_notes(&self, note_ids: &Vec<String>) -> TResult<Vec<Note>> {
         let db_guard = self.db.read().unwrap();
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
-            None => return FErr!(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
+            None => return Err(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
         };
 
-        let mut notes: Vec<Note> = ftry!(jedi::from_val(Value::Array(ftry!(db.by_id("notes", note_ids)))));
-        ftry!(self.find_models_keys(&mut notes));
-        self.with_next_fut()
-            .and_then(move |turtl| -> TFutureResult<Vec<Note>> {
-                protected::map_deserialize(turtl.clone().as_ref(), notes)
-            })
-            .boxed()
+        let mut notes: Vec<Note> = jedi::from_val(Value::Array(db.by_id("notes", note_ids)?))?;
+        self.find_models_keys(&mut notes)?;
+        protected::map_deserialize(self, notes)
     }
 
     /// Take all the (encrypted) notes in our profile data then decrypt, index,
     /// and free them. The idea is we can get a set of note IDs from a search,
     /// but we're not holding all our notes decrypted in memory at all times.
-    pub fn index_notes(&self) -> TFutureResult<()> {
+    pub fn index_notes(&self) -> TResult<()> {
         let db_guard = self.db.write().unwrap();
         if db_guard.is_none() {
-            return FErr!(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
+            return Err(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut notes: Vec<Note> = ftry!(jedi::from_val(ftry!(jedi::to_val(&ftry!(db.all("notes"))))));
-        ftry!(self.find_models_keys(&mut notes));
-        self.with_next_fut()
-            .and_then(move |turtl| {
-                let turtl1 = turtl.clone();
-                protected::map_deserialize(turtl.as_ref(), notes)
-                    .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
-                        let search = ftry!(Search::new());
-                        for note in &notes {
-                            match search.index_note(note) {
-                                Ok(_) => {},
-                                // keep going on error
-                                Err(e) => error!("turtl.index_notes() -- problem indexing note {:?}: {}", note.id(), e),
-                            }
-                        }
-                        let mut search_guard = turtl1.search.write().unwrap();
-                        *search_guard = Some(search);
-                        FOk!(())
-                    })
-                    .or_else(|e| -> TFutureResult<()> {
-                        error!("turtl.index_notes() -- there was a problem indexing notes: {}", e);
-                        FErr!(e)
-                    })
-                    .boxed()
-            })
-            .boxed()
-    }
-
-    /// Run the given callback on the next main loop. Essentially gives us a
-    /// setTimeout (if you are familiar). This means we can do something after
-    /// the stack is unwound, but get a fresh Turtl context for our callback.
-    ///
-    /// Very useful for (un)binding events and such while inside of another
-    /// triggered event (which normally deadlocks).
-    ///
-    /// Also note that this doesn't call the `cb` with `Turtl`, but instead
-    /// `TurtlWrap` which is also nice because we can `.clone()` it and use it
-    /// in multiple callbacks.
-    pub fn with_next<F>(&self, cb: F)
-        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
-    {
-        self.tx_main.next(cb);
-    }
-
-    /// Return a future that resolves with a TurtlWrap object on the next main
-    /// loop.
-    pub fn with_next_fut(&self) -> TFutureResult<TurtlWrap> {
-        self.tx_main.next_fut()
+        let mut notes: Vec<Note> = jedi::from_val(jedi::to_val(&db.all("notes")?)?)?;
+        self.find_models_keys(&mut notes)?;
+        let notes: Vec<Note> = protected::map_deserialize(self, notes)
+            .or_else(|e| -> TResult<Vec<Note>> {
+                error!("turtl.index_notes() -- there was a problem indexing notes: {}", e);
+                Err(e)
+            })?;
+        let search = Search::new()?;
+        for note in &notes {
+            match search.index_note(note) {
+                Ok(_) => {},
+                // keep going on error
+                Err(e) => error!("turtl.index_notes() -- problem indexing note {:?}: {}", note.id(), e),
+            }
+        }
+        let mut search_guard = self.search.write().unwrap();
+        *search_guard = Some(search);
+        Ok(())
     }
 
     /// Log out the current user (if logged in) and wipe ALL local SQL databases
@@ -656,15 +568,11 @@ mod tests {
 
     use ::std::sync::{Arc, RwLock};
 
-    use ::futures::Future;
-
     use ::config;
     use ::jedi;
 
-    use ::error::TFutureResult;
     use ::crypto::{self, Key};
     use ::search::Query;
-    use ::util;
     use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
@@ -673,7 +581,6 @@ mod tests {
     use ::models::note::Note;
     use ::models::board::Board;
     use ::sync::sync_model;
-    use ::util::stopper::Stopper;
 
     protected! {
         #[derive(Serialize, Deserialize)]
@@ -774,9 +681,6 @@ mod tests {
 
     #[test]
     fn loads_profile_search_notes() {
-        let stop = Arc::new(Stopper::new());
-        stop.set(true);
-
         let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
         let mut user: User = jedi::parse(&String::from(r#"{"id":"51","storage":104857600}"#)).unwrap();
         let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
@@ -809,73 +713,46 @@ mod tests {
         }
         turtl.db = RwLock::new(Some(db));
 
-        let turtl = Arc::new(turtl);
-        let ref tx_main = turtl.tx_main;
-        let turtl2 = turtl.clone();
-        let turtl3 = turtl.clone();
-        let tx2 = turtl.tx_main.clone();
-        let stop2 = stop.clone();
-        let runme = turtl.load_profile()
-            .and_then(move |_| {
-                let profile_guard = turtl2.profile.read().unwrap();
-                assert_eq!(profile_guard.keychain.entries.len(), 8);
-                assert_eq!(profile_guard.spaces.len(), 3);
-                assert_eq!(profile_guard.boards.len(), 3);
-                assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Bookmarks"));
-                turtl2.index_notes()
-            })
-            .and_then(move |_| {
-                fn parserrr(json: &str) -> Query {
-                    jedi::parse(&String::from(json)).unwrap()
-                }
+        turtl.load_profile().unwrap();
+        let profile_guard = turtl.profile.read().unwrap();
+        assert_eq!(profile_guard.keychain.entries.len(), 8);
+        assert_eq!(profile_guard.spaces.len(), 3);
+        assert_eq!(profile_guard.boards.len(), 3);
+        assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Bookmarks"));
+        turtl.index_notes().unwrap();
 
-                let search_guard = turtl3.search.read().unwrap();
-                let search = search_guard.as_ref().unwrap();
-
-                // this stuff is mostly covered in the search tests, but let's
-                // just make sure here.
-
-                let qry = parserrr(r#"{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","boards":["015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034"]}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"), String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b")]);
-
-                let qry = parserrr(r#"{"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","text":"grandpa happy"}"#);
-                assert_eq!(search.find(&qry).unwrap(), vec![String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5")]);
-
-                let qry = parserrr(r#"{"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","text":"grandpa happy"}"#);
-                assert_eq!(search.find(&qry).unwrap().len(), 0);
-
-                assert_eq!(
-                    search.tags_by_frequency(&String::from("015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"), &Vec::new(), 9999).unwrap(),
-                    vec![
-                        (String::from("fuck yeah"), 2),
-                        (String::from("america"), 1),
-                        (String::from("cult"), 1),
-                        (String::from("free market"), 1),
-                    ]
-                );
-                FOk!(())
-            })
-            .or_else(|e| -> TFutureResult<()> {
-                panic!("load profile error: {}", e);
-            })
-            .then(move |_| -> TFutureResult<()> {
-                stop2.set(false);
-                tx2.next(|_| {});
-                FOk!(())
-            });
-        util::future::run(runme);
-        util::future::start_poll(tx_main.clone());
-        while stop.running() {
-            let handler = tx_main.pop();
-            handler.call_box(turtl.clone());
+        fn parserrr(json: &str) -> Query {
+            jedi::parse(&String::from(json)).unwrap()
         }
+
+        let search_guard = turtl.search.read().unwrap();
+        let search = search_guard.as_ref().unwrap();
+
+        // this stuff is mostly covered in the search tests, but let's
+        // just make sure here.
+
+        let qry = parserrr(r#"{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","boards":["015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034"]}"#);
+        assert_eq!(search.find(&qry).unwrap(), vec![String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"), String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b")]);
+
+        let qry = parserrr(r#"{"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","text":"grandpa happy"}"#);
+        assert_eq!(search.find(&qry).unwrap(), vec![String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5")]);
+
+        let qry = parserrr(r#"{"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","text":"grandpa happy"}"#);
+        assert_eq!(search.find(&qry).unwrap().len(), 0);
+
+        assert_eq!(
+            search.tags_by_frequency(&String::from("015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"), &Vec::new(), 9999).unwrap(),
+            vec![
+                (String::from("fuck yeah"), 2),
+                (String::from("america"), 1),
+                (String::from("cult"), 1),
+                (String::from("free market"), 1),
+            ]
+        );
     }
 
     #[test]
     fn stores_models() {
-        let stop = Arc::new(Stopper::new());
-        stop.set(true);
-
         let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
         let mut user: User = jedi::parse(&String::from(r#"{"id":"51","storage":104857600}"#)).unwrap();
         let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
@@ -888,15 +765,12 @@ mod tests {
         turtl.db = RwLock::new(Some(db));
 
         let turtl: TurtlWrap = Arc::new(turtl);
-        let ref tx_main = turtl.tx_main;
-        let tx2 = turtl.tx_main.clone();
-        let stop2 = stop.clone();
         let mut space: Space = jedi::parse(&String::from(r#"{
             "user_id":69,
             "title":"get a job"
         }"#)).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model_sync(turtl.clone(), &mut space).unwrap();
+        let space_val: Value = sync_model::save_model(turtl.clone(), &mut space).unwrap();
         let mut note: Note = jedi::parse(&String::from(r#"{
             "user_id":69,
             "space_id":"8884442",
@@ -909,38 +783,16 @@ mod tests {
         }"#)).unwrap();
         let space_id: String = jedi::get(&["id"], &space_val).unwrap();
         note.space_id = space_id.clone();
-        let turtl2 = turtl.clone();
         // save our note to "disk"
-        let runme = sync_model::save_model(turtl.clone(), note)
-            .and_then(move |val: Value| -> TFutureResult<String> {
-                let saved_model: Note = jedi::from_val(val).unwrap();
-                assert!(saved_model.id().is_some());
-                assert_eq!(saved_model.space_id, space_id);
-                assert!(saved_model.get_body().is_some());
-                FOk!(saved_model.id().unwrap().clone())
-            })
-            .and_then(move |id: String| -> TFutureResult<Vec<Note>> {
-                turtl2.load_notes(&vec![id.clone()])
-            })
-            .and_then(|notes: Vec<Note>| -> TFutureResult<()> {
-                assert_eq!(notes.len(), 1);
-                assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
-                FOk!(())
-            })
-            .or_else(|e| -> TFutureResult<()> {
-                panic!("load profile error: {}", e);
-            })
-            .then(move |_| -> TFutureResult<()> {
-                stop2.set(false);
-                tx2.next(|_| {});
-                FOk!(())
-            });
-        util::future::run(runme);
-        util::future::start_poll(tx_main.clone());
-        while stop.running() {
-            let handler = tx_main.pop();
-            handler.call_box(turtl.clone());
-        }
+        let val: Value = sync_model::save_model(turtl.clone(), &mut note).unwrap();
+        let saved_model: Note = jedi::from_val(val).unwrap();
+        assert!(saved_model.id().is_some());
+        assert_eq!(saved_model.space_id, space_id);
+        assert!(saved_model.get_body().is_some());
+        let id: String = saved_model.id().unwrap().clone();
+        let notes: Vec<Note> = turtl.load_notes(&vec![id.clone()]).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
     }
 }
 

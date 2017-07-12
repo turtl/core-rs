@@ -1,14 +1,11 @@
-use ::std::collections::HashMap;
-
 use ::jedi::{self, Value};
 
-use ::error::{TResult, TFutureResult, TError};
+use ::error::{TResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::futures::Future;
-use ::turtl::TurtlWrap;
+use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
 use ::sync::sync_model::MemorySaver;
@@ -71,9 +68,7 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
     Ok(key_auth)
 }
 
-/// A function that tries authenticating a username/password against various
-/// versions, starting from latest to earliest until it runs out of versions or
-/// we get a match.
+/*
 fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) -> TFutureResult<()> {
     debug!("user::try_auth() -- trying auth version {}", &version);
     let turtl1 = turtl.clone();
@@ -136,12 +131,56 @@ fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) 
         })
         .boxed()
 }
+*/
+
+/// A function that tries authenticating a username/password against various
+/// versions, starting from latest to earliest until it runs out of versions or
+/// we get a match.
+fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -> TResult<()> {
+    let username_clone = username.clone();
+    let password_clone = password.clone();
+    let (key, auth) = turtl.work.run(move || { generate_auth(&username_clone, &password_clone, version) })?;
+    turtl.api.set_auth(username.clone(), auth.clone())?;
+    let user_id = turtl.api.post("/auth", ApiReq::new())?;
+    let mut user_guard_w = turtl.user.write().unwrap();
+    user_guard_w.id = match user_id {
+        Value::String(x) => Some(x),
+        _ => return Err(TError::BadValue(format!("user::do_login() -- auth was successful, but API returned strange id object: {:?}", user_id))),
+    };
+    user_guard_w.do_login(key, auth);
+    drop(user_guard_w);
+    let user_guard_r = turtl.user.read().unwrap();
+    user_guard_r.trigger("login", &jedi::obj());
+    drop(user_guard_r);
+    debug!("user::do_login() -- auth success, logged in");
+    Ok(())
+}
 
 impl User {
     /// Given a turtl, a username, and a password, see if we can log this user
     /// in.
-    pub fn login(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
-        try_auth(turtl, String::from(&username[..]), String::from(&password[..]), 0)
+    pub fn login(turtl: &Turtl, username: &String, password: &String) -> TResult<()> {
+        do_login(turtl, username, password, 0)
+            .map_err(|e| {
+                // NOTE: this is where we'd try lowering the auth version, but
+                // since we only have one version, 0, we admit defeat
+                turtl.api.clear_auth();
+                e
+            })
+        /*
+        Ok(x) => x,
+        Err(e) => {
+            match e {
+                TError::Api(x) => {
+                    match x {
+                        Status::Unauthorized => Ok(()),
+                        _ => Err(()),
+                    }
+                },
+                _ => Err(e)
+            }
+        }
+         */
     }
 
     /*
@@ -151,7 +190,7 @@ impl User {
     */
 
     /// Static method to log a user out
-    pub fn logout(turtl: TurtlWrap) -> TResult<()> {
+    pub fn logout(turtl: &Turtl) -> TResult<()> {
         let mut user_guard = turtl.user.write().unwrap();
         user_guard.do_logout();
         drop(user_guard);

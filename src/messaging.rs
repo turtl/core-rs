@@ -4,15 +4,11 @@
 //! This module is essentially the window into the app, essentially acting as an
 //! event bus to/from our remote sender (generally, this is a UI of some sort).
 
-use ::std::thread::{self, JoinHandle};
-
 use ::carrier;
 use ::jedi::{self, Value};
 
 use ::config;
 use ::error::{TResult, TError};
-use ::util::thredder::Pipeline;
-use ::dispatch;
 
 /// Defines a container for sending responses to the client. We could use a hash
 /// table, but then the elements might serialize out of order. This allows us to
@@ -166,50 +162,45 @@ impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
     }
 }
 
-/// Start a thread that handles proxying messages between main and remote.
-///
-/// Currently, the implementation relies on polling.
-pub fn start(tx_main: Pipeline) -> TResult<(JoinHandle<()>, Box<Fn() + 'static + Sync + Send>)> {
-    let handle = thread::Builder::new().name(String::from("messaging")).spawn(move || {
-        // create our messenger!
-        let mut messenger = Messenger::new();
-        info!("messaging::start() -- main loop");
-        while messenger.is_bound() {
-            // grab a message from our remote
-            match messenger.recv() {
-                Ok(x) => {
-                    if x == "turtl:internal:msg:shutdown" {
-                        messenger.shutdown();
-                        continue;
-                    }
-                    debug!("messaging: recv: {}", x.len());
-                    tx_main.next(move |turtl| {
-                        let msg = x;
-                        match dispatch::process(turtl, &msg) {
-                            Ok(..) => (),
-                            Err(e) => error!("messaging: dispatch: {}", format!("{}", e)),
-                        }
-                    });
-                },
-                Err(e) => {
-                    error!("messaging: problem polling remote socket: {:?}", e);
+/// Start the messaging system. Essentially does a blocking poll on incoming
+/// messages, running the given callback for each one, until the thread gets the
+/// "ok, quit!" message.
+pub fn start<F>(process: F) -> TResult<()>
+    where F: Fn(String) + Send + Sync + 'static
+{
+    // create our messenger!
+    let mut messenger = Messenger::new();
+    info!("messaging::start() -- main loop");
+    while messenger.is_bound() {
+        // grab a message from our remote
+        match messenger.recv() {
+            Ok(x) => {
+                if x == "turtl:internal:msg:shutdown" {
+                    messenger.shutdown();
+                    continue;
                 }
-            }
-        }
-        info!("messaging::start() -- shutting down");
-    })?;
-    let shutdown_fn = || {
-        let messenger = Messenger::new();
-        // send out a shutdown signal on the *incoming* channel so the messaging
-        // system gets it
-        match messenger.send_rev(String::from("turtl:internal:msg:shutdown")) {
-            Ok(_) => (),
+                debug!("messaging: recv: {}", x.len());
+                process(x);
+            },
             Err(e) => {
-                error!("turtl::shutdown() -- error shutting down messaging thread: {}", e)
+                error!("messaging: problem polling remote socket: {:?}", e);
             }
         }
-    };
-    Ok((handle, Box::new(shutdown_fn)))
+    }
+    info!("messaging::start() -- shutting down");
+    Ok(())
+}
+
+/// Call any time to send the "quit" message to the messaging system, which
+/// breaks out of its eternal loop.
+pub fn stop() {
+    let messenger = Messenger::new();
+    // send out a shutdown signal on the *incoming* channel so the messaging
+    // system gets it
+    match messenger.send_rev(String::from("turtl:internal:msg:shutdown")) {
+        Ok(_) => {},
+        Err(e) => error!("messaging::stop() -- error shutting down messaging thread: {}", e),
+    }
 }
 
 #[cfg(test)]

@@ -5,14 +5,13 @@
 //! data from the API and it's a note, we pass it through the NoteSync object
 //! which handles saving to the local disk.
 
-use ::error::{TError, TResult, TFutureResult};
+use ::error::{TError, TResult};
 use ::storage::Storage;
 use ::sync::item::SyncItem;
 use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
 use ::turtl::TurtlWrap;
-use ::futures::Future;
 use ::models::model::Model;
 
 
@@ -148,26 +147,15 @@ fn post_serialize<T>(turtl: TurtlWrap, model: T) -> TResult<Value>
 }
 
 /// Serialize this model and save it to the local db
-pub fn save_model<T>(turtl: TurtlWrap, mut model: T) -> TFutureResult<Value>
+///
+/// TODO: is there a way around all the horrible cloning?
+pub fn save_model<T>(turtl: TurtlWrap, model: &mut T) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
-    ftry!(prepare_for_sync(turtl.clone(), &mut model));
-    let turtl2 = turtl.clone();
-    let mut model2: T = ftry!(model.clone());
-    turtl.work.run(move || Protected::serialize(&mut model))
-        .and_then(move |serialized: Value| -> TFutureResult<Value> {
-            ftry!(model2.merge_fields(&serialized));
-            FOk!(ftry!(post_serialize(turtl2, model2)))
-        })
-        .boxed()
-}
-
-/// Serialize this model and save it to the local db (syncronously)
-pub fn save_model_sync<T>(turtl: TurtlWrap, model: &mut T) -> TResult<Value>
-    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver
-{
     prepare_for_sync(turtl.clone(), model)?;
-    Protected::serialize(model)?;
+    let mut model2: T = model.clone()?;
+    let serialized: Value = turtl.work.run(move || Protected::serialize(&mut model2))?;
+    model.merge_fields(&serialized)?;
     post_serialize(turtl, model.clone()?)
 }
 

@@ -120,7 +120,7 @@ impl Keychain {
         entry.k = Some(key.clone());
         // if we're saving the model, persist it before adding to the keychain
         match sync_save {
-            Some(turtl) => { sync_model::save_model_sync(turtl, &mut entry)?; },
+            Some(turtl) => { sync_model::save_model(turtl, &mut entry)?; },
             None => { entry.generate_id()?; },
         }
         self.entries.push(entry);

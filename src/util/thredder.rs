@@ -7,10 +7,10 @@ use ::std::sync::Arc;
 use ::std::ops::Deref;
 
 use ::crossbeam::sync::MsQueue;
-use ::futures::{self, Future};
+use ::futures::Future;
 use ::futures_cpupool::CpuPool;
 
-use ::error::{TResult, TFutureResult, TError};
+use ::error::{TResult, TFutureResult};
 use ::util::thunk::Thunk;
 use ::turtl::TurtlWrap;
 
@@ -40,22 +40,6 @@ impl Pipeline {
         where F: FnOnce(TurtlWrap) + Send + Sync + 'static
     {
         self.tx.push(Box::new(cb));
-    }
-
-    /// Return a future that resolves with a TurtlWrap object.
-    pub fn next_fut(&self) -> TFutureResult<TurtlWrap> {
-        let (fut_tx, fut_rx) = futures::oneshot::<TurtlWrap>();
-        self.next(move |turtl| {
-            match fut_tx.send(turtl) {
-                Ok(_) => {},
-                Err(_) => {
-                    error!("Pipeline::next_fut() -- receiver disappeared before `turtl` object could be sent");
-                }
-            };
-        });
-        fut_rx
-            .map_err(|_| TError::Msg(String::from("Pipeline::next_fut() -- future canceled")))
-            .boxed()
     }
 }
 impl Deref for Pipeline {
@@ -93,12 +77,21 @@ impl Thredder {
         }
     }
 
-    /// Run an operation on this pool
-    pub fn run<F, T>(&self, run: F) -> TFutureResult<T>
+    /// Run an operation on this pool, returning the Future to be waited on at
+    /// a later time.
+    pub fn run_async<F, T>(&self, run: F) -> TFutureResult<T>
         where T: Sync + Send + 'static,
               F: FnOnce() -> TResult<T> + Send + 'static
     {
         self.pool.spawn_fn(run).boxed()
+    }
+
+    /// Run an operation on this pool
+    pub fn run<F, T>(&self, run: F) -> TResult<T>
+        where T: Sync + Send + 'static,
+              F: FnOnce() -> TResult<T> + Send + 'static
+    {
+        self.pool.spawn_fn(run).wait()
     }
 }
 

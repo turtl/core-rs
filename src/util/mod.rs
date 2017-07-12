@@ -4,9 +4,7 @@ use ::std::time::Duration;
 pub mod logger;
 pub mod thunk;
 pub mod event;
-pub mod future;
 pub mod thredder;
-pub mod stopper;
 #[macro_use]
 pub mod macros;
 pub mod ser;

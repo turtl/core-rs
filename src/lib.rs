@@ -57,7 +57,6 @@ use ::jedi::Value;
 
 use ::error::TResult;
 use ::util::event::Emitter;
-use ::util::stopper::Stopper;
 use ::util::thredder::Pipeline;
 
 /// Init any state/logging/etc the app needs
@@ -66,16 +65,6 @@ pub fn init() -> TResult<()> {
         Ok(..) => Ok(()),
         Err(e) => Err(toterr!(e)),
     }
-}
-
-lazy_static!{
-    static ref RUN: Stopper = Stopper::new();
-}
-
-/// Stop all threads and close down Turtl
-fn stop(tx: Pipeline) {
-    (*RUN).set(false);
-    tx.next(|_| {});
 }
 
 /// This takes a JSON-encoded object, and parses out the values we care about,
@@ -106,7 +95,6 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
 /// those keys that exist in the config.yaml (app config). this gives the entire
 /// app access to our runtime config.
 pub fn start(config_str: String) -> thread::JoinHandle<()> {
-    (*RUN).set(true);
     thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
             // load our ocnfiguration
@@ -137,36 +125,31 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // send massages to the main thread.
             let tx_main = Pipeline::new();
 
-            // start our messaging thread
-            let (handle_msg, msg_shutdown) = messaging::start(tx_main.clone())?;
-
             // create our turtl object
             let turtl = turtl::Turtl::new_wrap(tx_main.clone())?;
+            turtl.events.bind("app:shutdown", |_| {
+                messaging::stop();
+            }, "app:shutdown:main");
 
-            // bind turtl.events "app:shutdown" to close everything
-            {
-                let tx_main_shutdown = tx_main.clone();
-                turtl.events.bind("app:shutdown", move |_| {
-                    stop(tx_main_shutdown.clone());
-                }, "app:shutdown:main");
-            }
-
-            // run our main loop. all threads pipe their data/responses into this
-            // loop, meaning <main> only has to check one place to grab messages.
-            // this creates an event loop of sorts, without all the grossness.
-            util::future::start_poll(tx_main.clone());
-            info!("main::start() -- main loop");
-            while (*RUN).running() {
-                trace!("turtl: main thread message loop");
-                let handler = tx_main.pop();
-                handler.call_box(turtl.clone());
+            // start our messaging thread
+            let msg_res = messaging::start(move |msg: String| {
+                let turtl2 = turtl.clone();
+                let res = thread::Builder::new().name(String::from("dispatch:msg")).spawn(move || {
+                    match dispatch::process(turtl2, &msg) {
+                        Ok(..) => {},
+                        Err(e) => error!("dispatch::process() -- error processing: {}", e),
+                    }
+                });
+                match res {
+                    Ok(..) => {},
+                    Err(e) => error!("main::start() -- message processor: error spawning thread: {}", e),
+                }
+            });
+            match msg_res {
+                Ok(..) => {},
+                Err(e) => error!("main::start() -- messaging error: {}", e),
             }
             info!("main::start() -- shutting down");
-
-            // shut down the messaging system
-            msg_shutdown();
-            handle_msg.join()?;
-
             Ok(())
         };
         match runner() {

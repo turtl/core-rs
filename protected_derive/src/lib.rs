@@ -219,8 +219,6 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
             fn public_fields(&self) -> Vec<&'static str> {
                 vec![
                     "id",
-                    "body",
-                    "keys",
                     #( #public_fields_rename1, )*
                 ]
             }

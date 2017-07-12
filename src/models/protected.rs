@@ -73,7 +73,7 @@ pub fn encrypt_key(encrypting_key: &Key, key_to_encrypt: Key) -> TResult<String>
 
 /// Map over a vec of Protected models, deserialize()ing them in worker threads
 /// and returning the resulting deserialized models as a vec in a future result
-pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
+pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
     where T: Protected + Send + Sync + 'static
 {
     // Allows our future to collect a single result type which can then be
@@ -97,7 +97,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
             let model_type = String::from(model.model_type());
             let model_id = model.id().unwrap().clone();
             // run the deserialize, return the result into our future chain
-            work.run(move || model_clone.deserialize())
+            work.run_async(move || model_clone.deserialize())
                 .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
                     ftry!(model.merge_fields(&item_mapped));
                     FOk!(DeserializeResult::Model(model))
@@ -111,22 +111,19 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TFutureResult<Vec<T>>
         .collect::<Vec<_>>();
     // wait for all our futures to finish. this will return them in order of
     // starting (NOT order of completion).
-    future::join_all(futures)
-        .and_then(move |mapped| {
-            // only return the models that succeeded deserialization, preserving
-            // the order.
-            // TODO: benchmark if using an iterator is faster here
-            let mut final_models = Vec::with_capacity(mapped.len());
-            for result in mapped {
-                match result {
-                    DeserializeResult::Model(m) => { final_models.push(m) },
-                    DeserializeResult::Failed => {},
-                }
-            }
-            debug!("protected::map_deserialize() -- finishing");
-            FOk!(final_models)
-        })
-        .boxed()
+    let mapped = future::join_all(futures).wait()?;
+    // only return the models that succeeded deserialization, preserving
+    // the order.
+    // TODO: benchmark if using an iterator is faster here
+    let mut final_models = Vec::with_capacity(mapped.len());
+    for result in mapped {
+        match result {
+            DeserializeResult::Model(m) => { final_models.push(m) },
+            DeserializeResult::Failed => {},
+        }
+    }
+    debug!("protected::map_deserialize() -- finishing");
+    Ok(final_models)
 }
 
 
