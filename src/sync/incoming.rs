@@ -187,15 +187,25 @@ impl Syncer for SyncIncoming {
     fn init(&self) -> TResult<()> {
         let sync_id = self.db.kv_get("sync_id")?;
         Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj())?;
-        let res = match sync_id {
-            // we have a sync id! grab the latest changes from the API
-            Some(ref x) => self.sync_from_api(x, false),
-            // no sync id ='[ ='[ ='[ ...instead grab the full profile
-            None => self.load_full_profile(),
+        let skip_init = {
+            let config_guard = self.config.read().unwrap();
+            config_guard.skip_api_init
         };
-        let init_err: Option<String> = match res {
-            Ok(_) => None,
-            Err(ref e) => Some(format!("sync::incoming::init() -- {}", e)),
+        let mut init_err: Option<String> = None;
+        let res = if !skip_init {
+            let res = match sync_id {
+                // we have a sync id! grab the latest changes from the API
+                Some(ref x) => self.sync_from_api(x, false),
+                // no sync id ='[ ='[ ='[ ...instead grab the full profile
+                None => self.load_full_profile(),
+            };
+            init_err = match res {
+                Ok(_) => None,
+                Err(ref e) => Some(format!("sync::incoming::init() -- {}", e)),
+            };
+            res
+        } else {
+            Ok(())
         };
         // let our Turtl know we're done
         self.get_tx().next(move |turtl| {

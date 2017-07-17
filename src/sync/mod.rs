@@ -20,7 +20,7 @@ pub mod item;
 pub mod sync_model;
 
 use ::std::thread;
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, mpsc};
 
 use ::config;
 use ::jedi::{self, Value};
@@ -51,6 +51,9 @@ pub struct SyncConfig {
     pub enabled: bool,
     /// The current logged in user_id
     pub user_id: String,
+    /// Whether or not to skip calling out to the API on init (useful for
+    /// testing)
+    pub skip_api_init: bool,
 }
 
 impl SyncConfig {
@@ -60,6 +63,7 @@ impl SyncConfig {
             quit: false,
             enabled: false,
             user_id: String::from(""),
+            skip_api_init: false,
         }
     }
 }
@@ -148,11 +152,21 @@ pub trait Syncer {
     }
 
     /// Runs our syncer, with some quick checks on run status.
-    fn runner(&self) {
+    fn runner(&self, init_tx: mpsc::Sender<TResult<()>>) {
         info!("sync::runner() -- {} init", self.get_name());
         let evname = format!("sync:{}:init", self.get_name());
-        match self.init() {
+        let init_res = self.init();
+        macro_rules! send_or_return {
+            ($sendex:expr) => {
+                match $sendex {
+                    Err(e) => error!("sync::{}::runner() -- problem sending init signal: {}", self.get_name(), e),
+                    _ => (),
+                }
+            }
+        }
+        match init_res {
             Ok(_) => {
+                send_or_return!(init_tx.send(Ok(())));
                 self.get_tx().next(move |turtl| {
                     turtl.events.trigger(evname.as_str(), &Value::Bool(true));
                 });
@@ -160,11 +174,16 @@ pub trait Syncer {
             Err(e) => {
                 error!("sync::runner() -- {}: init: {}", self.get_name(), e);
                 let msg = format!("{}", e);
+                send_or_return!(init_tx.send(Err(e)));
                 self.get_tx().next(move |turtl| {
                     turtl.events.trigger(evname.as_str(), &Value::String(msg));
                 });
                 return;
             },
+        }
+        match init_tx.send(init_res) {
+            Err(e) => error!("sync::{}::runner() -- problem sending init signal: {}", self.get_name(), e),
+            _ => (),
         }
 
         info!("sync::runner() -- {} main loop", self.get_name());
@@ -208,22 +227,40 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     // start our outging sync process
     let tx_main_out = tx_main.clone();
     let config_out = config.clone();
+    let (tx_out, rx_out) = mpsc::channel::<TResult<()>>();
     let api_out = api.clone();
     let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
-        sync.runner();
+        sync.runner(tx_out);
         info!("sync::start() -- outgoing shut down");
     })?;
 
     // start our incoming sync process
     let tx_main_in = tx_main.clone();
     let config_in = config.clone();
+    let (tx_in, rx_in) = mpsc::channel::<TResult<()>>();
     let api_in = api.clone();
     let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
         let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
-        sync.runner();
+        sync.runner(tx_in);
         info!("sync::start() -- incoming shut down");
     })?;
+
+    macro_rules! channel_check {
+        ($rx:expr) => {
+            match $rx {
+                Ok(x) => {
+                    match x {
+                        Err(e) => return Err(toterr!(e)),
+                        _ => (),
+                    }
+                },
+                Err(e) => return Err(toterr!(e)),
+            }
+        }
+    }
+    channel_check!(rx_out.recv());
+    channel_check!(rx_in.recv());
 
     let config1 = config.clone();
     let shutdown = move || {
@@ -279,7 +316,9 @@ mod tests {
     #[test]
     fn starts_and_quits() {
         let tx_main = Pipeline::new();
-        let sync_config = Arc::new(RwLock::new(SyncConfig::new()));
+        let mut sync_config = SyncConfig::new();
+        sync_config.skip_api_init = true;
+        let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
         let db_out = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
         let db_in = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());

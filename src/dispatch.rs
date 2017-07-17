@@ -12,8 +12,9 @@ use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
 use ::util;
+use ::config;
 use ::util::event::Emitter;
-use ::turtl::TurtlWrap;
+use ::turtl::{Turtl, TurtlWrap};
 use ::search::Query;
 use ::models::user::User;
 use ::models::space::Space;
@@ -58,157 +59,102 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
             Ok(())
         },
         */
-        /*
         "user:logout" => {
-            let turtl1 = turtl.clone();
-            let turtl2 = turtl.clone();
-            let mid1 = mid.clone();
-            let mid2 = mid.clone();
-            let runme = turtl.logout()
-                .then(|res| {
-                    util::sleep(1000);
-                    futures::done(res)
-                })
-                .map(move |_| {
-                    debug!("dispatch({}) -- user:login success", mid);
-                    match turtl1.msg_success(&mid1, jedi::obj()) {
-                        Err(e) => error!("dispatch -- problem sending logout message: {}", e),
-                        _ => ()
-                    }
-                })
-                .map_err(move |e| {
-                    turtl2.api.clear_auth();
-                    match turtl2.msg_error(&mid2, &e) {
-                        Err(e) => error!("dispatch -- problem sending logout message: {}", e),
-                        _ => ()
-                    }
-                });
-            util::future::run(runme);
-            Ok(())
+            turtl.logout()?;
+            util::sleep(1000);
+            Ok(jedi::obj())
         },
         "app:wipe-local-data" => {
-            match turtl.wipe_local_data() {
-                Ok(_) => turtl.msg_success(&mid, jedi::obj()),
-                Err(e) => {
-                    match turtl.msg_error(&mid, &e) {
-                        Err(e) => error!("dispatch -- problem sending message: {}", e),
-                        _ => ()
-                    }
-                    Ok(())
-                }
-            }
+            turtl.wipe_local_data()?;
+            Ok(jedi::obj())
         },
         "app:start-sync" => {
-            turtl.start_sync()?;
-            let turtl2 = turtl.clone();
-            turtl.events.bind_once("sync:incoming:init:done", move |err| {
-                // using our crude eventing system, a bool signals a success, a
-                // string is an error (containing the error message)
-                match *err {
-                    Value::Bool(_) => {
-                        try_or!(turtl2.msg_success(&mid, jedi::obj()), e,
-                            error!("dispatch -- app:start-sync: error sending success: {}", e));
-                    },
-                    Value::String(ref x) => {
-                        try_or!(turtl2.msg_error(&mid, &TError::Msg(x.clone())), e,
-                            error!("dispatch -- app:start-sync: error sending error: {}", e));
-                    },
-                    _ => {
-                        error!("dispatch -- unknown sync error: {:?}", err);
-                        try_or!(turtl2.msg_error(&mid, &TError::Msg(String::from("unknown error initializing syncing"))), e,
-                            error!("dispatch -- app:start-sync: error sending error: {}", e));
-                    },
-                }
-            }, "dispatch:sync:init");
-            Ok(())
+            turtl.sync_start()?;
+            Ok(jedi::obj())
         },
         "app:pause-sync" => {
-            turtl.events.trigger("sync:pause", &jedi::obj());
-            turtl.msg_success(&mid, jedi::obj())
+            turtl.sync_pause();
+            Ok(jedi::obj())
         },
         "app:resume-sync" => {
-            turtl.events.trigger("sync:resume", &jedi::obj());
-            turtl.msg_success(&mid, jedi::obj())
+            turtl.sync_resume();
+            Ok(jedi::obj())
         },
         "app:shutdown-sync" => {
-            turtl.events.trigger("sync:shutdown", &Value::Bool(true));
-            turtl.msg_success(&mid, jedi::obj())
+            turtl.sync_shutdown(true)?;
+            Ok(jedi::obj())
         },
         "app:api:set-endpoint" => {
             let endpoint: String = jedi::get(&["2"], &data)?;
             config::set(&["api", "endpoint"], &endpoint)?;
-            turtl.msg_success(&mid, jedi::obj())
+            Ok(jedi::obj())
         },
         "app:shutdown" => {
             info!("dispatch: got shutdown signal, quitting");
-            match turtl.msg_success(&mid, jedi::obj()) {
-                Ok(..) => (),
-                Err(..) => (),
-            }
-            util::sleep(10);
-            turtl.events.trigger("sync:shutdown", &Value::Bool(true));
-            turtl.events.trigger("app:shutdown", &jedi::to_val(&())?);
-            Ok(())
+            turtl.sync_shutdown(false)?;
+            turtl.events.trigger("app:shutdown", &jedi::obj());
+            Ok(jedi::obj())
         },
         "profile:sync:model" => {
             let action: String = jedi::get(&["2"], &data)?;
             let ty: String = jedi::get(&["3"], &data)?;
 
-            let runme = match action.as_ref() {
+            match action.as_ref() {
                 "create" | "update" => {
-                    let turtl2 = turtl.clone();
-                    match ty.as_ref() {
+                    let val = match ty.as_ref() {
                         "user" => {
-                            let model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl2, model)
+                            let mut model: User = jedi::get(&["4"], &data)?;
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "space" => {
-                            let model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl2, model)
+                            let mut model: Space = jedi::get(&["4"], &data)?;
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "board" => {
-                            let model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl2, model)
+                            let mut model: Board = jedi::get(&["4"], &data)?;
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "note" => {
-                            let model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl2, model)
+                            let mut model: Note = jedi::get(&["4"], &data)?;
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "invite" => {
-                            let model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl2, model)
+                            let mut model: Invite = jedi::get(&["4"], &data)?;
+                            sync_model::save_model(turtl, &mut model)?
+                        },
+                        _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
+                    };
+                    Ok(val)
+                },
+                "delete" => {
+                    let id: String = jedi::get(&["4", "id"], &data)?;
+                    match ty.as_ref() {
+                        "user" => {
+                            sync_model::delete_model::<User>(turtl, &id)?;
+                        },
+                        "space" => {
+                            sync_model::delete_model::<Space>(turtl, &id)?;
+                        },
+                        "board" => {
+                            sync_model::delete_model::<Board>(turtl, &id)?;
+                        },
+                        "note" => {
+                            sync_model::delete_model::<Note>(turtl, &id)?;
+                        },
+                        "invite" => {
+                            sync_model::delete_model::<Invite>(turtl, &id)?;
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     }
-                },
-                "delete" => {
-                    FOk!(Value::Null)
+                    Ok(jedi::obj())
                 },
                 _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync action {}", action))),
-            };
-            util::future::run(runme);
-
-            Ok(())
+            }
         },
         "profile:get-notes" => {
             let note_ids = jedi::get(&["2"], &data)?;
-            let mid1 = mid.clone();
-            let mid2 = mid.clone();
-            let turtl1 = turtl.clone();
-            let turtl2 = turtl.clone();
-            let runme = turtl.load_notes(&note_ids)
-                .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
-                    FOk!(ftry!(turtl1.msg_success(&mid1, ftry!(jedi::to_val(&notes)))))
-                })
-                .or_else(move |e| -> TFutureResult<()> {
-                    match turtl2.msg_error(&mid2, &e) {
-                        Err(e) => error!("dispatch -- problem sending get-notes message: {}", e),
-                        _ => ()
-                    }
-                    FOk!(())
-                });
-            util::future::run(runme);
-            Ok(())
+            let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
+            Ok(jedi::to_val(&notes)?)
         },
         "profile:find-notes" => {
             let qry: Query = jedi::get(&["2"], &data)?;
@@ -218,23 +164,8 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
             }
             let search = search_guard.as_ref().unwrap();
             let note_ids = search.find(&qry)?;
-            let mid1 = mid.clone();
-            let mid2 = mid.clone();
-            let turtl1 = turtl.clone();
-            let turtl2 = turtl.clone();
-            let runme = turtl.load_notes(&note_ids)
-                .and_then(move |notes: Vec<Note>| -> TFutureResult<()> {
-                    FOk!(ftry!(turtl1.msg_success(&mid1, ftry!(jedi::to_val(&notes)))))
-                })
-                .or_else(move |e| -> TFutureResult<()> {
-                    match turtl2.msg_error(&mid2, &e) {
-                        Err(e) => error!("dispatch -- problem sending find-notes message: {}", e),
-                        _ => ()
-                    }
-                    FOk!(())
-                });
-            util::future::run(runme);
-            Ok(())
+            let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
+            Ok(jedi::to_val(&notes)?)
         },
         "profile:get-tags" => {
             let space_id: String = jedi::get(&["2"], &data)?;
@@ -246,13 +177,12 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
             }
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
-            turtl.msg_success(&mid, jedi::to_val(&tags)?)
+            Ok(jedi::to_val(&tags)?)
         },
         "ping" => {
             info!("ping!");
-            turtl.msg_success(&mid, Value::String(String::from("pong")))
+            Ok(Value::String(String::from("pong")))
         },
-        */
         _ => {
             Err(TError::MissingCommand(cmd.clone()))
         }

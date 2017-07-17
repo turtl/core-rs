@@ -195,82 +195,58 @@ impl Turtl {
 
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
-    pub fn start_sync(turtl: TurtlWrap) -> TResult<()> {
+    pub fn sync_start(&self) -> TResult<()> {
         // create the ol' in/out (in/out) db connections for our sync system
-        let db_out = Arc::new(turtl.create_user_db()?);
-        let db_in = Arc::new(turtl.create_user_db()?);
+        let db_out = Arc::new(self.create_user_db()?);
+        let db_in = Arc::new(self.create_user_db()?);
         // start the sync, and save the resulting state into Turtl
-        let sync_state = sync::start(turtl.tx_main.clone(), turtl.sync_config.clone(), turtl.api.clone(), db_out, db_in)?;
+        let sync_state = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
         {
-            let mut state_guard = turtl.sync_state.write().unwrap();
+            let mut state_guard = self.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
         }
 
-        let turtl1 = turtl.clone();
-        turtl.events.bind_once("app:shutdown", move |_| {
-            turtl1.events.trigger("sync:shutdown", &jedi::obj());
-        }, "turtl:app:shutdown:sync");
+        self.load_profile()?;
+        Messenger::event("profile:loaded", jedi::obj())?;
+        self.index_notes()?;
+        Messenger::event("profile:indexed", jedi::obj())?;
+        Ok(())
+    }
 
-        let sync_state1 = turtl.sync_state.clone();
-        let sync_state2 = turtl.sync_state.clone();
-        let sync_state3 = turtl.sync_state.clone();
-        turtl.events.bind_once("sync:shutdown", move |joinval| {
-            let join = match *joinval {
-                Value::Bool(x) => x,
-                _ => false,
-            };
-            let mut guard = sync_state1.write().unwrap();
-            if guard.is_some() {
-                let state = guard.as_mut().unwrap();
-                (state.shutdown)();
-                if join {
-                    loop {
-                        let hn = state.join_handles.pop();
-                        match hn {
-                            Some(x) => match x.join() {
-                                Ok(_) => (),
-                                Err(e) => error!("turtl -- sync:shutdown: problem joining thread: {:?}", e),
-                            },
-                            None => break,
-                        }
+    /// Shut down the sync system
+    pub fn sync_shutdown(&self, join: bool) -> TResult<()> {
+        let mut guard = self.sync_state.write().unwrap();
+        if guard.is_none() { return Ok(()); }
+        {
+            let state = guard.as_mut().unwrap();
+            (state.shutdown)();
+            if join {
+                loop {
+                    let hn = state.join_handles.pop();
+                    match hn {
+                        Some(x) => match x.join() {
+                            Ok(_) => (),
+                            Err(e) => error!("turtl::sync_shutdown() -- problem joining thread: {:?}", e),
+                        },
+                        None => break,
                     }
                 }
             }
-            *guard = None;
-        }, "turtl:sync:shutdown");
-        turtl.events.bind("sync:pause", move |_| {
-            let guard = sync_state2.read().unwrap();
-            if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
-        }, "turtl:sync:pause");
-        turtl.events.bind("sync:resume", move |_| {
-            let guard = sync_state3.read().unwrap();
-            if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
-        }, "turtl:sync:resume");
-        let turtl2 = turtl.clone();
-        turtl.events.bind("sync:incoming:init:done", move |err| {
-            // don't load the profile if we didn't sync correctly
-            match *err {
-                Value::Bool(_) => {},
-                _ => return error!("turtl::sync:incoming:init:done -- sync error, skipping profile load"),
-            }
-            let turtl3 = turtl2.clone();
-            let turtl4 = turtl2.clone();
-            turtl2.load_profile()
-                .and_then(move |_| {
-                    Messenger::event("profile:loaded", jedi::obj())?;
-                    turtl3.index_notes()
-                })
-                .and_then(|_| {
-                    Messenger::event("profile:indexed", jedi::obj())?;
-                    Ok(())
-                })
-                .or_else(move |e| -> TResult<()> {
-                    error!("turtl -- sync:load-profile: problem loading profile: {}", e);
-                    turtl4.error_event(&e, "load_profile")?;
-                    Ok(())
-                });
-        }, "sync:incoming:init:done");
+        }
+        *guard = None;
         Ok(())
+    }
+
+    /// Pause the sync system (if active)
+    pub fn sync_pause(&self) {
+        let guard = self.sync_state.read().unwrap();
+        if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
+    }
+
+    /// Resume the sync system (if active)
+    pub fn sync_resume(&self) {
+        let guard = self.sync_state.read().unwrap();
+        if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
     }
 
     /// Create a new per-user database for the current user.
@@ -793,6 +769,8 @@ mod tests {
         let notes: Vec<Note> = turtl.load_notes(&vec![id.clone()]).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
+
+        // TODO: test removing models via sync_model::delete()
     }
 }
 

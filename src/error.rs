@@ -123,6 +123,7 @@ from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
 from_err!(::dumpy::DError);
 from_err!(::regex::Error);
+from_err!(::std::sync::mpsc::RecvError);
 
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
