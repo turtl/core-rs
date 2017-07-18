@@ -141,10 +141,36 @@ mod tests {
     #[test]
     fn set_api_endpoint() {
         let handle = init();
-        send(r#"["1","app:api:set-endpoint","https://api.turtl.it/v2"]"#);
+        send(r#"["1","app:api:set-endpoint","http://api.turtl.dev:8181"]"#);
         let msg = recv("1");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         end(handle);
+    }
+
+    #[test]
+    fn join_delete_account() {
+        let handle = init();
+        let username: String = config::get(&["client", "test", "username"]).unwrap();
+        let password: String = config::get(&["client", "test", "password"]).unwrap();
+
+        let msg = format!(r#"["69","app:wipe-local-data"]"#);
+        send(msg.as_str());
+        let msg = recv("69");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = format!(r#"["2","user:join","{}","{}"]"#, username, password);
+        send(msg.as_str());
+        let msg = recv("2");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = format!(r#"["3","user:delete-account","{}","{}"]"#, username, password);
+        send(msg.as_str());
+        let msg = recv("3");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
     }
 
     #[test]

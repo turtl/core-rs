@@ -1,14 +1,17 @@
-use ::jedi::{self, Value};
+use ::std::collections::HashMap;
+use ::jedi::{self, Value, Serialize, DeserializeOwned};
 
 use ::error::{TResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
 use ::models::model::Model;
+use ::models::space::Space;
+use ::models::board::Board;
 use ::models::protected::{Keyfinder, Protected};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
-use ::sync::sync_model::MemorySaver;
+use ::sync::sync_model::{self, MemorySaver};
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -20,11 +23,23 @@ protected! {
 
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
-        pub storage: Option<i64>,
+        pub storage_mb: Option<i64>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[protected_field(public)]
+        pub name: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[protected_field(public)]
+        pub pubkey: Option<Key>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
-        pub settings: Option<String>,
+        pub settings: Option<HashMap<String, Value>>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[protected_field(private)]
+        pub privkey: Option<Key>,
     }
 }
 
@@ -34,6 +49,8 @@ make_basic_sync_model!(User);
 impl Keyfinder for User {}
 
 impl MemorySaver for User {}
+
+pub const CURRENT_AUTH_VERSION: u16 = 0;
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16) -> TResult<Key> {
@@ -68,78 +85,11 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
     Ok(key_auth)
 }
 
-/*
-fn try_auth(turtl: TurtlWrap, username: String, password: String, version: u16) -> TFutureResult<()> {
-    debug!("user::try_auth() -- trying auth version {}", &version);
-    let turtl1 = turtl.clone();
-    let turtl2 = turtl.clone();
-    let ref work = turtl.work;
-    let username_clone = username.clone();
-    let password_clone = password.clone();
-    let username_api_clone = username.clone();
-    work.run(move || generate_auth(&username_clone, &password_clone, version))
-        .and_then(move |key_auth: (Key, String)| -> TFutureResult<()> {
-            let (key, auth) = key_auth;
-            let mut data = HashMap::new();
-            data.insert("auth", auth.clone());
-            {
-                let ref api = turtl1.api;
-                match api.set_auth(username_api_clone, auth.clone()) {
-                    Err(e) => return FErr!(e),
-                    _ => (),
-                }
-            }
-            let turtl4 = turtl1.clone();
-            turtl1.with_api(|api| -> TResult<Value> {
-                api.post("/auth", ApiReq::new())
-            }).and_then(move |user_id| {
-                let mut user_guard_w = turtl4.user.write().unwrap();
-                user_guard_w.id = match user_id {
-                    Value::String(x) => Some(x),
-                    _ => return FErr!(TError::BadValue(format!("user::try_auth() -- auth was successful, but API returned strange id object: {:?}", user_id))),
-                };
-                user_guard_w.do_login(key, auth);
-                drop(user_guard_w);
-                let user_guard_r = turtl4.user.read().unwrap();
-                user_guard_r.trigger("login", &jedi::obj());
-                drop(user_guard_r);
-                debug!("user::try_auth() -- auth success, logged in");
-                FOk!(())
-            }).boxed()
-        })
-        .or_else(move |err| {
-            // return with the error value if we have anything other than
-            // api::Status::Unauthorized
-            debug!("user::try_auth() -- api error: {}", err);
-            let mut test_err = match err {
-                TError::Api(x) => {
-                    match x {
-                        Status::Unauthorized => Ok(()),
-                        _ => Err(()),
-                    }
-                },
-                _ => Err(())
-            };
-            // if we're already at version 0, then JUST FORGET IT
-            if version <= 0 { test_err = Err(()); }
-
-            if test_err.is_err() {
-                return FErr!(err);
-            }
-            // try again, lower version num
-            try_auth(turtl2, username, password, version - 1)
-        })
-        .boxed()
-}
-*/
-
 /// A function that tries authenticating a username/password against various
 /// versions, starting from latest to earliest until it runs out of versions or
 /// we get a match.
 fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -> TResult<()> {
-    let username_clone = username.clone();
-    let password_clone = password.clone();
-    let (key, auth) = turtl.work.run(move || { generate_auth(&username_clone, &password_clone, version) })?;
+    let (key, auth) = generate_auth(username, password, version)?;
     turtl.api.set_auth(username.clone(), auth.clone())?;
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
     let mut user_guard_w = turtl.user.write().unwrap();
@@ -159,43 +109,121 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
 impl User {
     /// Given a turtl, a username, and a password, see if we can log this user
     /// in.
-    pub fn login(turtl: &Turtl, username: &String, password: &String) -> TResult<()> {
-        do_login(turtl, username, password, 0)
-            .map_err(|e| {
-                // NOTE: this is where we'd try lowering the auth version, but
-                // since we only have one version, 0, we admit defeat
+    pub fn login(turtl: &Turtl, username: String, password: String, version: u16) -> TResult<()> {
+        do_login(turtl, &username, &password, version)
+            .or_else(|e| {
                 turtl.api.clear_auth();
-                e
+                match e {
+                    TError::Api(x) => {
+                        match x {
+                            // if we got a BAD LOGIN error, try again with a
+                            // different (lesser) auth version
+                            Status::Unauthorized => {
+                                if version <= 0 {
+                                    Err(TError::Api(Status::Unauthorized))
+                                } else {
+                                    User::login(turtl, username, password, version - 1)
+                                }
+                            },
+                            _ => Err(TError::Api(x)),
+                        }
+                    },
+                    _ => Err(e)
+                }
             })
-        /*
-        Ok(x) => x,
-        Err(e) => {
-            match e {
-                TError::Api(x) => {
-                    match x {
-                        Status::Unauthorized => Ok(()),
-                        _ => Err(()),
-                    }
-                },
-                _ => Err(e)
-            }
-        }
-         */
     }
 
-    /*
-    pub fn join(turtl: TurtlWrap, username: &String, password: &String) -> TFutureResult<()> {
-        FOk!(())
+    pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
+        let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
+        let (pk, sk) = crypto::asym::keygen()?;
+        let mut user_guard_w = turtl.user.write().unwrap();
+        user_guard_w.pubkey = Some(pk);
+        user_guard_w.privkey = Some(sk);
+        let userdata = Protected::serialize(&mut (*user_guard_w))?;
+        drop(user_guard_w);
+
+        turtl.api.set_auth(username.clone(), auth.clone())?;
+        let mut req = ApiReq::new();
+
+        req = req.data(jedi::to_val(&hobj!{
+            "auth" => Value::String(auth.clone()),
+            "username" => Value::String(username),
+            "data" => userdata,
+        })?);
+        let joindata = turtl.api.post("/users", req)?;
+        let user_id: String = jedi::get(&["id"], &joindata)?;
+        let mut user_guard_w = turtl.user.write().unwrap();
+        user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
+        user_guard_w.do_login(key, auth);
+        user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
+        drop(user_guard_w);
+
+        // TODO: i18n on space names
+        fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
+            let mut space: Space = Default::default();
+            let id = (space.generate_id()?).clone();
+            space.generate_key()?;
+            space.user_id = user_id.clone();
+            space.title = Some(String::from(title));
+            space.color = Some(String::from(color));
+            sync_model::save_model(turtl, &mut space)?;
+            Ok(id)
+        }
+        // TODO: i18n on board names
+        fn save_board(turtl: &Turtl, user_id: &String, space_id: &String, title: &str) -> TResult<String> {
+            let mut board: Board = Default::default();
+            let id = (board.generate_id()?).clone();
+            board.generate_key()?;
+            board.user_id = user_id.clone();
+            board.space_id = space_id.clone();
+            board.title = Some(String::from(title));
+            sync_model::save_model(turtl, &mut board)?;
+            Ok(id)
+        }
+
+        let personal_space_id = save_space(turtl, &user_id, "Personal", "#408080")?;
+        save_space(turtl, &user_id, "Work", "#439645")?;
+        save_space(turtl, &user_id, "Home", "#800000")?;
+        save_board(turtl, &user_id, &personal_space_id, "Bookmarks")?;
+        save_board(turtl, &user_id, &personal_space_id, "Photos")?;
+        save_board(turtl, &user_id, &personal_space_id, "Passwords")?;
+
+        let mut user_guard_w = turtl.user.write().unwrap();
+        user_guard_w.set_setting(turtl, "default_space", &personal_space_id)?;
+        drop(user_guard_w);
+
+        let user_guard_r = turtl.user.read().unwrap();
+        user_guard_r.trigger("login", &jedi::obj());
+        drop(user_guard_r);
+        debug!("user::join() -- auth success, logged in");
+
+        Ok(())
     }
-    */
 
     /// Static method to log a user out
     pub fn logout(turtl: &Turtl) -> TResult<()> {
         let mut user_guard = turtl.user.write().unwrap();
+        if !user_guard.logged_in {
+            return Ok(());
+        }
         user_guard.do_logout();
         drop(user_guard);
         let user_guard = turtl.user.read().unwrap();
         user_guard.trigger("logout", &jedi::obj());
+        turtl.api.clear_auth();
+        Ok(())
+    }
+
+    /// Delete the current user
+    pub fn delete_account(turtl: &Turtl) -> TResult<()> {
+        let mut user_guard = turtl.user.write().unwrap();
+        user_guard.do_logout();
+        let id = match user_guard.id() {
+            Some(x) => x.clone(),
+            None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+        };
+
+        turtl.api.delete(format!("/users/{}", id).as_str(), ApiReq::new())?;
         Ok(())
     }
 
@@ -211,6 +239,42 @@ impl User {
         self.set_key(None);
         self.auth = None;
         self.logged_in = false;
+    }
+
+    /// Set a setting into this user's settings object
+    pub fn set_setting<T>(&mut self, turtl: &Turtl, key: &str, val: &T) -> TResult<()>
+        where T: Serialize
+    {
+        match self.settings.as_mut() {
+            Some(ref mut settings) => {
+                settings.insert(String::from(key), jedi::to_val(val)?);
+            },
+            None => {
+                return Err(TError::MissingField(String::from("user.set_setting() -- missing user.settings (None)")));
+            }
+        }
+        sync_model::save_model(turtl, self)?;
+        Ok(())
+    }
+
+    /// Get a user setting
+    pub fn get_setting<T>(&self, key: &str) -> Option<T>
+        where T: DeserializeOwned
+    {
+        match self.settings.as_ref() {
+            Some(ref settings) => {
+                match settings.get(key) {
+                    Some(val) => {
+                        match jedi::from_val(val.clone()) {
+                            Ok(x) => Some(x),
+                            Err(_) => None,
+                        }
+                    },
+                    None => None,
+                }
+            },
+            None => None,
+        }
     }
 }
 

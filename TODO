@@ -1,3 +1,8 @@
+current:
+- finish converting user.join() to create default boards/spaces
+- finish test client to do join, start-sync, load-profile (check spaces/boards),
+  delete-account
+
 v0.7:
 - convert to threaded model instead of horrible pseudo-async model
   - convert all the dispatch endpoints
@@ -27,6 +32,8 @@ v0.7:
     - store files in filesystem (not sqlite)
     - filenames should be the <note.id>_<note.file.id>.enc
 - user
+  - join
+    - create spaces/boards
   - change password
   - delete account
 - get sync info (pending, failed)
@@ -34,7 +41,6 @@ v0.7:
 - save file
 - send feedback
 - implement sync.immediate
-- send username/salt when joining
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not

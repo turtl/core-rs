@@ -11,7 +11,7 @@ use ::sync::item::SyncItem;
 use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
-use ::turtl::TurtlWrap;
+use ::turtl::Turtl;
 use ::models::model::Model;
 
 
@@ -74,18 +74,18 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
 
 pub trait MemorySaver: Protected {
     /// Save a model to Turtl's memory on save
-    fn save_to_mem(self, _turtl: TurtlWrap) -> TResult<()> {
+    fn save_to_mem(self, _turtl: &Turtl) -> TResult<()> {
         Ok(())
     }
 
     /// Remove a model from Turtl's memory on delete
-    fn remove_from_mem(&self, _turtl: TurtlWrap) -> TResult<()> {
+    fn remove_from_mem(&self, _turtl: &Turtl) -> TResult<()> {
         Ok(())
     }
 }
 
 /// Prepare a model for saving to db
-fn prepare_for_sync<T>(turtl: TurtlWrap, model: &mut T) -> TResult<()>
+fn prepare_for_sync<T>(turtl: &Turtl, model: &mut T) -> TResult<()>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver
 {
     {
@@ -121,14 +121,14 @@ fn prepare_for_sync<T>(turtl: TurtlWrap, model: &mut T) -> TResult<()>
             (*user_guard).id().unwrap().clone()
         };
         let mut profile_guard = turtl.profile.write().unwrap();
-        (*profile_guard).keychain.upsert_key(&user_id, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), Some(turtl.clone()))?;
+        (*profile_guard).keychain.upsert_key(&user_id, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), Some(turtl))?;
     }
 
     Ok(())
 }
 
 /// Called after a model is serialized and we want to save it/persist it
-fn post_serialize<T>(turtl: TurtlWrap, model: T) -> TResult<Value>
+fn post_serialize<T>(turtl: &Turtl, model: T) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver
 {
     {
@@ -149,10 +149,10 @@ fn post_serialize<T>(turtl: TurtlWrap, model: T) -> TResult<Value>
 /// Serialize this model and save it to the local db
 ///
 /// TODO: is there a way around all the horrible cloning?
-pub fn save_model<T>(turtl: TurtlWrap, model: &mut T) -> TResult<Value>
+pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
-    prepare_for_sync(turtl.clone(), model)?;
+    prepare_for_sync(turtl, model)?;
     let mut model2: T = model.clone()?;
     let serialized: Value = turtl.work.run(move || Protected::serialize(&mut model2))?;
     model.merge_fields(&serialized)?;
@@ -160,7 +160,7 @@ pub fn save_model<T>(turtl: TurtlWrap, model: &mut T) -> TResult<Value>
 }
 
 /// Remove a model from memory/storage
-pub fn delete_model<T>(turtl: TurtlWrap, id: &String) -> TResult<()>
+pub fn delete_model<T>(turtl: &Turtl, id: &String) -> TResult<()>
     where T: Protected + Storable + SyncModel + MemorySaver
 {
     let mut model: T = Default::default();

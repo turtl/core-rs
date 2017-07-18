@@ -21,7 +21,7 @@ use ::api::Api;
 use ::profile::Profile;
 use ::models::protected::{self, Keyfinder, Protected};
 use ::models::model::Model;
-use ::models::user::User;
+use ::models::user::{self, User};
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
@@ -150,46 +150,39 @@ impl Turtl {
         self.remote_send(Some(mid.clone()), msg)
     }
 
-    /// If an error occurs out of band of a request, send an error event
-    pub fn error_event(&self, err: &TError, context: &str) -> TResult<()> {
-        let val = Value::Array(vec![Value::String(String::from(context)), Value::String(format!("{}", err))]);
-        Messenger::event("error", val)
-    }
-
     /// Log a user in
     pub fn login(&self, username: String, password: String) -> TResult<()> {
-        User::login(self, &username, &password)?;
+        let version = user::CURRENT_AUTH_VERSION;
+        User::login(self, username, password, version)?;
         let db = self.create_user_db()?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = Some(db);
         Ok(())
     }
 
-    /*
-    pub fn join(&self, username: String, password: String) -> TFutureResult<()> {
-        self.with_next_fut()
-            .and_then(move |turtl| -> TFutureResult<()> {
-                let turtl2 = turtl.clone();
-                User::join(turtl.clone(), &username, &password)
-                    .and_then(move |_| -> TFutureResult<()> {
-                        let db = ftry!(turtl2.create_user_db());
-                        let mut db_guard = turtl2.db.write().unwrap();
-                        *db_guard = Some(db);
-                        drop(db_guard);
-                        FOk!(())
-                    })
-                    .boxed()
-            })
-            .boxed()
+    /// Create a new user account
+    pub fn join(&self, username: String, password: String) -> TResult<()> {
+        User::join(self, username, password)?;
+        let db = self.create_user_db()?;
+        let mut db_guard = self.db.write().unwrap();
+        *db_guard = Some(db);
+        drop(db_guard);
+        Ok(())
     }
-    */
 
     /// Log a user out
     pub fn logout(&self) -> TResult<()> {
-        self.events.trigger("sync:shutdown", &Value::Bool(false));
+        self.sync_shutdown(false)?;
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = None;
+        Ok(())
+    }
+
+    /// Delete the current user's account (if they are logged in derr)
+    pub fn delete_account(&self) -> TResult<()> {
+        User::delete_account(self)?;
+        self.wipe_local_data()?;
         Ok(())
     }
 
@@ -523,6 +516,7 @@ impl Turtl {
             info!("turtl.wipe_local_data() -- removing {}", path.display());
         }
         (*kv_guard) = Turtl::open_kv()?;
+        self.logout()?;
         Ok(())
     }
 
@@ -746,7 +740,7 @@ mod tests {
             "title":"get a job"
         }"#)).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model(turtl.clone(), &mut space).unwrap();
+        let space_val: Value = sync_model::save_model(turtl.as_ref(), &mut space).unwrap();
         let mut note: Note = jedi::parse(&String::from(r#"{
             "user_id":69,
             "space_id":"8884442",
@@ -760,7 +754,7 @@ mod tests {
         let space_id: String = jedi::get(&["id"], &space_val).unwrap();
         note.space_id = space_id.clone();
         // save our note to "disk"
-        let val: Value = sync_model::save_model(turtl.clone(), &mut note).unwrap();
+        let val: Value = sync_model::save_model(turtl.as_ref(), &mut note).unwrap();
         let saved_model: Note = jedi::from_val(val).unwrap();
         assert!(saved_model.id().is_some());
         assert_eq!(saved_model.space_id, space_id);

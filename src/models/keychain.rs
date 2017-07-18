@@ -5,7 +5,7 @@ use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::sync::sync_model::{self, MemorySaver};
-use ::turtl::TurtlWrap;
+use ::turtl::Turtl;
 
 /// Used as an easy object to reference other keys
 pub struct KeyRef<T> {
@@ -99,7 +99,7 @@ impl Keychain {
     }
 
     /// Upsert a key to the keychain
-    pub fn upsert_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String, sync_save: Option<TurtlWrap>) -> TResult<()> {
+    pub fn upsert_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String, sync_save: Option<&Turtl>) -> TResult<()> {
         let remove = {
             let existing = self.find_entry(item_id);
             match existing {
@@ -112,7 +112,7 @@ impl Keychain {
                 None => false,
             }
         };
-        if remove { self.remove_entry(item_id, sync_save.clone())?; }
+        if remove { self.remove_entry(item_id, sync_save)?; }
         let mut entry = KeychainEntry::new();
         entry.type_ = ty.clone();
         entry.user_id = user_id.clone();
@@ -128,12 +128,12 @@ impl Keychain {
     }
 
     /// Remove a keychain entry
-    pub fn remove_entry(&mut self, item_id: &String, sync_save: Option<TurtlWrap>) -> TResult<()> {
+    pub fn remove_entry(&mut self, item_id: &String, sync_save: Option<&Turtl>) -> TResult<()> {
         match sync_save {
             Some(turtl) => {
                 for entry in &mut self.entries {
                     if &entry.item_id != item_id { continue; }
-                    sync_model::delete_model::<KeychainEntry>(turtl.clone(), entry.id().unwrap())?;
+                    sync_model::delete_model::<KeychainEntry>(turtl, entry.id().unwrap())?;
                 }
             },
             None => {},

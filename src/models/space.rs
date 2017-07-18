@@ -2,7 +2,7 @@ use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::sync::sync_model::MemorySaver;
-use ::turtl::TurtlWrap;
+use ::turtl::Turtl;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -11,9 +11,16 @@ protected! {
         #[protected_field(public)]
         pub user_id: String,
 
+        // members?
+        // invites?
+
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
-        pub title: Option<String>
+        pub title: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[protected_field(Color)]
+        pub color: Option<String>,
     }
 }
 
@@ -28,7 +35,7 @@ impl Keyfinder for Space {
 }
 
 impl MemorySaver for Space {
-    fn save_to_mem(self, turtl: TurtlWrap) -> TResult<()> {
+    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
         let mut profile_guard = turtl.profile.write().unwrap();
         for space in &mut profile_guard.spaces {
             if space.id() == self.id() {

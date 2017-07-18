@@ -14,7 +14,7 @@ use ::error::{TResult, TError};
 use ::util;
 use ::config;
 use ::util::event::Emitter;
-use ::turtl::{Turtl, TurtlWrap};
+use ::turtl::{TurtlWrap};
 use ::search::Query;
 use ::models::user::User;
 use ::models::space::Space;
@@ -32,36 +32,19 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
             turtl.login(username, password)?;
             Ok(jedi::obj())
         },
-        /*
         "user:join" => {
             let username = jedi::get(&["2"], &data)?;
             let password = jedi::get(&["3"], &data)?;
-            let turtl1 = turtl.clone();
-            let turtl2 = turtl.clone();
-            let mid = mid.clone();
-            let mid2 = mid.clone();
-            let runme = turtl.join(username, password)
-                .map(move |_| {
-                    debug!("dispath({}) -- user:join sucess", mid);
-                    match turtl1.msg_success(&mid, jedi::obj()) {
-                        Err(e) => error!("dispatch -- problem sending user:join message: {}", e),
-                        _ => ()
-                    }
-                })
-                .map_err(move |e| {
-                    turtl2.api.clear_auth();
-                    match turtl2.msg_error(&mid2, &e) {
-                        Err(e) => error!("dispatch -- problem sending user:join message: {}", e),
-                        _ => ()
-                    }
-                });
-            util::future::run(runme);
-            Ok(())
+            turtl.join(username, password)?;
+            Ok(jedi::obj())
         },
-        */
         "user:logout" => {
             turtl.logout()?;
             util::sleep(1000);
+            Ok(jedi::obj())
+        },
+        "user:delete-account" => {
+            turtl.delete_account()?;
             Ok(jedi::obj())
         },
         "app:wipe-local-data" => {
@@ -95,6 +78,14 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
             turtl.events.trigger("app:shutdown", &jedi::obj());
             Ok(jedi::obj())
         },
+        "profile:load" => {
+            let profile_guard = turtl.profile.read().unwrap();
+            let profile_data = jedi::to_val(&hobj!{
+                "spaces" => jedi::to_val(&profile_guard.spaces)?,
+                "boards" => jedi::to_val(&profile_guard.boards)?,
+            })?;
+            Ok(profile_data)
+        },
         "profile:sync:model" => {
             let action: String = jedi::get(&["2"], &data)?;
             let ty: String = jedi::get(&["3"], &data)?;
@@ -104,23 +95,23 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
                     let val = match ty.as_ref() {
                         "user" => {
                             let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(turtl.as_ref(), &mut model)?
                         },
                         "space" => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(turtl.as_ref(), &mut model)?
                         },
                         "board" => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(turtl.as_ref(), &mut model)?
                         },
                         "note" => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(turtl.as_ref(), &mut model)?
                         },
                         "invite" => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(turtl.as_ref(), &mut model)?
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     };
@@ -130,19 +121,19 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
                     let id: String = jedi::get(&["4", "id"], &data)?;
                     match ty.as_ref() {
                         "user" => {
-                            sync_model::delete_model::<User>(turtl, &id)?;
+                            sync_model::delete_model::<User>(turtl.as_ref(), &id)?;
                         },
                         "space" => {
-                            sync_model::delete_model::<Space>(turtl, &id)?;
+                            sync_model::delete_model::<Space>(turtl.as_ref(), &id)?;
                         },
                         "board" => {
-                            sync_model::delete_model::<Board>(turtl, &id)?;
+                            sync_model::delete_model::<Board>(turtl.as_ref(), &id)?;
                         },
                         "note" => {
-                            sync_model::delete_model::<Note>(turtl, &id)?;
+                            sync_model::delete_model::<Note>(turtl.as_ref(), &id)?;
                         },
                         "invite" => {
-                            sync_model::delete_model::<Invite>(turtl, &id)?;
+                            sync_model::delete_model::<Invite>(turtl.as_ref(), &id)?;
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     }
