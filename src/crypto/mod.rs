@@ -253,6 +253,52 @@ pub fn random_hash() -> CResult<String> {
     low::to_hex(&low::rand_bytes(32)?)
 }
 
+pub mod asym {
+    use ::crypto::key::Key;
+    use ::crypto::error::{CResult, CryptoError};
+    use ::crypto::low::asym as low_asym;
+
+    /// Stores our current crypto version. This gets encoded into a header in the
+    /// ciphertext and lets the crypto module know how to handle the message.
+    const CRYPTO_VERSION: u8 = 3;
+
+    /// Serialize an asym message
+    fn serialize(version: u8, mut data: Vec<u8>) -> Vec<u8> {
+        let mut ser: Vec<u8> = Vec::with_capacity(data.len() + 1);
+        ser.push(version);
+        ser.append(&mut data);
+        ser
+    }
+
+    fn deserialize(mut serialized: Vec<u8>) -> (u8, Vec<u8>) {
+        let version = serialized[0];
+        let data = serialized.drain(1..).collect();
+        (version, data)
+    }
+
+    /// Generate an asym keypair.
+    pub fn keygen() -> CResult<(Key, Key)> {
+        let (pk, sk) = low_asym::keygen()?;
+        // wrap our Vecs in the Key type
+        Ok((Key::new(pk), Key::new(sk)))
+    }
+
+    /// Asymmetrically encrypt a message with someone's public key
+    pub fn encrypt(their_pubkey: &Key, plaintext: Vec<u8>) -> CResult<Vec<u8>> {
+        let encrypted = low_asym::encrypt(their_pubkey.data().as_slice(), plaintext.as_slice())?;
+        Ok(serialize(CRYPTO_VERSION, encrypted))
+    }
+
+    /// Asymmetrically decrypt a message with our public/private keypair
+    pub fn decrypt(our_pubkey: &Key, our_privkey: &Key, message: Vec<u8>) -> CResult<Vec<u8>> {
+        let (version, ciphertext) = deserialize(message);
+        match version {
+            3 => low_asym::decrypt(our_pubkey.data().as_slice(), our_privkey.data().as_slice(), ciphertext.as_slice()),
+            _ => Err(CryptoError::NotImplemented(format!("crypto::asym::decrypt() -- found version {} (which is not implemented)", version))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for our high-level Crypto module interface.
@@ -326,6 +372,36 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn asym_crypto() {
+        // test decrypting pre-computed val from js
+        let ciphertext = from_base64(&String::from(r#"A3eNneAydRaXiMB0886wo3sTTAxHcyM7JpaLN4z2rqQRyxUPq/eKrWHyF2/1wC9gfmw5t7lQ6KhT+tSbYTAHQb2EJ3NvwGRyeQ5SXId7RYSAeaoizSyT8JfEI91hyRde3sC5C00xYn60LYjt"#)).unwrap();
+        let pk = Key::new(from_base64(&String::from(r#"3KhS3n3QlT/w7rE8hwwq/HNnVxlgzkphsqYKRAzbNGg="#)).unwrap());
+        let sk = Key::new(from_base64(&String::from(r#"ZZN2wHM5T7tUugDGUpMbMB6lI/o5S9AVxjntFjdO+/0="#)).unwrap());
+
+        let msg = asym::decrypt(&pk, &sk, ciphertext).unwrap();
+        let msg_str = String::from_utf8(msg).unwrap();
+        assert_eq!(msg_str, "and if you ever put your god damn hands on my wife again...");
+
+        // test encrypt/decrypt cycle
+        let (her_pk, her_sk) = asym::keygen().unwrap();
+        let message = String::from("I'M NOT A PERVERT");
+        let encrypted = asym::encrypt(&her_pk, Vec::from(message.as_bytes())).unwrap();
+        let decrypted = asym::decrypt(&her_pk, &her_sk, encrypted).unwrap();
+        let decrypted_str = String::from_utf8(decrypted).unwrap();
+        assert_eq!(decrypted_str, "I'M NOT A PERVERT");
+
+        // test error condition
+        let (her_pk, her_sk) = asym::keygen().unwrap();
+        let message = String::from("I'M NOT A PERVERT");
+        let mut encrypted = asym::encrypt(&her_pk, Vec::from(message.as_bytes())).unwrap();
+        // modify the data, should break the crypto
+        if encrypted[4] == 0 { encrypted[4] = 1; }
+        else { encrypted[4] = 0; }
+        let res = asym::decrypt(&her_pk, &her_sk, encrypted);
+        assert!(res.is_err());
     }
 }
 

@@ -172,6 +172,43 @@ pub mod chacha20poly1305 {
     }
 }
 
+pub mod asym {
+    use ::crypto::error::{CryptoError, CResult};
+    use ::sodiumoxide::crypto::box_ as crypto_box;
+    use ::sodiumoxide::crypto::sealedbox;
+
+    /// Generate a public/private keypair for use with the crypto::box lib
+    pub fn keygen() -> CResult<(Vec<u8>, Vec<u8>)> {
+        let (pk, sk) = crypto_box::gen_keypair();
+        Ok((pk.0.to_vec(), sk.0.to_vec()))
+    }
+
+    /// Encrypt data using crypto_box (asym)
+    pub fn encrypt(their_pubkey: &[u8], plaintext: &[u8]) -> CResult<Vec<u8>> {
+        let pubkey = match crypto_box::PublicKey::from_slice(their_pubkey) {
+            Some(x) => x,
+            None => return Err(CryptoError::BadData(String::from("crypto::low::async::encrypt() -- bad public key given"))),
+        };
+        Ok(sealedbox::seal(plaintext, &pubkey))
+    }
+
+    /// Decrypt data using crypto_box (asym)
+    pub fn decrypt(our_pubkey: &[u8], our_privkey: &[u8], ciphertext: &[u8]) -> CResult<Vec<u8>> {
+        let pubkey = match crypto_box::PublicKey::from_slice(our_pubkey) {
+            Some(x) => x,
+            None => return Err(CryptoError::BadData(String::from("crypto::low::async::decrypt() -- bad public key given"))),
+        };
+        let privkey = match crypto_box::SecretKey::from_slice(our_privkey) {
+            Some(x) => x,
+            None => return Err(CryptoError::BadData(String::from("crypto::low::async::decrypt() -- bad private key given"))),
+        };
+        match sealedbox::open(ciphertext, &pubkey, &privkey) {
+            Ok(x) => Ok(x),
+            Err(_) => Err(CryptoError::OperationFailed(String::from("crypto::low::async::decrypt() -- decrypt failed"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +407,17 @@ mod tests {
         let comp2 = secure_compare(key1.as_slice(), key3.as_slice()).unwrap();
         assert_eq!(comp1, true);
         assert_eq!(comp2, false);
+    }
+
+    #[test]
+    fn asym_crypto() {
+        let (her_pk, her_sk) = asym::keygen().unwrap();
+        let message = String::from("I'M NOT A PERVERT");
+
+        let encrypted = asym::encrypt(her_pk.as_slice(), message.as_bytes()).unwrap();
+        let decrypted = asym::decrypt(her_pk.as_slice(), her_sk.as_slice(), encrypted.as_slice()).unwrap();
+        let decrypted_str = String::from_utf8(decrypted).unwrap();
+        assert_eq!(decrypted_str, "I'M NOT A PERVERT");
     }
 }
 
