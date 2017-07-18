@@ -77,6 +77,33 @@ macro_rules! jedi_value_wrapper {
     }
 }
 
+/// Define a macro that makes it easy to create HashMap objects with a JSON-like
+/// syntax.
+///
+/// Pretty much taken direct from here:
+///  https://stackoverflow.com/questions/24276617/why-does-this-rust-hashmap-macro-no-longer-work
+#[macro_export]
+macro_rules! hobj(
+    { $($key:expr => $value:expr),+ } => {
+        {
+            let mut m = ::std::collections::HashMap::new();
+            $(
+                m.insert($key, $value);
+            )+
+            m
+        }
+    };
+    { $($key:expr => $value:expr,)+ } => {
+        {
+            let mut m = ::std::collections::HashMap::new();
+            $(
+                m.insert($key, $value);
+            )+
+            m
+        }
+    };
+);
+
 /// Parse a JSON string and return a Result<Value>
 pub fn parse<T: DeserializeOwned>(string: &String) -> JResult<T> {
     serde_json::from_str(string).map_err(JSONError::Parse)
