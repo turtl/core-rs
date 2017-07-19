@@ -26,7 +26,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::models::note::Note;
-use ::util::thredder::{Thredder, Pipeline};
+use ::util::thredder::Thredder;
 use ::messaging::{Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
@@ -34,11 +34,6 @@ use ::search::Search;
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
 pub struct Turtl {
-    /// Our phone channel to the main thread. Although not generally used
-    /// directly by the Turtl object, Turtl may spawn other processes that need
-    /// it (eg after login the sync system needs it) to it's handy to have a
-    /// copy laying around.
-    pub tx_main: Pipeline,
     /// This is our app-wide event bus.
     pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
@@ -78,7 +73,7 @@ pub type TurtlWrap = Arc<Turtl>;
 
 impl Turtl {
     /// Create a new Turtl app
-    fn new(tx_main: Pipeline) -> TResult<Turtl> {
+    fn new() -> TResult<Turtl> {
         let num_workers = num_cpus::get() - 1;
 
         let api = Arc::new(Api::new());
@@ -88,7 +83,6 @@ impl Turtl {
         storage::setup_client_id(kv.clone())?;
 
         let turtl = Turtl {
-            tx_main: tx_main.clone(),
             events: event::EventEmitter::new(),
             user: RwLock::new(User::new()),
             profile: RwLock::new(Profile::new()),
@@ -106,8 +100,8 @@ impl Turtl {
 
     /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
     /// shareable across threads.
-    pub fn new_wrap(tx_main: Pipeline) -> TResult<TurtlWrap> {
-        let turtl = Arc::new(Turtl::new(tx_main)?);
+    pub fn new_wrap() -> TResult<TurtlWrap> {
+        let turtl = Arc::new(Turtl::new()?);
         Ok(turtl)
     }
 
@@ -167,6 +161,7 @@ impl Turtl {
         let mut db_guard = self.db.write().unwrap();
         *db_guard = Some(db);
         drop(db_guard);
+        User::post_join(self)?;
         Ok(())
     }
 
@@ -193,7 +188,7 @@ impl Turtl {
         let db_out = Arc::new(self.create_user_db()?);
         let db_in = Arc::new(self.create_user_db()?);
         // start the sync, and save the resulting state into Turtl
-        let sync_state = sync::start(self.tx_main.clone(), self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
+        let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
         {
             let mut state_guard = self.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
@@ -543,7 +538,6 @@ mod tests {
 
     use ::crypto::{self, Key};
     use ::search::Query;
-    use ::util::thredder::Pipeline;
     use ::models::model::Model;
     use ::models::protected::Protected;
     use ::models::keychain::KeychainEntry;
@@ -566,7 +560,7 @@ mod tests {
     /// Give us a new Turtl to start running tests on
     fn with_test(logged_in: bool) -> Turtl {
         config::set(&["data_folder"], &String::from(":memory:")).unwrap();
-        let turtl = Turtl::new(Pipeline::new()).unwrap();
+        let turtl = Turtl::new().unwrap();
         if logged_in {
             let mut user_guard = turtl.user.write().unwrap();
             let version = 0;

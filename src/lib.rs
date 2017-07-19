@@ -57,7 +57,6 @@ use ::jedi::Value;
 
 use ::error::TResult;
 use ::util::event::Emitter;
-use ::util::thredder::Pipeline;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -121,12 +120,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 }
             }
 
-            // create our main "Pipeline" ...this is what all our threads use to
-            // send massages to the main thread.
-            let tx_main = Pipeline::new();
-
             // create our turtl object
-            let turtl = turtl::Turtl::new_wrap(tx_main.clone())?;
+            let turtl = turtl::Turtl::new_wrap()?;
             turtl.events.bind("app:shutdown", |_| {
                 messaging::stop();
             }, "app:shutdown:main");

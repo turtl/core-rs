@@ -3,57 +3,11 @@
 //! and tracks the state of them.
 
 use ::std::marker::Send;
-use ::std::sync::Arc;
-use ::std::ops::Deref;
 
-use ::crossbeam::sync::MsQueue;
 use ::futures::Future;
 use ::futures_cpupool::CpuPool;
 
 use ::error::{TResult, TFutureResult};
-use ::util::thunk::Thunk;
-use ::turtl::TurtlWrap;
-
-/// Abstract our tx_main type
-pub struct Pipeline {
-    tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>,
-}
-
-impl Pipeline {
-    /// Create a new Pipeline
-    pub fn new() -> Pipeline {
-        Pipeline {
-            tx: Arc::new(MsQueue::new()),
-        }
-    }
-
-    /// Create a new pipeline from a tx object
-    pub fn new_tx(tx: Arc<MsQueue<Box<Thunk<TurtlWrap>>>>) -> Pipeline {
-        // bangarang
-        Pipeline {
-            tx: tx,
-        }
-    }
-
-    /// Run the given function on the next main loop
-    pub fn next<F>(&self, cb: F)
-        where F: FnOnce(TurtlWrap) + Send + Sync + 'static
-    {
-        self.tx.push(Box::new(cb));
-    }
-}
-impl Deref for Pipeline {
-    type Target = Arc<MsQueue<Box<Thunk<TurtlWrap>>>>;
-
-    fn deref(&self) -> &Arc<MsQueue<Box<Thunk<TurtlWrap>>>> {
-        &self.tx
-    }
-}
-impl Clone for Pipeline {
-    fn clone(&self) -> Self {
-        Pipeline::new_tx(self.tx.clone())
-    }
-}
 
 /// Stores state information for a thread we've spawned.
 ///

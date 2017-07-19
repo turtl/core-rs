@@ -5,7 +5,7 @@
 //! event bus to/from our remote sender (generally, this is a UI of some sort).
 
 use ::carrier;
-use ::jedi::{self, Value};
+use ::jedi::{self, Value, Serialize};
 
 use ::config;
 use ::error::{TResult, TError};
@@ -201,6 +201,12 @@ pub fn stop() {
         Ok(_) => {},
         Err(e) => error!("messaging::stop() -- error shutting down messaging thread: {}", e),
     }
+}
+
+/// Send an event to our own dispatch handler
+pub fn app_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
+    let messenger = Messenger::new();
+    messenger.send_rev(format!("|ev|{}|{}", ev, jedi::stringify(val)?))
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use ::std::time::Duration;
 use ::config;
 use ::hyper;
 use ::hyper::method::Method;
-use ::hyper::header::Headers;
+use ::hyper::header::{self, Headers};
 pub use ::hyper::status::StatusCode as Status;
 use ::jedi::{self, Value};
 
@@ -116,6 +116,9 @@ impl Api {
             Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),
             None => (),
         }
+        if headers.get_raw("Content-Type").is_none() {
+            headers.set(header::ContentType::json());
+        }
         client.set_read_timeout(Some(timeout));
         client
             .request(method, &url[..])
@@ -129,13 +132,21 @@ impl Api {
                 }
             })
             .and_then(|mut res| {
-                if !res.status.is_success() {
-                    return Err(TError::Api(res.status));
-                }
                 let mut out = String::new();
-                res.read_to_string(&mut out)
+                let str_res = res.read_to_string(&mut out)
                     .map_err(|e| toterr!(e))
-                    .and_then(move |_| Ok(out))
+                    .and_then(move |_| Ok(out));
+                if !res.status.is_success() {
+                    let errstr = match str_res {
+                        Ok(x) => x,
+                        Err(e) => {
+                            error!("api::call() -- problem grabbing error message: {}", e);
+                            String::from("<unknown>")
+                        }
+                    };
+                    return Err(TError::Api(res.status, errstr));
+                }
+                str_res
             })
             .map(|out| {
                 info!("api::call() -- res({}): {} {}", out.len(), method2, resource);

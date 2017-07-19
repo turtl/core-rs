@@ -114,18 +114,18 @@ impl User {
             .or_else(|e| {
                 turtl.api.clear_auth();
                 match e {
-                    TError::Api(x) => {
+                    TError::Api(x, y) => {
                         match x {
                             // if we got a BAD LOGIN error, try again with a
                             // different (lesser) auth version
                             Status::Unauthorized => {
                                 if version <= 0 {
-                                    Err(TError::Api(Status::Unauthorized))
+                                    Err(TError::Api(Status::Unauthorized, y))
                                 } else {
                                     User::login(turtl, username, password, version - 1)
                                 }
                             },
-                            _ => Err(TError::Api(x)),
+                            _ => Err(TError::Api(x, y)),
                         }
                     },
                     _ => Err(e)
@@ -137,8 +137,10 @@ impl User {
         let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
         let (pk, sk) = crypto::asym::keygen()?;
         let mut user_guard_w = turtl.user.write().unwrap();
+        user_guard_w.set_key(Some(key.clone()));
         user_guard_w.pubkey = Some(pk);
         user_guard_w.privkey = Some(sk);
+        user_guard_w.settings = Some(Default::default());
         let userdata = Protected::serialize(&mut (*user_guard_w))?;
         drop(user_guard_w);
 
@@ -151,33 +153,51 @@ impl User {
             "data" => userdata,
         })?);
         let joindata = turtl.api.post("/users", req)?;
-        let user_id: String = jedi::get(&["id"], &joindata)?;
+        let user_id: u64 = jedi::get(&["id"], &joindata)?;
+        let user_id: String = user_id.to_string();
         let mut user_guard_w = turtl.user.write().unwrap();
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
+        user_guard_w.id = Some(user_id);
         user_guard_w.do_login(key, auth);
         user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
         drop(user_guard_w);
 
+        let user_guard_r = turtl.user.read().unwrap();
+        user_guard_r.trigger("login", &jedi::obj());
+        drop(user_guard_r);
+        debug!("user::join() -- auth success, logged in");
+        Ok(())
+    }
+
+    /// Once the user has joined, we set up a default profile for them.
+    pub fn post_join(turtl: &Turtl) -> TResult<()> {
+        let user_guard_r = turtl.user.read().unwrap();
+        let user_id = match user_guard_r.id() {
+            Some(x) => x.clone(),
+            None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+        };
+        drop(user_guard_r);
+
         // TODO: i18n on space names
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
             let mut space: Space = Default::default();
-            let id = (space.generate_id()?).clone();
             space.generate_key()?;
             space.user_id = user_id.clone();
             space.title = Some(String::from(title));
             space.color = Some(String::from(color));
-            sync_model::save_model(turtl, &mut space)?;
+            let val = sync_model::save_model(turtl, &mut space)?;
+            let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
         // TODO: i18n on board names
         fn save_board(turtl: &Turtl, user_id: &String, space_id: &String, title: &str) -> TResult<String> {
             let mut board: Board = Default::default();
-            let id = (board.generate_id()?).clone();
             board.generate_key()?;
             board.user_id = user_id.clone();
             board.space_id = space_id.clone();
             board.title = Some(String::from(title));
-            sync_model::save_model(turtl, &mut board)?;
+            let val = sync_model::save_model(turtl, &mut board)?;
+            let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
 
@@ -191,11 +211,6 @@ impl User {
         let mut user_guard_w = turtl.user.write().unwrap();
         user_guard_w.set_setting(turtl, "default_space", &personal_space_id)?;
         drop(user_guard_w);
-
-        let user_guard_r = turtl.user.read().unwrap();
-        user_guard_r.trigger("login", &jedi::obj());
-        drop(user_guard_r);
-        debug!("user::join() -- auth success, logged in");
 
         Ok(())
     }

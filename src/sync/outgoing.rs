@@ -4,18 +4,14 @@ use ::jedi::{self, Value};
 
 use ::error::TResult;
 use ::sync::{SyncConfig, Syncer, SyncRecord};
-use ::util::thredder::Pipeline;
-use ::util::event::Emitter;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
+use ::messaging;
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
 /// Holds the state for data going from turtl -> API (outgoing sync data).
 pub struct SyncOutgoing {
-    /// The message channel to our main thread.
-    tx_main: Pipeline,
-
     /// Holds our sync config. Note that this is shared between the sync system
     /// and the `Turtl` object in the main thread.
     config: Arc<RwLock<SyncConfig>>,
@@ -31,9 +27,8 @@ pub struct SyncOutgoing {
 
 impl SyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncOutgoing {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncOutgoing {
         SyncOutgoing {
-            tx_main: tx_main,
             config: config,
             api: api,
             db: db,
@@ -108,18 +103,8 @@ impl SyncOutgoing {
         for failure in &fail {
             self.handle_failed_record(failure)?;
         }
-        self.tx_main.next(move |turtl| {
-            let fail = match jedi::to_val(&fail) {
-                Ok(x) => x,
-                Err(e) => {
-                    error!("sync.outgoing.notify_sync_failure() -- error serializing failed sync records: {}", e);
-                    Value::Array(vec![])
-                }
-            };
-            let val = Value::Array(vec![fail, error]);
-            turtl.events.trigger("sync:outgoing:failure", &val);
-        });
-        Ok(())
+        let fail_val = jedi::to_val(&fail)?;
+        messaging::app_event("sync:outgoing:failure", &Value::Array(vec![fail_val, error]))
     }
 }
 
@@ -130,10 +115,6 @@ impl Syncer for SyncOutgoing {
 
     fn get_config(&self) -> Arc<RwLock<SyncConfig>> {
         self.config.clone()
-    }
-
-    fn get_tx(&self) -> Pipeline {
-        self.tx_main.clone()
     }
 
     fn get_delay(&self) -> u64 {

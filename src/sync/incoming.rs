@@ -7,8 +7,6 @@ use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::sync::item::SyncItem;
-use ::util::thredder::Pipeline;
-use ::util::event::Emitter;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::Messenger;
@@ -27,9 +25,6 @@ struct Handlers {
 /// Holds the state for data going from API -> turtl (incoming sync data),
 /// including tracking which sync item's we've seen and which we haven't.
 pub struct SyncIncoming {
-    /// The message channel to our main thread.
-    tx_main: Pipeline,
-
     /// Holds our sync config. Note that this is shared between the sync system
     /// and the `Turtl` object in the main thread.
     config: Arc<RwLock<SyncConfig>>,
@@ -49,7 +44,7 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::KeychainEntry::new(),
@@ -61,7 +56,6 @@ impl SyncIncoming {
         };
 
         SyncIncoming {
-            tx_main: tx_main,
             config: config,
             api: api,
             db: db,
@@ -180,10 +174,6 @@ impl Syncer for SyncIncoming {
         self.config.clone()
     }
 
-    fn get_tx(&self) -> Pipeline {
-        self.tx_main.clone()
-    }
-
     fn init(&self) -> TResult<()> {
         let sync_id = self.db.kv_get("sync_id")?;
         Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj())?;
@@ -191,30 +181,16 @@ impl Syncer for SyncIncoming {
             let config_guard = self.config.read().unwrap();
             config_guard.skip_api_init
         };
-        let mut init_err: Option<String> = None;
         let res = if !skip_init {
-            let res = match sync_id {
+            match sync_id {
                 // we have a sync id! grab the latest changes from the API
                 Some(ref x) => self.sync_from_api(x, false),
                 // no sync id ='[ ='[ ='[ ...instead grab the full profile
                 None => self.load_full_profile(),
-            };
-            init_err = match res {
-                Ok(_) => None,
-                Err(ref e) => Some(format!("sync::incoming::init() -- {}", e)),
-            };
-            res
+            }
         } else {
             Ok(())
         };
-        // let our Turtl know we're done
-        self.get_tx().next(move |turtl| {
-            let val = match init_err {
-                Some(x) => Value::String(x),
-                None => Value::Bool(true),
-            };
-            turtl.events.trigger("sync:incoming:init:done", &val);
-        });
         res
     }
 

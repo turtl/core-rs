@@ -50,9 +50,9 @@ quick_error! {
             description("io error")
             display("io error: {}", err)
         }
-        Api(status: StatusCode) {
+        Api(status: StatusCode, msg: String) {
             description("API error")
-            display("api error: {}", status.canonical_reason().unwrap_or("unknown"))
+            display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
         }
         TryAgain {
             description("try again")

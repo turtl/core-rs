@@ -23,16 +23,15 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock, mpsc};
 
 use ::config;
-use ::jedi::{self, Value};
+use ::jedi;
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
 use ::util;
-use ::util::event::Emitter;
-use ::util::thredder::Pipeline;
 use ::error::TResult;
 use ::storage::Storage;
 use ::api::Api;
+use ::messaging;
 
 /// This holds the configuration for the sync system (whether it's enabled, the
 /// current user id/api endpoint, and any other information we need to make
@@ -101,9 +100,6 @@ pub trait Syncer {
     /// Get a copy of the current sync config
     fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
 
-    /// Get the main thread messenger
-    fn get_tx(&self) -> Pipeline;
-
     /// Run the sync operation for this syncer.
     ///
     /// Essentially, this is the meat of the syncer. This is the entry point for
@@ -154,7 +150,6 @@ pub trait Syncer {
     /// Runs our syncer, with some quick checks on run status.
     fn runner(&self, init_tx: mpsc::Sender<TResult<()>>) {
         info!("sync::runner() -- {} init", self.get_name());
-        let evname = format!("sync:{}:init", self.get_name());
         let init_res = self.init();
         macro_rules! send_or_return {
             ($sendex:expr) => {
@@ -167,17 +162,10 @@ pub trait Syncer {
         match init_res {
             Ok(_) => {
                 send_or_return!(init_tx.send(Ok(())));
-                self.get_tx().next(move |turtl| {
-                    turtl.events.trigger(evname.as_str(), &Value::Bool(true));
-                });
             },
             Err(e) => {
                 error!("sync::runner() -- {}: init: {}", self.get_name(), e);
-                let msg = format!("{}", e);
                 send_or_return!(init_tx.send(Err(e)));
-                self.get_tx().next(move |turtl| {
-                    turtl.events.trigger(evname.as_str(), &Value::String(msg));
-                });
                 return;
             },
         }
@@ -204,9 +192,8 @@ pub trait Syncer {
     /// Let the main thread know that we've (dis)connected to the API. Useful
     /// for updating the UI on our connection state
     fn connected(&self, yesno: bool) {
-        self.get_tx().next(move |turtl| {
-            turtl.events.trigger("app:connected", &Value::Bool(yesno));
-        });
+        messaging::app_event("sync:connected", &yesno)
+            .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected event: {}", e));
     }
 }
 
@@ -216,7 +203,7 @@ pub trait Syncer {
 /// thread needs its own connection. We don't have the ability to create the
 /// connections in this scope (no access to Turtl by design) so we need to
 /// just have them passed in.
-pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Arc<Storage>, db_in: Arc<Storage>) -> TResult<SyncState> {
+pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Arc<Storage>, db_in: Arc<Storage>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = config.write().unwrap();
@@ -225,23 +212,21 @@ pub fn start(tx_main: Pipeline, config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, 
     }
 
     // start our outging sync process
-    let tx_main_out = tx_main.clone();
     let config_out = config.clone();
     let (tx_out, rx_out) = mpsc::channel::<TResult<()>>();
     let api_out = api.clone();
     let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
-        let sync = SyncOutgoing::new(tx_main_out, config_out, api_out, db_out);
+        let sync = SyncOutgoing::new(config_out, api_out, db_out);
         sync.runner(tx_out);
         info!("sync::start() -- outgoing shut down");
     })?;
 
     // start our incoming sync process
-    let tx_main_in = tx_main.clone();
     let config_in = config.clone();
     let (tx_in, rx_in) = mpsc::channel::<TResult<()>>();
     let api_in = api.clone();
     let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
-        let sync = SyncIncoming::new(tx_main_in, config_in, api_in, db_in);
+        let sync = SyncIncoming::new(config_in, api_in, db_in);
         sync.runner(tx_in);
         info!("sync::start() -- incoming shut down");
     })?;
@@ -296,7 +281,6 @@ mod tests {
     use ::jedi::{self, Value};
 
     use ::storage::Storage;
-    use ::util::thredder::Pipeline;
     use ::api::Api;
 
     #[test]
@@ -315,14 +299,13 @@ mod tests {
 
     #[test]
     fn starts_and_quits() {
-        let tx_main = Pipeline::new();
         let mut sync_config = SyncConfig::new();
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
         let db_out = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
         let db_in = Arc::new(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap());
-        let mut state = start(tx_main, sync_config, api, db_out, db_in).unwrap();
+        let mut state = start(sync_config, api, db_out, db_in).unwrap();
         (state.shutdown)();
         loop {
             let hn = state.join_handles.pop();

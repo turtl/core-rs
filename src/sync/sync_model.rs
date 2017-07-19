@@ -99,14 +99,14 @@ fn prepare_for_sync<T>(turtl: &Turtl, model: &mut T) -> TResult<()>
             model.generate_id()?;
             model.generate_key()?;
         } else {
-            let model_data: Value = model.data()?;
             let got_model = db.get::<T>(model.table(), model.id().unwrap())?;
             match got_model {
                 Some(db_model) => {
+                    let model_data: Value = model.data()?;
                     model.merge_fields(&db_model.data_for_storage()?)?;
                     model.merge_fields(&model_data)?;
                 },
-                None => return Err(TError::MissingData(format!("sync_model::save_model() -- {} model could not be found by existing id {}", model.model_type(), model.id().unwrap()))),
+                None => {},
             }
         }
     }
