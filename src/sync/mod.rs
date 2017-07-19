@@ -84,6 +84,7 @@ impl Default for SyncData {
 /// Define a container for our sync records
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncRecord {
+    #[serde(with = "::util::ser::int_converter")]
     pub id: String,
     pub action: String,
     pub sync_ids: Option<Vec<String>>,
@@ -285,7 +286,7 @@ mod tests {
 
     #[test]
     fn serializes_sync_record() {
-        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":"1234","action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
+        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":1234,"action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
         assert_eq!(sync.id, String::from("1234"));
         assert_eq!(sync.action, String::from("add"));
         assert_eq!(sync.sync_ids, None);
@@ -294,7 +295,7 @@ mod tests {
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
         let syncstr: String = jedi::stringify(&sync).unwrap();
-        assert_eq!(syncstr, String::from(r#"{"id":"1234","action":"add","sync_ids":null,"type":"note","data":{"id":"6969"}}"#));
+        assert_eq!(syncstr, String::from(r#"{"id":1234,"action":"add","sync_ids":null,"type":"note","data":{"id":"6969"}}"#));
     }
 
     #[test]
