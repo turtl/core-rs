@@ -25,6 +25,11 @@ use ::sync::sync_model;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
+
+    // -------------------------------------------------------------------------
+    // TODO: handle app events
+    // -------------------------------------------------------------------------
+
     match cmd.as_ref() {
         "user:login" => {
             let username = jedi::get(&["2"], &data)?;

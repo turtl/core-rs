@@ -1,6 +1,5 @@
-//! Thredder is a thread tracking system that not only creates threads for
-//! specific purposes, but sets up communication channels between the threads
-//! and tracks the state of them.
+//! Thredder is a wrapper around a cpu thread pooling implementation. It works
+//! using promises.
 
 use ::std::marker::Send;
 
@@ -10,11 +9,6 @@ use ::futures_cpupool::CpuPool;
 use ::error::{TResult, TFutureResult};
 
 /// Stores state information for a thread we've spawned.
-///
-/// NOTE: Thredder used to have a lot of wrapping around CpuPool and provided a
-/// lot of utilities for passing data between pools and our main thread. Those
-/// days are gone now since many improvements to CpuPool, so it now exists as a
-/// very thin layer.
 pub struct Thredder {
     /// Our Thredder's name
     pub name: String,

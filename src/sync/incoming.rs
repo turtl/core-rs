@@ -33,7 +33,7 @@ pub struct SyncIncoming {
     api: Arc<Api>,
 
     /// Holds our user-specific db. This is mainly for persisting k/v data (such
-    /// as our lsat sync_id).
+    /// as our last sync_id).
     db: Arc<Storage>,
 
     /// For each type we get back from an outgoing poll, defines a collection
