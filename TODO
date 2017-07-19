@@ -1,5 +1,4 @@
 current:
-- finish converting user.join() to create default boards/spaces
 - finish test client to do join, start-sync, load-profile (check spaces/boards),
   delete-account
 
@@ -65,4 +64,6 @@ later:
   - storage sysem ONLY accepts encrypted model types
   - UI messaging layer ONLY accepts decrypted model types
   - encrypting and decrypting BOTH consume a model and return the new type
+- implement i18n? seems the only place using it is the user model. maybe not a
+  big deal to just have a few hardcoded english items?
 
