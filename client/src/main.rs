@@ -165,6 +165,27 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
+        let msg = String::from(r#"["4","app:start-sync"]"#);
+        send(msg.as_str());
+        let msg = recv("4");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        // wait until we're loaded
+        while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
+
+        let msg = format!(r#"["3","profile:load"]"#);
+        send(msg.as_str());
+        let msg = recv("3");
+        let val: Value = jedi::parse(msg).unwrap();
+        let spaces: Vec<Value> = jedi::get(&["spaces"], &val).unwrap();
+        let boards: Vec<Value> = jedi::get(&["boards"], &val).unwrap();
+        let ptitle: String = jedi::get(&["spaces", 0, "title"], &val).unwrap();
+        assert_eq!(spaces.len(), 3);
+        assert_eq!(boards.len(), 3);
+        assert_eq!(ptitle, "Personal");
+        sleep(10);
+
         let msg = format!(r#"["3","user:delete-account","{}","{}"]"#, username, password);
         send(msg.as_str());
         let msg = recv("3");
