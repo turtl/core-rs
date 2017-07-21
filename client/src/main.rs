@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = format!(r#"["2","user:join","{}","{}"]"#, username, password);
+        let msg = format!(r#"["2","user:join","{}","{}"]"#, "slippyslappy@turtlapp.com", password);
         send(msg.as_str());
         let msg = recv("2");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
@@ -174,13 +174,14 @@ mod tests {
         // wait until we're loaded
         while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
 
-        let msg = format!(r#"["3","profile:load"]"#);
+        let msg = format!(r#"["30","profile:load"]"#);
         send(msg.as_str());
-        let msg = recv("3");
-        let val: Value = jedi::parse(msg).unwrap();
-        let spaces: Vec<Value> = jedi::get(&["spaces"], &val).unwrap();
-        let boards: Vec<Value> = jedi::get(&["boards"], &val).unwrap();
-        let ptitle: String = jedi::get(&["spaces", 0, "title"], &val).unwrap();
+        let msg = recv("30");
+        let val: Value = jedi::parse(&msg).unwrap();
+        let data: Value = jedi::get(&["d"], &val).unwrap();
+        let spaces: Vec<Value> = jedi::get(&["spaces"], &data).unwrap();
+        let boards: Vec<Value> = jedi::get(&["boards"], &data).unwrap();
+        let ptitle: String = jedi::get(&["spaces", "0", "title"], &data).unwrap();
         assert_eq!(spaces.len(), 3);
         assert_eq!(boards.len(), 3);
         assert_eq!(ptitle, "Personal");
@@ -191,7 +192,7 @@ mod tests {
         let msg = recv("3");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
-
+        end(handle);
     }
 
     #[test]
@@ -220,19 +221,28 @@ mod tests {
 
         // wait until we're loaded
         while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
-
-        let msg = String::from(r#"["12","profile:get-notes",["015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f"]]"#);
-        send(msg.as_str());
-        let msg = recv("12");
-        assert_eq!(msg, r##"{"e":0,"d":[{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","color":null,"embed":null,"file":null,"has_file":null,"id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f","keys":null,"mod":1479425965,"password":null,"tags":[],"text":"the confederate flag is the flag of traitors","title":"mai title","type":"text","url":null,"user_id":"5244679b2b1375384f0000bc","username":null}]}"##);
-
         // wait until we're indexed
         while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
 
-        let msg = String::from(r#"["6","profile:find-notes",{"search":{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"]}}]"#);
+        let msg = format!(r#"["30","profile:load"]"#);
+        send(msg.as_str());
+        let msg = recv("30");
+        let val: Value = jedi::parse(&msg).unwrap();
+        let data: Value = jedi::get(&["d"], &val).unwrap();
+        let spaces: Vec<Value> = jedi::get(&["spaces"], &data).unwrap();
+        let boards: Vec<Value> = jedi::get(&["boards"], &data).unwrap();
+        let ptitle: String = jedi::get(&["spaces", "0", "title"], &data).unwrap();
+        assert_eq!(spaces.len(), 3);
+        assert_eq!(boards.len(), 3);
+        assert_eq!(ptitle, "Personal");
+        sleep(10);
+
+        let msg = String::from(r#"["6","profile:find-notes",{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}]"#);
         send(msg.as_str());
         let msg = recv("6");
-        assert_eq!(msg, r#"{"e":0,"d":[{"boards":["01549210bd2db6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c9007c"],"body":"AAUCAAGTaDVBJHRXgdsfHjrI4706aoh6HKbvoa6Oda4KP0HV07o4JEDED/QHqCVMTCODJq5o2I3DNv0jIhZ6U3686ViT6YIwi3EUFjnE+VMfPNdnNEMh7uZp84rUaKe03GBntBRNyiGikxn0mxG86CGnwBA8KPL1Gzwkxd+PJZhPiRz0enWbOBKik7kAztahJq7EFgCLdk7vKkhiTdOg4ghc/jD6s9ATeN8NKA90MNltzTIM","color":null,"embed":null,"file":null,"has_file":null,"id":"015874a823e4af227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba0361f","keys":null,"mod":1479425965,"password":null,"tags":[],"text":"the confederate flag is the flag of traitors","title":"mai title","type":"text","url":null,"user_id":"5244679b2b1375384f0000bc","username":null}]}"#);
+        let res: Value = jedi::parse(&msg).unwrap();
+        let note = jedi::stringify(&jedi::get::<Value>(&["d", "0"], &res).unwrap()).unwrap();
+        assert_eq!(note, r#"{"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl","has_file":false,"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592545,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","tags":["free market","america","fuck yeah"],"text":"COMMIES, AMIRITE?\n\n#PRIVATIZEEVERYTHING #FREEMARKET #TOLLROADS #LIBCUCKS","title":"YOU KNOW WUT I HATE?!","type":"text","user_id":51}"#);
         sleep(10);
 
         let msg = String::from(r#"["6","app:shutdown-sync"]"#);

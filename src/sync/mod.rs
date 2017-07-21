@@ -15,7 +15,6 @@
 
 mod incoming;
 mod outgoing;
-pub mod item;
 #[macro_use]
 pub mod sync_model;
 
@@ -23,7 +22,7 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock, mpsc};
 
 use ::config;
-use ::jedi;
+use ::jedi::Value;
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
@@ -75,22 +74,25 @@ pub struct SyncState {
     pub resume: Box<Fn() + 'static + Sync + Send>,
 }
 
-/// Create `SyncData`, a wrapper type for Value that we can define Default on
-jedi_value_wrapper!(SyncData);
-impl Default for SyncData {
-    fn default() -> SyncData { SyncData(jedi::obj()) }
-}
-
 /// Define a container for our sync records
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SyncRecord {
     #[serde(with = "::util::ser::int_converter")]
     pub id: String,
     pub action: String,
-    pub sync_ids: Option<Vec<String>>,
+    #[serde(with = "::util::ser::int_converter")]
+    pub item_id: String,
+    #[serde(with = "::util::ser::int_converter")]
+    pub user_id: String,
     #[serde(rename = "type")]
-    pub type_: String,
-    pub data: SyncData,
+    pub ty: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects
@@ -286,16 +288,16 @@ mod tests {
 
     #[test]
     fn serializes_sync_record() {
-        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":1234,"action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
+        let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":1234,"user_id":1,"item_id":6969,"action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
         assert_eq!(sync.id, String::from("1234"));
         assert_eq!(sync.action, String::from("add"));
         assert_eq!(sync.sync_ids, None);
-        assert_eq!(sync.type_, String::from("note"));
+        assert_eq!(sync.ty, String::from("note"));
         let data: Value = jedi::to_val(&sync.data).unwrap();
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
         let syncstr: String = jedi::stringify(&sync).unwrap();
-        assert_eq!(syncstr, String::from(r#"{"id":1234,"action":"add","sync_ids":null,"type":"note","data":{"id":"6969"}}"#));
+        assert_eq!(syncstr, String::from(r#"{"id":1234,"action":"add","item_id":6969,"user_id":1,"type":"note","data":{"id":"6969"}}"#));
     }
 
     #[test]

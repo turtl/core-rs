@@ -7,27 +7,30 @@
 
 use ::error::{TError, TResult};
 use ::storage::Storage;
-use ::sync::item::SyncItem;
+use ::sync::SyncRecord;
 use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
 use ::turtl::Turtl;
 use ::models::model::Model;
 
-
 macro_rules! make_sync_incoming {
     ($n:ty) => {
-        fn incoming(&self, db: &::storage::Storage, sync_item: ::sync::item::SyncItem) -> ::error::TResult<()> {
-            let data = match sync_item.data.as_ref() {
-                Some(x) => x.clone(),
-                None => return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id, self.model_type()))),
-            };
+        fn incoming(&self, db: &::storage::Storage, sync_item: ::sync::SyncRecord) -> ::error::TResult<()> {
             if sync_item.action == "delete" {
-                let model: $n = ::jedi::from_val(data)?;
+                let mut model: $n = Default::default();
+                model.id = Some(sync_item.item_id);
                 model.db_delete(db)
             } else {
-                let sync_item = self.transform(sync_item)?;
-                debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), sync_item);
+                if sync_item.data.is_none() {
+                    return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id, self.model_type())));
+                }
+                let mut sync_item = self.transform(sync_item)?;
+                let mut data = ::jedi::Value::Null;
+                // swap the `data` out from under the SyncRecord so we don't
+                // have to clone it
+                ::std::mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
+                debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), ::jedi::stringify(&data)?);
                 let model: $n = ::jedi::from_val(data)?;
                 model.db_save(db)
             }
@@ -54,7 +57,7 @@ macro_rules! make_basic_sync_model {
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Run an incoming sync item
-    fn incoming(&self, db: &Storage, sync_item: SyncItem) -> TResult<()>;
+    fn incoming(&self, db: &Storage, sync_item: SyncRecord) -> TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
     fn db_save(&self, db: &Storage) -> TResult<()> {
@@ -67,8 +70,15 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     }
 
     /// Transform this model's data from an incoming sync (if required).
-    fn transform(&self, sync_item: SyncItem) -> TResult<SyncItem> {
+    fn transform(&self, sync_item: SyncRecord) -> TResult<SyncRecord> {
         Ok(sync_item)
+    }
+
+    /// Return a mutable reference to this model. Useful in cases where the
+    /// model is wrapped in a container (RwLock, et al) and you need a ref to
+    /// it.
+    fn as_mut<'a>(&'a mut self) -> &'a mut Self {
+        self
     }
 }
 

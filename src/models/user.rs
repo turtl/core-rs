@@ -11,7 +11,8 @@ use ::models::protected::{Keyfinder, Protected};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
-use ::sync::sync_model::{self, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
+use ::sync::SyncRecord;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -44,7 +45,23 @@ protected! {
 }
 
 make_storable!(User, "users");
-make_basic_sync_model!(User);
+make_basic_sync_model!{ User, 
+    fn transform(&self, mut sync_item: SyncRecord) -> TResult<SyncRecord> {
+        // make sure we convert integer ids to string ids for the user object
+        match sync_item.data.as_mut() {
+            Some(ref mut data) => {
+                match jedi::get_opt::<i64>(&["id"], data) {
+                    Some(id) => {
+                        jedi::set(&["id"], data, &id.to_string())?;
+                    }
+                    None => {}
+                }
+            }
+            None => {}
+        }
+        Ok(sync_item)
+    }
+}
 
 impl Keyfinder for User {}
 
@@ -93,9 +110,16 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     turtl.api.set_auth(username.clone(), auth.clone())?;
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
     let mut user_guard_w = turtl.user.write().unwrap();
+    let id_err = Err(TError::BadValue(format!("user::do_login() -- auth was successful, but API returned strange id object: {:?}", user_id)));
     user_guard_w.id = match user_id {
+        Value::Number(x) => {
+            match x.as_i64() {
+                Some(id) => Some(id.to_string()),
+                None => return id_err,
+            }
+        },
         Value::String(x) => Some(x),
-        _ => return Err(TError::BadValue(format!("user::do_login() -- auth was successful, but API returned strange id object: {:?}", user_id))),
+        _ => return id_err,
     };
     user_guard_w.do_login(key, auth);
     drop(user_guard_w);
@@ -147,11 +171,11 @@ impl User {
         turtl.api.set_auth(username.clone(), auth.clone())?;
         let mut req = ApiReq::new();
 
-        req = req.data(jedi::to_val(&hobj!{
-            "auth" => Value::String(auth.clone()),
-            "username" => Value::String(username),
-            "data" => userdata,
-        })?);
+        req = req.data(json!({
+            "auth": auth.clone(),
+            "username": username,
+            "data": userdata,
+        }));
         let joindata = turtl.api.post("/users", req)?;
         let user_id: u64 = jedi::get(&["id"], &joindata)?;
         let user_id: String = user_id.to_string();
@@ -160,6 +184,7 @@ impl User {
         user_guard_w.id = Some(user_id);
         user_guard_w.do_login(key, auth);
         user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
+        sync_model::save_model(turtl, user_guard_w.as_mut())?;
         drop(user_guard_w);
 
         let user_guard_r = turtl.user.read().unwrap();

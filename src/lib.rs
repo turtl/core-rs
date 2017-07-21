@@ -8,7 +8,6 @@ extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate hyper;
-#[macro_use]
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
@@ -26,6 +25,7 @@ extern crate rustc_serialize as serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
 extern crate serde_json;
 extern crate sodiumoxide;
 extern crate time;

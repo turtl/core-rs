@@ -4,9 +4,8 @@ use ::std::io::ErrorKind;
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
-use ::sync::{SyncConfig, Syncer};
+use ::sync::{SyncRecord, SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
-use ::sync::item::SyncItem;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::Messenger;
@@ -112,22 +111,18 @@ impl SyncIncoming {
         if syncdata == Value::Null { return Ok(()); }
 
         // the api sends back the latest sync id out of the bunch. grab it.
-        let sync_id = jedi::get::<String>(&["sync_id"], &syncdata)?;
+        let sync_id = (jedi::get::<u64>(&["sync_id"], &syncdata)?).to_string();
         // also grab our sync records.
-        let records: Vec<Value> = jedi::get(&["records"], &syncdata)?;
+        let records: Vec<SyncRecord> = jedi::get(&["records"], &syncdata)?;
 
         // start a transaction. we don't want to save half-data.
         self.db.conn.execute("BEGIN TRANSACTION", &[])?;
         for rec in records {
-            // NOTE: doing `records: Vec<SyncItem> = jedi::get(...)` breaks the
-            // deserialization, but converting one-by-one from a Value here
-            // works. what the hell?
-            let item: SyncItem = jedi::from_val(rec)?;
-            self.run_sync_item(item)?;
+            self.run_sync_item(rec)?;
         }
         // make sure we save our sync_id as the LAST STEP of our transaction.
         // if this fails, then next time we load we just start from the same
-        // spot we were at before
+        // spot we were at before. SYNC BUGS HATE HIM!!!1
         self.db.kv_set("sync_id", &sync_id)?;
         // ok, commit
         self.db.conn.execute("COMMIT TRANSACTION", &[])?;
@@ -135,7 +130,7 @@ impl SyncIncoming {
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, sync_item: SyncItem) -> TResult<()> {
+    fn run_sync_item(&self, sync_item: SyncRecord) -> TResult<()> {
         // check if we have missing data, and if so, if it's on purpose
         if sync_item.data.is_none() {
             let missing = match sync_item.missing {
@@ -152,7 +147,7 @@ impl SyncIncoming {
 
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
-        match sync_item.type_.as_ref() {
+        match sync_item.ty.as_ref() {
             "user" => self.handlers.user.incoming(&self.db, sync_item),
             "keychain" => self.handlers.keychain.incoming(&self.db, sync_item),
             "space" => self.handlers.space.incoming(&self.db, sync_item),
@@ -160,7 +155,7 @@ impl SyncIncoming {
             "note" => self.handlers.note.incoming(&self.db, sync_item),
             "file" => self.handlers.file.incoming(&self.db, sync_item),
             "invite" => self.handlers.invite.incoming(&self.db, sync_item),
-            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.type_))),
+            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.ty))),
         }
     }
 }
@@ -176,7 +171,7 @@ impl Syncer for SyncIncoming {
 
     fn init(&self) -> TResult<()> {
         let sync_id = self.db.kv_get("sync_id")?;
-        Messenger::event(String::from("sync:incoming:init:start").as_str(), jedi::obj())?;
+        Messenger::event("sync:incoming:init:start", jedi::obj())?;
         let skip_init = {
             let config_guard = self.config.read().unwrap();
             config_guard.skip_api_init

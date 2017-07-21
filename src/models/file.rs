@@ -1,7 +1,7 @@
 use ::jedi::{self, Value};
 use ::error::TResult;
 use ::storage::Storage;
-use ::sync::item::SyncItem;
+use ::sync::SyncRecord;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 
@@ -34,6 +34,7 @@ protected! {
     /// metadata that lives in the Note object.
     #[derive(Serialize, Deserialize)]
     pub struct FileData {
+        #[serde(default)]
         #[protected_field(public)]
         pub has_data: bool,
 
@@ -45,7 +46,7 @@ protected! {
 
 make_storable!(FileData, "files");
 make_basic_sync_model!{ FileData,
-    fn transform(&self, mut sync_item: SyncItem) -> TResult<SyncItem> {
+    fn transform(&self, mut sync_item: SyncRecord) -> TResult<SyncRecord> {
         let note_id: String = jedi::get(&["id"], sync_item.data.as_ref().unwrap())?;
         sync_item.data = Some(jedi::get(&["file"], sync_item.data.as_ref().unwrap())?);
         match sync_item.data.as_mut().unwrap() {

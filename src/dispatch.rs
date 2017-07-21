@@ -85,10 +85,10 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
         },
         "profile:load" => {
             let profile_guard = turtl.profile.read().unwrap();
-            let profile_data = jedi::to_val(&hobj!{
-                "spaces" => jedi::to_val(&profile_guard.spaces)?,
-                "boards" => jedi::to_val(&profile_guard.boards)?,
-            })?;
+            let profile_data = json!({
+                "spaces": &profile_guard.spaces,
+                "boards": &profile_guard.boards,
+            });
             Ok(profile_data)
         },
         "profile:sync:model" => {

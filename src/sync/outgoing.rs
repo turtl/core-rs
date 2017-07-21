@@ -135,7 +135,7 @@ impl Syncer for SyncOutgoing {
         let mut file_syncs: Vec<SyncRecord> = Vec::new();
         // split our sync records into our normal/file collections
         for rec in sync {
-            if rec.type_ == "file" && rec.action == "add" {
+            if rec.ty == "file" && rec.action == "add" {
                 file_syncs.push(rec);
             } else {
                 syncs.push(rec);

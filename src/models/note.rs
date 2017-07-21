@@ -6,7 +6,7 @@ use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
 use ::models::file::File;
 use ::crypto::Key;
-use ::sync::item::SyncItem;
+use ::sync::SyncRecord;
 use ::sync::sync_model::MemorySaver;
 
 protected! {
@@ -62,7 +62,7 @@ protected! {
 
 make_storable!(Note, "notes");
 make_basic_sync_model!{ Note,
-    fn transform(&self, mut sync_item: SyncItem) -> TResult<SyncItem> {
+    fn transform(&self, mut sync_item: SyncRecord) -> TResult<SyncRecord> {
         let data = sync_item.data.as_ref().unwrap().clone();
         match jedi::get::<String>(&["board_id"], &data) {
             Ok(board_id) => {
