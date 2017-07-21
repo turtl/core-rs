@@ -37,7 +37,8 @@ mod util;
 mod crypto;
 mod messaging;
 mod api;
-#[macro_use] mod sync;
+#[macro_use]
+mod sync;
 #[macro_use]
 mod models;
 mod profile;

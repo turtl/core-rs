@@ -184,7 +184,6 @@ impl User {
         user_guard_w.id = Some(user_id);
         user_guard_w.do_login(key, auth);
         user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
-        sync_model::save_model(turtl, user_guard_w.as_mut())?;
         drop(user_guard_w);
 
         let user_guard_r = turtl.user.read().unwrap();
@@ -196,14 +195,14 @@ impl User {
 
     /// Once the user has joined, we set up a default profile for them.
     pub fn post_join(turtl: &Turtl) -> TResult<()> {
-        let user_guard_r = turtl.user.read().unwrap();
-        let user_id = match user_guard_r.id() {
+        let mut user_guard_w = turtl.user.write().unwrap();
+        let user_id = match user_guard_w.id() {
             Some(x) => x.clone(),
             None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
         };
-        drop(user_guard_r);
+        sync_model::save_model(turtl, user_guard_w.as_mut())?;
+        drop(user_guard_w);
 
-        // TODO: i18n on space names
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
             let mut space: Space = Default::default();
             space.generate_key()?;
@@ -214,7 +213,6 @@ impl User {
             let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
-        // TODO: i18n on board names
         fn save_board(turtl: &Turtl, user_id: &String, space_id: &String, title: &str) -> TResult<String> {
             let mut board: Board = Default::default();
             board.generate_key()?;
