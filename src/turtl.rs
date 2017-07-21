@@ -68,12 +68,9 @@ pub struct Turtl {
     sync_state: Arc<RwLock<Option<SyncState>>>,
 }
 
-/// A handy type alias for passing Turtl around
-pub type TurtlWrap = Arc<Turtl>;
-
 impl Turtl {
     /// Create a new Turtl app
-    fn new() -> TResult<Turtl> {
+    pub fn new() -> TResult<Turtl> {
         let num_workers = num_cpus::get() - 1;
 
         let api = Arc::new(Api::new());
@@ -95,13 +92,6 @@ impl Turtl {
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
         };
-        Ok(turtl)
-    }
-
-    /// A handy wrapper for creating a wrapped Turtl object (TurtlWrap),
-    /// shareable across threads.
-    pub fn new_wrap() -> TResult<TurtlWrap> {
-        let turtl = Arc::new(Turtl::new()?);
         Ok(turtl)
     }
 
@@ -531,7 +521,7 @@ impl Drop for Turtl {
 mod tests {
     use super::*;
 
-    use ::std::sync::{Arc, RwLock};
+    use ::std::sync::RwLock;
 
     use ::config;
     use ::jedi;
@@ -728,13 +718,12 @@ mod tests {
         let db = turtl.create_user_db().unwrap();
         turtl.db = RwLock::new(Some(db));
 
-        let turtl: TurtlWrap = Arc::new(turtl);
         let mut space: Space = jedi::parse(&String::from(r#"{
             "user_id":69,
             "title":"get a job"
         }"#)).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model(turtl.as_ref(), &mut space).unwrap();
+        let space_val: Value = sync_model::save_model(&turtl, &mut space).unwrap();
         let mut note: Note = jedi::parse(&String::from(r#"{
             "user_id":69,
             "space_id":"8884442",
@@ -748,7 +737,7 @@ mod tests {
         let space_id: String = jedi::get(&["id"], &space_val).unwrap();
         note.space_id = space_id.clone();
         // save our note to "disk"
-        let val: Value = sync_model::save_model(turtl.as_ref(), &mut note).unwrap();
+        let val: Value = sync_model::save_model(&turtl, &mut note).unwrap();
         let saved_model: Note = jedi::from_val(val).unwrap();
         assert!(saved_model.id().is_some());
         assert_eq!(saved_model.space_id, space_id);

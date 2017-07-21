@@ -14,7 +14,7 @@ use ::error::{TResult, TError};
 use ::util;
 use ::config;
 use ::util::event::Emitter;
-use ::turtl::{TurtlWrap};
+use ::turtl::Turtl;
 use ::search::Query;
 use ::models::user::User;
 use ::models::space::Space;
@@ -24,7 +24,7 @@ use ::models::invite::Invite;
 use ::sync::sync_model;
 
 /// Does our actual message dispatching
-fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
+fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
 
     // -------------------------------------------------------------------------
     // TODO: handle app events
@@ -100,23 +100,23 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
                     let val = match ty.as_ref() {
                         "user" => {
                             let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl.as_ref(), &mut model)?
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "space" => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl.as_ref(), &mut model)?
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "board" => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl.as_ref(), &mut model)?
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "note" => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl.as_ref(), &mut model)?
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         "invite" => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl.as_ref(), &mut model)?
+                            sync_model::save_model(turtl, &mut model)?
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     };
@@ -126,19 +126,19 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
                     let id: String = jedi::get(&["4", "id"], &data)?;
                     match ty.as_ref() {
                         "user" => {
-                            sync_model::delete_model::<User>(turtl.as_ref(), &id)?;
+                            sync_model::delete_model::<User>(turtl, &id)?;
                         },
                         "space" => {
-                            sync_model::delete_model::<Space>(turtl.as_ref(), &id)?;
+                            sync_model::delete_model::<Space>(turtl, &id)?;
                         },
                         "board" => {
-                            sync_model::delete_model::<Board>(turtl.as_ref(), &id)?;
+                            sync_model::delete_model::<Board>(turtl, &id)?;
                         },
                         "note" => {
-                            sync_model::delete_model::<Note>(turtl.as_ref(), &id)?;
+                            sync_model::delete_model::<Note>(turtl, &id)?;
                         },
                         "invite" => {
-                            sync_model::delete_model::<Invite>(turtl.as_ref(), &id)?;
+                            sync_model::delete_model::<Invite>(turtl, &id)?;
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     }
@@ -187,7 +187,7 @@ fn dispatch(cmd: &String, turtl: TurtlWrap, data: Value) -> TResult<Value> {
 
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
-pub fn process(turtl: TurtlWrap, msg: &String) -> TResult<()> {
+pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
     let data: Value = jedi::parse(msg)?;
 
     // grab the request id from the data

@@ -47,6 +47,7 @@ mod dispatch;
 mod turtl;
 
 use ::std::thread;
+use ::std::sync::Arc;
 use ::std::fs;
 use ::std::io::ErrorKind;
 use ::std::os::raw::c_char;
@@ -121,7 +122,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             }
 
             // create our turtl object
-            let turtl = turtl::Turtl::new_wrap()?;
+            let turtl = Arc::new(turtl::Turtl::new()?);
             turtl.events.bind("app:shutdown", |_| {
                 messaging::stop();
             }, "app:shutdown:main");
@@ -130,7 +131,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             let msg_res = messaging::start(move |msg: String| {
                 let turtl2 = turtl.clone();
                 let res = thread::Builder::new().name(String::from("dispatch:msg")).spawn(move || {
-                    match dispatch::process(turtl2, &msg) {
+                    match dispatch::process(turtl2.as_ref(), &msg) {
                         Ok(..) => {},
                         Err(e) => error!("dispatch::process() -- error processing: {}", e),
                     }
