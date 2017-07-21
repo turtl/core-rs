@@ -492,12 +492,12 @@ mod tests {
         dog.tags = Some(vec![String::from("canine"), String::from("3-legged")]);
         // tests for presence of `extra` fields in JSON (there should be none)
         dog.active = true;
-        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
             let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
-        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"id":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
+        assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"keys":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
     }
 
     #[test]
@@ -576,8 +576,8 @@ mod tests {
     #[test]
     fn recursive_serialization() {
         let mut junkyard: Junkyard = jedi::parse(&String::from(r#"{"name":"US political system","dog":{"size":69,"name":"Gerard","type":"chowchow","tags":["bites","stubborn","furry"]}}"#)).unwrap();
-        assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"keys":null,"size":69},"id":null,"keys":null,"name":"US political system"}"#));
-        assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"id":null,"keys":null,"name":"US political system"}"#));
+        assert_eq!(junkyard.stringify_for_storage().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"keys":null,"size":69},"keys":null,"name":"US political system"}"#));
+        assert_eq!(junkyard.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"dog":{"body":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"},"keys":null,"name":"US political system"}"#));
         junkyard.generate_key().unwrap();
         junkyard.serialize().unwrap();
 
@@ -595,7 +595,7 @@ mod tests {
         assert_eq!(dog.type_.as_ref().unwrap(), &String::from("chowchow"));
         assert_eq!(dog.size.as_ref().unwrap(), &69);
         dog.body = None;
-        assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"id":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
+        assert_eq!(dog.stringify_unsafe().unwrap(), String::from(r#"{"body":null,"keys":null,"name":"Gerard","size":69,"tags":["bites","stubborn","furry"],"type":"chowchow"}"#));
     }
 
     #[test]

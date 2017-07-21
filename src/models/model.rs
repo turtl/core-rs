@@ -145,6 +145,7 @@ macro_rules! model {
 
             #[serde(default)]
             #[serde(deserialize_with = "::util::ser::int_opt_converter::deserialize")]
+            #[serde(skip_serializing_if = "Option::is_none")]
             pub id: Option<String>,
             $( $inner )*
         }
@@ -253,7 +254,7 @@ mod tests {
     #[test]
     fn stringify() {
         let mut rabbit = Rabbit::new();
-        assert_eq!(rabbit.stringify().unwrap(), "{\"id\":null,\"name\":null,\"type\":null,\"city\":null,\"chews_on_things_that_dont_belong_to_him\":null}");
+        assert_eq!(rabbit.stringify().unwrap(), "{\"name\":null,\"type\":null,\"city\":null,\"chews_on_things_that_dont_belong_to_him\":null}");
 
         rabbit.id = Some(String::from("12345"));
         rabbit.type_ = Some(String::from("hopper"));
