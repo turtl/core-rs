@@ -5,8 +5,8 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
 use ::models::file::File;
+use ::models::sync_record::SyncRecord;
 use ::crypto::Key;
-use ::sync::SyncRecord;
 use ::sync::sync_model::MemorySaver;
 
 protected! {

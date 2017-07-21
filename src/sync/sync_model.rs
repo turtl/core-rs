@@ -7,23 +7,23 @@
 
 use ::error::{TError, TResult};
 use ::storage::Storage;
-use ::sync::SyncRecord;
 use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
 use ::turtl::Turtl;
 use ::models::model::Model;
+use ::models::sync_record::SyncRecord;
 
 macro_rules! make_sync_incoming {
     ($n:ty) => {
-        fn incoming(&self, db: &::storage::Storage, sync_item: ::sync::SyncRecord) -> ::error::TResult<()> {
+        fn incoming(&self, db: &::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
             if sync_item.action == "delete" {
                 let mut model: $n = Default::default();
                 model.id = Some(sync_item.item_id);
                 model.db_delete(db)
             } else {
                 if sync_item.data.is_none() {
-                    return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id, self.model_type())));
+                    return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id.unwrap_or(String::from("<no id>")), self.model_type())));
                 }
                 let mut sync_item = self.transform(sync_item)?;
                 let mut data = ::jedi::Value::Null;

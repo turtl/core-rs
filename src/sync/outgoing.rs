@@ -3,10 +3,11 @@ use ::std::sync::{Arc, RwLock};
 use ::jedi::{self, Value};
 
 use ::error::TResult;
-use ::sync::{SyncConfig, Syncer, SyncRecord};
+use ::sync::{SyncConfig, Syncer};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
+use ::models::sync_record::SyncRecord;
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 

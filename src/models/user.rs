@@ -12,7 +12,6 @@ use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::sync::SyncRecord;
 
 protected! {
     #[derive(Serialize, Deserialize)]

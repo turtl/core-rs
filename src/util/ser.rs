@@ -13,9 +13,8 @@ pub mod int_converter {
     pub fn deserialize<'de, D>(des: D) -> Result<String, D::Error>
         where D: Deserializer<'de>
     {
-        struct StringOrI64 {};
-
-        impl<'de> Visitor<'de> for StringOrI64 {
+        struct StringOrInt;
+        impl<'de> Visitor<'de> for StringOrInt {
             type Value = String;
 
             fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -65,7 +64,7 @@ pub mod int_converter {
             }
         }
 
-        des.deserialize_any(StringOrI64 {})
+        des.deserialize_any(StringOrInt {})
     }
 
     pub fn from_value(val: Value) -> TResult<Option<String>> {
@@ -92,9 +91,10 @@ pub mod int_converter {
 pub mod int_opt_converter {
     use ::error::{TResult, TError};
     use ::serde::ser::Serializer;
-    use ::serde::de::{self, Deserialize, Deserializer, Visitor};
+    use ::serde::de::{Deserialize, Deserializer};
     use ::jedi::Value;
 
+    #[allow(dead_code)]
     pub fn serialize<S>(val: &Option<String>, ser: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
@@ -107,9 +107,31 @@ pub mod int_opt_converter {
     pub fn deserialize<'de, D>(des: D) -> Result<Option<String>, D::Error>
         where D: Deserializer<'de>
     {
-        Ok(Option::deserialize(des)?)
+        // fuck it, deserialize to intermediate Value. sick of trying to figure
+        // out how serde deals with Option...
+        let val: Value = Deserialize::deserialize(des)?;
+        match val {
+            Value::Number(num) => {
+                match num.as_i64() {
+                    Some(x) => Ok(Some(x.to_string())),
+                    None => {
+                        match num.as_u64() {
+                            Some(x) => Ok(Some(x.to_string())),
+                            None => Ok(None),
+                        }
+                    }
+                }
+            }
+            Value::String(s) => {
+                Ok(Some(s))
+            }
+            _ => {
+                Ok(None)
+            }
+        }
     }
 
+    #[allow(dead_code)]
     pub fn from_value(val: Value) -> TResult<Option<String>> {
         match val {
             Value::Number(num) => {

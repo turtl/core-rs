@@ -8,6 +8,7 @@ pub mod protected;
 #[macro_use]
 pub mod storable;
 
+pub mod sync_record;
 pub mod user;
 pub mod keychain;
 pub mod space;

@@ -22,7 +22,6 @@ use ::std::thread;
 use ::std::sync::{Arc, RwLock, mpsc};
 
 use ::config;
-use ::jedi::Value;
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
@@ -72,27 +71,6 @@ pub struct SyncState {
     pub shutdown: Box<Fn() + 'static + Sync + Send>,
     pub pause: Box<Fn() + 'static + Sync + Send>,
     pub resume: Box<Fn() + 'static + Sync + Send>,
-}
-
-/// Define a container for our sync records
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SyncRecord {
-    #[serde(with = "::util::ser::int_converter")]
-    pub id: String,
-    pub action: String,
-    #[serde(with = "::util::ser::int_converter")]
-    pub item_id: String,
-    #[serde(with = "::util::ser::int_converter")]
-    pub user_id: String,
-    #[serde(rename = "type")]
-    pub ty: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sync_ids: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub missing: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects
@@ -282,14 +260,14 @@ mod tests {
     use ::std::sync::{Arc, RwLock};
 
     use ::jedi::{self, Value};
-
     use ::storage::Storage;
     use ::api::Api;
+    use ::models::sync_record::SyncRecord;
 
     #[test]
     fn serializes_sync_record() {
         let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":1234,"user_id":1,"item_id":6969,"action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
-        assert_eq!(sync.id, String::from("1234"));
+        assert_eq!(sync.id, Some(String::from("1234")));
         assert_eq!(sync.action, String::from("add"));
         assert_eq!(sync.sync_ids, None);
         assert_eq!(sync.ty, String::from("note"));
@@ -297,7 +275,7 @@ mod tests {
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
         let syncstr: String = jedi::stringify(&sync).unwrap();
-        assert_eq!(syncstr, String::from(r#"{"id":1234,"action":"add","item_id":6969,"user_id":1,"type":"note","data":{"id":"6969"}}"#));
+        assert_eq!(syncstr, String::from(r#"{"id":"1234","body":null,"action":"add","item_id":6969,"user_id":1,"type":"note","data":{"id":"6969"}}"#));
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use ::jedi::{self, Value};
 use ::error::TResult;
 use ::storage::Storage;
-use ::sync::SyncRecord;
 use ::models::model::Model;
+use ::models::sync_record::SyncRecord;
 use ::models::protected::{Keyfinder, Protected};
 
 protected! {

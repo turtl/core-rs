@@ -4,12 +4,13 @@ use ::std::io::ErrorKind;
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
-use ::sync::{SyncRecord, SyncConfig, Syncer};
+use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::Messenger;
 use ::models;
+use ::models::sync_record::SyncRecord;
 
 struct Handlers {
     user: models::user::User,

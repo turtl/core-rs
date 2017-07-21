@@ -144,8 +144,8 @@ macro_rules! model {
             pub _emitter: ::util::event::EventEmitter,
 
             #[serde(default)]
-            #[serde(deserialize_with = "::util::ser::int_opt_converter::deserialize")]
             #[serde(skip_serializing_if = "Option::is_none")]
+            #[serde(deserialize_with = "::util::ser::int_opt_converter::deserialize")]
             pub id: Option<String>,
             $( $inner )*
         }
