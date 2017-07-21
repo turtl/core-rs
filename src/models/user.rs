@@ -45,23 +45,7 @@ protected! {
 }
 
 make_storable!(User, "users");
-make_basic_sync_model!{ User, 
-    fn transform(&self, mut sync_item: SyncRecord) -> TResult<SyncRecord> {
-        // make sure we convert integer ids to string ids for the user object
-        match sync_item.data.as_mut() {
-            Some(ref mut data) => {
-                match jedi::get_opt::<i64>(&["id"], data) {
-                    Some(id) => {
-                        jedi::set(&["id"], data, &id.to_string())?;
-                    }
-                    None => {}
-                }
-            }
-            None => {}
-        }
-        Ok(sync_item)
-    }
-}
+make_basic_sync_model!(User);
 
 impl Keyfinder for User {}
 

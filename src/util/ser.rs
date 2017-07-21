@@ -89,54 +89,45 @@ pub mod int_converter {
     }
 }
 
-/*
-pub mod false_as_none {
-    use ::serde::de::{self, Deserializer, Deserialize, Visitor, MapAccess};
-    use std::marker::PhantomData;
+pub mod int_opt_converter {
+    use ::error::{TResult, TError};
+    use ::serde::ser::Serializer;
+    use ::serde::de::{self, Deserialize, Deserializer, Visitor};
+    use ::jedi::Value;
 
-    pub fn deserialize<'de, T, D>(des: D) -> Result<Option<T>, D::Error>
-        where D: Deserializer<'de>,
-              T: Deserialize<'de>
+    pub fn serialize<S>(val: &Option<String>, ser: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
     {
-        struct FalseAsNone<T>(PhantomData<T>);
-
-        impl<'de, T> Visitor<'de> for FalseAsNone<T>
-            where T: Deserialize<'de>
-        {
-            type Value = Option<T>;
-
-            fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                formatter.write_str("null, bool, struct")
-            }
-
-            fn visit_none<E>(self) -> Result<Self::Value, E>
-                where E: de::Error
-            {
-                Ok(None)
-            }
-
-            fn visit_unit<E>(self) -> Result<Self::Value, E>
-                where E: de::Error
-            {
-                Ok(None)
-            }
-
-            fn visit_bool<E>(self, _val: bool) -> Result<Self::Value, E>
-                where E: de::Error
-            {
-                Ok(None)
-            }
-
-            fn visit_map<M>(self, visitor: M) -> Result<Self::Value, M::Error>
-                where M: MapAccess<'de>
-            {
-                Deserialize::deserialize(de::value::MapAccessDeserializer::new(visitor))
-                    .map(|x| Some(x))
-            }
+        match val {
+            &Some(ref x) => ser.serialize_i64(x.parse().unwrap()),
+            &None => ser.serialize_none(),
         }
+    }
 
-        des.deserialize_any(FalseAsNone(PhantomData))
+    pub fn deserialize<'de, D>(des: D) -> Result<Option<String>, D::Error>
+        where D: Deserializer<'de>
+    {
+        Ok(Option::deserialize(des)?)
+    }
+
+    pub fn from_value(val: Value) -> TResult<Option<String>> {
+        match val {
+            Value::Number(num) => {
+                match num.as_i64() {
+                    Some(x) => Ok(Some(x.to_string())),
+                    None => {
+                        match num.as_u64() {
+                            Some(x) => Ok(Some(x.to_string())),
+                            None => Ok(None),
+                        }
+                    }
+                }
+            },
+            Value::String(s) => {
+                Ok(Some(s))
+            },
+            _ => Err(TError::BadValue(String::from("int_converter::from_value() -- expecting int or string. got another type."))),
+        }
     }
 }
-*/
 
