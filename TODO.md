@@ -4,8 +4,6 @@ current:
 - implement event handling in dispatch (see messaging::app_event())
 
 v0.7:
-- convert to threaded model instead of horrible pseudo-async model
-  - convert all the dispatch endpoints
 - syncing:
   - add/edit/delete model (user, space, board, note, invite)
     - (keychain managed internally)
