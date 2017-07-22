@@ -23,12 +23,12 @@ pub struct SyncOutgoing {
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling the "outgoing" table for local changes that need to be
     /// synced to our heroic API.
-    db: Arc<Storage>,
+    db: Storage,
 }
 
 impl SyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncOutgoing {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Storage) -> SyncOutgoing {
         SyncOutgoing {
             config: config,
             api: api,

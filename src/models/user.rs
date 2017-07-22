@@ -92,6 +92,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     let (key, auth) = generate_auth(username, password, version)?;
     turtl.api.set_auth(username.clone(), auth.clone())?;
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
+
     let mut user_guard_w = turtl.user.write().unwrap();
     let id_err = Err(TError::BadValue(format!("user::do_login() -- auth was successful, but API returned strange id object: {:?}", user_id)));
     user_guard_w.id = match user_id {
@@ -143,13 +144,13 @@ impl User {
     pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
         let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
         let (pk, sk) = crypto::asym::keygen()?;
-        let mut user_guard_w = turtl.user.write().unwrap();
-        user_guard_w.set_key(Some(key.clone()));
-        user_guard_w.pubkey = Some(pk);
-        user_guard_w.privkey = Some(sk);
-        user_guard_w.settings = Some(Default::default());
-        let userdata = Protected::serialize(&mut (*user_guard_w))?;
-        drop(user_guard_w);
+        let userdata = {
+            let mut user = User::default();
+            user.set_key(Some(key.clone()));
+            user.pubkey = Some(pk);
+            user.privkey = Some(sk);
+            Protected::serialize(&mut user)?
+        };
 
         turtl.api.set_auth(username.clone(), auth.clone())?;
         let mut req = ApiReq::new();
@@ -165,8 +166,8 @@ impl User {
         let mut user_guard_w = turtl.user.write().unwrap();
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
         user_guard_w.id = Some(user_id);
-        user_guard_w.do_login(key, auth);
         user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
+        user_guard_w.do_login(key, auth);
         drop(user_guard_w);
 
         let user_guard_r = turtl.user.read().unwrap();
@@ -184,6 +185,9 @@ impl User {
             None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
         };
         sync_model::save_model(turtl, user_guard_w.as_mut())?;
+        if user_guard_w.settings.is_none() {
+            user_guard_w.settings = Some(Default::default());
+        }
         drop(user_guard_w);
 
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
@@ -237,13 +241,13 @@ impl User {
 
     /// Delete the current user
     pub fn delete_account(turtl: &Turtl) -> TResult<()> {
-        let mut user_guard = turtl.user.write().unwrap();
-        let id = match user_guard.id() {
-            Some(x) => x.clone(),
-            None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+        let id = {
+            let user_guard = turtl.user.read().unwrap();
+            match user_guard.id() {
+                Some(x) => x.clone(),
+                None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+            }
         };
-        drop(user_guard);
-
         turtl.api.delete(format!("/users/{}", id).as_str(), ApiReq::new())?;
         Ok(())
     }

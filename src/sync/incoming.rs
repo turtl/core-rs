@@ -34,7 +34,7 @@ pub struct SyncIncoming {
 
     /// Holds our user-specific db. This is mainly for persisting k/v data (such
     /// as our last sync_id).
-    db: Arc<Storage>,
+    db: Storage,
 
     /// For each type we get back from an outgoing poll, defines a collection
     /// that is able to handle that incoming item (for instance a "note" coming
@@ -44,7 +44,7 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Storage>) -> SyncIncoming {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Storage) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::KeychainEntry::new(),

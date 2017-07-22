@@ -184,7 +184,7 @@ pub trait Syncer {
 /// thread needs its own connection. We don't have the ability to create the
 /// connections in this scope (no access to Turtl by design) so we need to
 /// just have them passed in.
-pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Arc<Storage>, db_in: Arc<Storage>) -> TResult<SyncState> {
+pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Storage, db_in: Storage) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = config.write().unwrap();

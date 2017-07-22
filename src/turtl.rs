@@ -175,8 +175,8 @@ impl Turtl {
     /// we definitely have a Turtl.db object available.
     pub fn sync_start(&self) -> TResult<()> {
         // create the ol' in/out (in/out) db connections for our sync system
-        let db_out = Arc::new(self.create_user_db()?);
-        let db_in = Arc::new(self.create_user_db()?);
+        let db_out = self.create_user_db()?;
+        let db_in = self.create_user_db()?;
         // start the sync, and save the resulting state into Turtl
         let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
         {
@@ -483,7 +483,7 @@ impl Turtl {
     /// Log out the current user (if logged in) and wipe ALL local SQL databases
     /// from our data folder.
     pub fn wipe_app_data(&self) -> TResult<()> {
-        self.sync_shutdown(true);
+        self.sync_shutdown(true)?;
         self.logout()?;
 
         let mut kv_guard = self.kv.write().unwrap();
@@ -509,7 +509,7 @@ impl Turtl {
 
     /// Wipe any local database(s) for the current user (and log them out)
     pub fn wipe_user_data(&self) -> TResult<()> {
-        self.sync_shutdown(true);
+        self.sync_shutdown(true)?;
         self.logout()?;
 
         let db_loc = self.get_user_db_location()?;
@@ -519,14 +519,21 @@ impl Turtl {
     }
 
     /// Shut down this Turtl instance and all the state/threads it manages
-    pub fn shutdown(&mut self) { }
+    pub fn shutdown(&mut self) -> TResult<()> {
+        self.sync_shutdown(false)?;
+        self.logout()?;
+        Ok(())
+    }
 }
 
 // Probably don't need this since `shutdown` just wipes our internal state which
-// would happen anyway it Turtl is dropped, but whatever.
+// would happen anyway if Turtl is dropped, but whatever.
 impl Drop for Turtl {
     fn drop(&mut self) {
-        self.shutdown();
+        match self.shutdown() {
+            Err(e) => error!("Turt::drop() -- error shutting down Turtl: {}", e),
+            _ => (),
+        }
     }
 }
 
