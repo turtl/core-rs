@@ -167,7 +167,7 @@ impl Turtl {
     /// Delete the current user's account (if they are logged in derr)
     pub fn delete_account(&self) -> TResult<()> {
         User::delete_account(self)?;
-        self.wipe_local_data()?;
+        self.wipe_user_data()?;
         Ok(())
     }
 
@@ -482,7 +482,10 @@ impl Turtl {
 
     /// Log out the current user (if logged in) and wipe ALL local SQL databases
     /// from our data folder.
-    pub fn wipe_local_data(&self) -> TResult<()> {
+    pub fn wipe_app_data(&self) -> TResult<()> {
+        self.sync_shutdown(true);
+        self.logout()?;
+
         let mut kv_guard = self.kv.write().unwrap();
         kv_guard.close()?;
         let data_folder = config::get::<String>(&["data_folder"])?;
@@ -494,14 +497,24 @@ impl Turtl {
             let filename = entry.file_name();
             let filename_str = match filename.to_str() {
                 Some(x) => x,
-                None => return Err(TError::Msg(format!("turtl.wipe_local_data() -- error converting OsString into &str"))),
+                None => return Err(TError::Msg(format!("turtl.wipe_app_data() -- error converting OsString into &str"))),
             };
             if &filename_str[0..6] != "turtl-" { continue; }
             fs::remove_file(&path)?;
-            info!("turtl.wipe_local_data() -- removing {}", path.display());
+            info!("turtl.wipe_app_data() -- removing {}", path.display());
         }
         (*kv_guard) = Turtl::open_kv()?;
+        Ok(())
+    }
+
+    /// Wipe any local database(s) for the current user (and log them out)
+    pub fn wipe_user_data(&self) -> TResult<()> {
+        self.sync_shutdown(true);
         self.logout()?;
+
+        let db_loc = self.get_user_db_location()?;
+        info!("turtl.wipe_user_data() -- removing {}", db_loc);
+        fs::remove_file(&db_loc)?;
         Ok(())
     }
 

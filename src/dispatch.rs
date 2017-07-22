@@ -52,8 +52,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.delete_account()?;
             Ok(jedi::obj())
         },
-        "app:wipe-local-data" => {
-            turtl.wipe_local_data()?;
+        "app:wipe-user-data" => {
+            turtl.wipe_user_data()?;
+            Ok(jedi::obj())
+        },
+        "app:wipe-app-data" => {
+            turtl.wipe_app_data()?;
             Ok(jedi::obj())
         },
         "app:start-sync" => {

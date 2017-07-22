@@ -153,7 +153,7 @@ mod tests {
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
 
-        let msg = format!(r#"["69","app:wipe-local-data"]"#);
+        let msg = format!(r#"["69","app:wipe-app-data"]"#);
         send(msg.as_str());
         let msg = recv("69");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
@@ -174,6 +174,7 @@ mod tests {
         // wait until we're loaded
         while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
 
+        /*
         let msg = format!(r#"["30","profile:load"]"#);
         send(msg.as_str());
         let msg = recv("30");
@@ -186,6 +187,7 @@ mod tests {
         assert_eq!(boards.len(), 3);
         assert_eq!(ptitle, "Personal");
         sleep(10);
+        */
 
         let msg = format!(r#"["3","user:delete-account","{}","{}"]"#, username, password);
         send(msg.as_str());
@@ -201,7 +203,7 @@ mod tests {
         let username: String = config::get(&["client", "test", "username"]).unwrap();
         let password: String = config::get(&["client", "test", "password"]).unwrap();
 
-        let msg = format!(r#"["69","app:wipe-local-data"]"#);
+        let msg = format!(r#"["69","app:wipe-app-data"]"#);
         send(msg.as_str());
         let msg = recv("69");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);

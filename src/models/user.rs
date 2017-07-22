@@ -238,11 +238,11 @@ impl User {
     /// Delete the current user
     pub fn delete_account(turtl: &Turtl) -> TResult<()> {
         let mut user_guard = turtl.user.write().unwrap();
-        user_guard.do_logout();
         let id = match user_guard.id() {
             Some(x) => x.clone(),
             None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
         };
+        drop(user_guard);
 
         turtl.api.delete(format!("/users/{}", id).as_str(), ApiReq::new())?;
         Ok(())
