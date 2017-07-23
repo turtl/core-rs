@@ -100,23 +100,23 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     let val = match ty.as_ref() {
                         "user" => {
                             let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model)?
                         },
                         "space" => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model)?
                         },
                         "board" => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model)?
                         },
                         "note" => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model)?
                         },
                         "invite" => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model)?
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     };

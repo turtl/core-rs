@@ -134,7 +134,7 @@ impl Keychain {
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
         if save {
-            sync_model::save_model(turtl, &mut entry)?;
+            sync_model::save_model(&String::from("create"), turtl, &mut entry)?;
         } else {
             entry.generate_id()?;
         }

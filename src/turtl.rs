@@ -746,7 +746,7 @@ mod tests {
             "title":"get a job"
         }"#)).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model(&turtl, &mut space).unwrap();
+        let space_val: Value = sync_model::save_model("create", &turtl, &mut space).unwrap();
         let mut note: Note = jedi::parse(&String::from(r#"{
             "user_id":69,
             "space_id":"8884442",
@@ -760,7 +760,7 @@ mod tests {
         let space_id: String = jedi::get(&["id"], &space_val).unwrap();
         note.space_id = space_id.clone();
         // save our note to "disk"
-        let val: Value = sync_model::save_model(&turtl, &mut note).unwrap();
+        let val: Value = sync_model::save_model("create", &turtl, &mut note).unwrap();
         let saved_model: Note = jedi::from_val(val).unwrap();
         assert!(saved_model.id().is_some());
         assert_eq!(saved_model.space_id, space_id);

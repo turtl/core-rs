@@ -95,7 +95,7 @@ pub trait MemorySaver: Protected {
 
 /// Serialize this model and save it to the local db
 ///
-pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
+pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
@@ -116,7 +116,7 @@ pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
                     model.merge_fields(&db_model.data_for_storage()?)?;
                     model.merge_fields(&model_data)?;
                 },
-                None => {},
+                None => (),
             }
         }
     }
@@ -142,7 +142,8 @@ pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
             None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
         model.db_save(db)?;
-        // TODO: save to sync_outgoing
+        let mut sync_record = SyncRecord::default();
+        sync_record.action = String::from(action);
     }
 
     let model_data = model.data()?;
