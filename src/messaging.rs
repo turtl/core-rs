@@ -30,9 +30,9 @@ pub struct Response {
 
 /// Defines a container for sending events to the client. See the `Response`
 /// object for notes.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename = "ev")]
-struct Event {
+pub struct Event {
     /// Our event's name
     pub e: String,
     /// Our event's data
@@ -204,9 +204,18 @@ pub fn stop() {
 }
 
 /// Send an event to our own dispatch handler
+pub fn ui_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
+    Messenger::event(ev, jedi::to_val(val)?)
+}
+
+/// Send an event to our own dispatch handler
 pub fn app_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
     let messenger = Messenger::new();
-    messenger.send_rev(format!("|ev|{}|{}", ev, jedi::stringify(val)?))
+    let event = Event {
+        e: String::from(ev),
+        d: jedi::to_val(val)?,
+    };
+    messenger.send_rev(format!("::ev{}", jedi::stringify(&event)?))
 }
 
 #[cfg(test)]

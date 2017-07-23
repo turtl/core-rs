@@ -1,8 +1,3 @@
-current:
-- finish test client to do join, start-sync, load-profile (check spaces/boards),
-  delete-account
-- implement event handling in dispatch (see messaging::app_event())
-
 v0.7:
 - syncing:
   - add/edit/delete model (user, space, board, note, invite)

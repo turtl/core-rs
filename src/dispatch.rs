@@ -22,14 +22,10 @@ use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
 use ::sync::sync_model;
+use ::messaging::Event;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
-
-    // -------------------------------------------------------------------------
-    // TODO: handle app events
-    // -------------------------------------------------------------------------
-
     match cmd.as_ref() {
         "user:login" => {
             let username = jedi::get(&["2"], &data)?;
@@ -189,9 +185,23 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
     }
 }
 
+/// Event dispatching. This acts as a way for parts of the app that don't have
+/// access to the Turtl object to trigger events.
+fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
+    info!("dispatch::dispatch_event() -- {}", cmd);
+    turtl.events.trigger(cmd, &data);
+    Ok(())
+}
+
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
+    if &msg[0..4] == "::ev" {
+        let event: Event = jedi::parse(&String::from(&msg[4..]))?;
+        let Event {e, d} = event;
+        return dispatch_event(&e, turtl, d);
+    }
+
     let data: Value = jedi::parse(msg)?;
 
     // grab the request id from the data
