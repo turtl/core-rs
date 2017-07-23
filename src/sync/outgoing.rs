@@ -105,7 +105,7 @@ impl SyncOutgoing {
             self.handle_failed_record(failure)?;
         }
         let fail_val = jedi::to_val(&fail)?;
-        messaging::app_event("sync:outgoing:failure", &Value::Array(vec![fail_val, error]))
+        messaging::ui_event("sync:outgoing:failure", &Value::Array(vec![fail_val, error]))
     }
 }
 
