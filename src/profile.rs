@@ -24,5 +24,12 @@ impl Profile {
             boards: Vec::new(),
         }
     }
+
+    /// Wipe the profile from memory
+    pub fn wipe(&mut self) {
+        self.keychain = Keychain::new();
+        self.spaces = Vec::new();
+        self.boards = Vec::new();
+    }
 }
 

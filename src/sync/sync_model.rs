@@ -11,7 +11,6 @@ use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
 use ::turtl::Turtl;
-use ::models::model::Model;
 use ::models::sync_record::SyncRecord;
 
 macro_rules! make_sync_incoming {
@@ -94,9 +93,10 @@ pub trait MemorySaver: Protected {
     }
 }
 
-/// Prepare a model for saving to db
-fn prepare_for_sync<T>(turtl: &Turtl, model: &mut T) -> TResult<()>
-    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver
+/// Serialize this model and save it to the local db
+///
+pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
+    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
         let db_guard = turtl.db.write().unwrap();
@@ -126,21 +126,15 @@ fn prepare_for_sync<T>(turtl: &Turtl, model: &mut T) -> TResult<()>
     model.generate_subkeys(&keyrefs)?;
 
     if model.add_to_keychain() {
-        let user_id: String = {
-            let user_guard = turtl.user.read().unwrap();
-            (*user_guard).id().unwrap().clone()
-        };
         let mut profile_guard = turtl.profile.write().unwrap();
-        (*profile_guard).keychain.upsert_key(&user_id, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), Some(turtl))?;
+        (*profile_guard).keychain.upsert_key_save(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()))?;
     }
 
-    Ok(())
-}
+    // TODO: is there a way around all the horrible cloning?
+    let mut model2: T = model.clone()?;
+    let serialized: Value = turtl.work.run(move || Protected::serialize(&mut model2))?;
+    model.merge_fields(&serialized)?;
 
-/// Called after a model is serialized and we want to save it/persist it
-fn post_serialize<T>(turtl: &Turtl, model: T) -> TResult<Value>
-    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver
-{
     {
         let db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_ref() {
@@ -152,21 +146,9 @@ fn post_serialize<T>(turtl: &Turtl, model: T) -> TResult<Value>
     }
 
     let model_data = model.data()?;
-    model.save_to_mem(turtl)?;
+    // TODO: is there a way around all the horrible cloning?
+    model.clone()?.save_to_mem(turtl)?;
     Ok(model_data)
-}
-
-/// Serialize this model and save it to the local db
-///
-/// TODO: is there a way around all the horrible cloning?
-pub fn save_model<T>(turtl: &Turtl, model: &mut T) -> TResult<Value>
-    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
-{
-    prepare_for_sync(turtl, model)?;
-    let mut model2: T = model.clone()?;
-    let serialized: Value = turtl.work.run(move || Protected::serialize(&mut model2))?;
-    model.merge_fields(&serialized)?;
-    post_serialize(turtl, model.clone()?)
 }
 
 /// Remove a model from memory/storage

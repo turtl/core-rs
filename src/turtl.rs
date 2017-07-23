@@ -157,6 +157,10 @@ impl Turtl {
 
     /// Log a user out
     pub fn logout(&self) -> TResult<()> {
+        {
+            let mut profile_guard = self.profile.write().unwrap();
+            profile_guard.wipe();
+        }
         self.sync_shutdown(false)?;
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
@@ -315,7 +319,10 @@ impl Turtl {
         {
             let user_guard = self.user.read().unwrap();
             if user_guard.id().is_some() && user_guard.key().is_some() {
-                search.upsert_key(user_guard.id().unwrap(), user_guard.id().unwrap(), user_guard.key().unwrap(), &String::from("user"), None)?;
+                let id = user_guard.id().unwrap().clone();
+                let key = user_guard.key().unwrap().clone();
+                drop(user_guard);
+                search.upsert_key(self, &id, &key, &String::from("user"))?;
             }
         }
 
@@ -591,14 +598,10 @@ mod tests {
         let mut note: Note = jedi::parse(&enc_note).unwrap();
 
         let turtl = with_test(true);
-        let user_id = {
-            let user_guard = turtl.user.read().unwrap();
-            user_guard.id().unwrap().clone()
-        };
 
         // add the note's key as a direct entry to the keychain
         let mut profile_guard = turtl.profile.write().unwrap();
-        profile_guard.keychain.upsert_key(&user_id, note.id().unwrap(), &note_key, &String::from("note"), None).unwrap();
+        profile_guard.keychain.upsert_key(&turtl, note.id().unwrap(), &note_key, &String::from("note")).unwrap();
         drop(profile_guard);
 
         // see if we can find the note as a direct entry
@@ -612,7 +615,7 @@ mod tests {
         let mut profile_guard = turtl.profile.write().unwrap();
         profile_guard.keychain.entries.clear();
         assert_eq!(profile_guard.keychain.entries.len(), 0);
-        profile_guard.keychain.upsert_key(&user_id, board.id().unwrap(), &board_key, &String::from("board"), None).unwrap();
+        profile_guard.keychain.upsert_key(&turtl, board.id().unwrap(), &board_key, &String::from("board")).unwrap();
         assert_eq!(profile_guard.keychain.entries.len(), 1);
         drop(profile_guard);
 

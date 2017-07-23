@@ -1,6 +1,6 @@
 use ::std::collections::HashMap;
 
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
@@ -99,7 +99,19 @@ impl Keychain {
     }
 
     /// Upsert a key to the keychain
-    pub fn upsert_key(&mut self, user_id: &String, item_id: &String, key: &Key, ty: &String, sync_save: Option<&Turtl>) -> TResult<()> {
+    fn upsert_key_impl(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, save: bool) -> TResult<()> {
+        let (user_id, user_key) = {
+            let user_guard = turtl.user.read().unwrap();
+            let id = match user_guard.id() {
+                Some(id) => id.clone(),
+                None => return Err(TError::MissingField(String::from("Keychain.upsert_key_save() -- `turtl.user` is missing an id. harrr."))),
+            };
+            let key = match user_guard.key() {
+                Some(k) => k.clone(),
+                None => return Err(TError::MissingField(String::from("Keychain.upsert_key_save() -- `turtl.user` is missing a key. gfft."))),
+            };
+            (id, key)
+        };
         let remove = {
             let existing = self.find_entry(item_id);
             match existing {
@@ -112,19 +124,32 @@ impl Keychain {
                 None => false,
             }
         };
-        if remove { self.remove_entry(item_id, sync_save)?; }
+        if save && remove {
+            self.remove_entry(item_id, Some(turtl))?;
+        }
         let mut entry = KeychainEntry::new();
+        entry.set_key(Some(user_key.clone()));
         entry.type_ = ty.clone();
         entry.user_id = user_id.clone();
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
-        // if we're saving the model, persist it before adding to the keychain
-        match sync_save {
-            Some(turtl) => { sync_model::save_model(turtl, &mut entry)?; },
-            None => { entry.generate_id()?; },
+        if save {
+            sync_model::save_model(turtl, &mut entry)?;
+        } else {
+            entry.generate_id()?;
         }
         self.entries.push(entry);
         Ok(())
+    }
+
+    /// Upsert a key to the keychain, don't save
+    pub fn upsert_key(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
+        self.upsert_key_impl(turtl, item_id, key, ty, false)
+    }
+
+    /// Upsert a key to the keychain, then save (sync)
+    pub fn upsert_key_save(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
+        self.upsert_key_impl(turtl, item_id, key, ty, true)
     }
 
     /// Remove a keychain entry

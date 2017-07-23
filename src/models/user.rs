@@ -185,9 +185,6 @@ impl User {
             None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
         };
         sync_model::save_model(turtl, user_guard_w.as_mut())?;
-        if user_guard_w.settings.is_none() {
-            user_guard_w.settings = Some(Default::default());
-        }
         drop(user_guard_w);
 
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
@@ -270,6 +267,9 @@ impl User {
     pub fn set_setting<T>(&mut self, turtl: &Turtl, key: &str, val: &T) -> TResult<()>
         where T: Serialize
     {
+        if self.settings.is_none() {
+            self.settings = Some(Default::default());
+        }
         match self.settings.as_mut() {
             Some(ref mut settings) => {
                 settings.insert(String::from(key), jedi::to_val(val)?);

@@ -44,7 +44,6 @@ impl Keyfinder for Board {
             None => {},
         }
 
-        let user_id = String::from("");     // fake id is ok
         if space_ids.len() > 0 {
             let ty = String::from("space");
             let profile_guard = turtl.profile.read().unwrap();
@@ -52,7 +51,7 @@ impl Keyfinder for Board {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
                 if !space_ids.contains(space_id) { continue; }
-                keychain.upsert_key(&user_id, space_id, space.key().unwrap(), &ty, None)?;
+                keychain.upsert_key(turtl, space_id, space.key().unwrap(), &ty)?;
             }
         }
         Ok(keychain)
