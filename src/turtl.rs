@@ -146,7 +146,6 @@ impl Turtl {
     /// If the `turtl.user` object has a valid ID, set it into `turtl.user_id`
     fn set_user_id(&self) {
         let user_guard = self.user.read().unwrap();
-        let user_id_guard = self.user_id.write().unwrap();
         match user_guard.id() {
             Some(id) => {
                 let mut isengard = self.user_id.write().unwrap();
