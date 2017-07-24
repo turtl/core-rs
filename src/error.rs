@@ -5,6 +5,7 @@ use ::std::convert::From;
 use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
 use ::jedi::JSONError;
+use ::dumpy::DError;
 
 use ::crypto::CryptoError;
 
@@ -44,6 +45,16 @@ quick_error! {
             cause(err)
             description("crypto error")
             display("crypto error: {}", err)
+        }
+        JSON(err: JSONError) {
+            cause(err)
+            description("JSON error")
+            display("JSON error: {}", err)
+        }
+        Dumpy(err: DError) {
+            cause(err)
+            description("Dumpy error")
+            display("Dumpy error: {}", err)
         }
         Io(err: IoError) {
             cause(err)
@@ -105,7 +116,15 @@ impl From<JSONError> for TError {
     fn from(err: JSONError) -> TError {
         match err {
             JSONError::Boxed(x) => TError::Boxed(x),
-            _ => TError::Boxed(Box::new(err)),
+            _ => TError::JSON(err),
+        }
+    }
+}
+impl From<DError> for TError {
+    fn from(err: DError) -> TError {
+        match err {
+            DError::Boxed(x) => TError::Boxed(x),
+            _ => TError::Dumpy(err),
         }
     }
 }
@@ -121,7 +140,6 @@ from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
-from_err!(::dumpy::DError);
 from_err!(::regex::Error);
 from_err!(::std::sync::mpsc::RecvError);
 

@@ -4,6 +4,7 @@ use ::std::error::Error;
 use ::std::convert::From;
 
 use ::rusqlite::Error as SqlError;
+use ::jedi::JSONError;
 
 quick_error! {
     #[derive(Debug)]
@@ -21,25 +22,23 @@ quick_error! {
             description(err.description())
             display("SQL error: {}", err.description())
         }
+        JSON(err: JSONError) {
+            cause(err)
+            description("JSON error")
+            display("JSON error: {}", err)
+        }
     }
 }
-
-/// A macro to make it easy to create From impls for DError
-macro_rules! from_err {
-    ($t:ty) => (
-        impl From<$t> for DError {
-            fn from(err: $t) -> DError {
-                DError::Boxed(Box::new(err))
-            }
-        }
-    )
-}
-
-from_err!(::jedi::JSONError);
 
 impl From<SqlError> for DError {
     fn from(err: SqlError) -> DError {
         DError::SqlError(err)
+    }
+}
+
+impl From<JSONError> for DError {
+    fn from(err: JSONError) -> DError {
+        DError::JSON(err)
     }
 }
 

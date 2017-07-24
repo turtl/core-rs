@@ -85,7 +85,10 @@ impl Dumpy {
 
     /// Store an object!
     pub fn store(&self, conn: &Connection, table: &String, obj: &Value) -> DResult<()> {
-        let id = jedi::get::<String>(&["id"], obj)?;
+        let id: String = match jedi::get_opt(&["id"], obj) {
+            Some(id) => id,
+            None => return Err(DError::Msg(format!("Dumpy.store() -- object being saved to table `{}` is missing `id` field", table))),
+        };
         let json = jedi::stringify(obj)?;
         // "upsert" the object
         conn.execute("INSERT OR REPLACE INTO dumpy_objects (id, table_name, data) VALUES ($1, $2, $3)", &[&id, table, &json])?;
