@@ -1,3 +1,6 @@
+current:
+- finish the syncmodel::outgoing impl (macro)
+
 v0.7:
 - syncing:
   - add/edit/delete model (user, space, board, note, invite)
