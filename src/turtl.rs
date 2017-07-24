@@ -38,6 +38,14 @@ pub struct Turtl {
     pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
     pub user: RwLock<User>,
+    /// A lot of times we just want to get the user's id. We shouldn't have to
+    /// lock the `turtl.user` object just for that.
+    ///
+    /// NOTE: this isn't some idiotic premature ejoptimization, there are a
+    /// handful of places that call sync_model::save_model() with the user
+    /// object locked, and save_model() needs to be able to get to the user
+    /// id without locking the user object.
+    pub user_id: RwLock<Option<String>>,
     /// Holds the user's data profile (keychain, boards, notes, etc, etc, etc)
     pub profile: RwLock<Profile>,
     /// Need to do some CPU-intensive work and have a Future finished when it's
@@ -82,6 +90,7 @@ impl Turtl {
         let turtl = Turtl {
             events: event::EventEmitter::new(),
             user: RwLock::new(User::new()),
+            user_id: RwLock::new(None),
             profile: RwLock::new(Profile::new()),
             api: api,
             msg: Messenger::new(),
@@ -134,19 +143,41 @@ impl Turtl {
         self.remote_send(Some(mid.clone()), msg)
     }
 
+    /// If the `turtl.user` object has a valid ID, set it into `turtl.user_id`
+    fn set_user_id(&self) {
+        let user_guard = self.user.read().unwrap();
+        let user_id_guard = self.user_id.write().unwrap();
+        match user_guard.id() {
+            Some(id) => {
+                let mut isengard = self.user_id.write().unwrap();
+                *isengard = Some(id.clone());
+            }
+            None => {}
+        }
+    }
+
+    /// Clear out `turtl.user_id` to be None
+    fn clear_user_id(&self) {
+        let mut isengard = self.user_id.write().unwrap();
+        *isengard = None;
+    }
+
     /// Log a user in
     pub fn login(&self, username: String, password: String) -> TResult<()> {
         let version = user::CURRENT_AUTH_VERSION;
         User::login(self, username, password, version)?;
+        self.set_user_id();
         let db = self.create_user_db()?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = Some(db);
+        drop(db_guard);
         Ok(())
     }
 
     /// Create a new user account
     pub fn join(&self, username: String, password: String) -> TResult<()> {
         User::join(self, username, password)?;
+        self.set_user_id();
         let db = self.create_user_db()?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = Some(db);
@@ -162,6 +193,7 @@ impl Turtl {
             profile_guard.wipe();
         }
         self.sync_shutdown(false)?;
+        self.clear_user_id();
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = None;
