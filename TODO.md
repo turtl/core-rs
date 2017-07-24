@@ -1,13 +1,6 @@
-current:
-- finish the syncmodel::outgoing impl (macro)
-
 v0.7:
 - syncing:
   - add/edit/delete model (user, space, board, note, invite)
-    - (keychain managed internally)
-	- finish storable::save_model (get_keyrefs/gen_keys/add_to_keychain)
-	- implement Keyfinder for notes/boards/spaces/etc
-	- SAVE sync records to sync_outgoing in sync_model::post_serialize
 	- TEST removing of models via sync_models in turtl::tests::stores_models
   - file syncing
   - notify UI of API -> core sync

@@ -768,6 +768,11 @@ mod tests {
 
         let mut turtl = with_test(false);
         turtl.user = RwLock::new(user);
+        {
+            let user_guard = turtl.user.read().unwrap();
+            let mut isengard = turtl.user_id.write().unwrap();
+            *isengard = Some(user_guard.id().unwrap().clone());
+        }
 
         let db = turtl.create_user_db().unwrap();
         turtl.db = RwLock::new(Some(db));
@@ -801,6 +806,7 @@ mod tests {
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
 
+        sync_model::delete_model::<Note>(&turtl, &id).unwrap();
         // TODO: test removing models via sync_model::delete()
     }
 }
