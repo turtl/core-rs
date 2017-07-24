@@ -35,4 +35,3 @@ make_basic_sync_model!(SyncRecord);
 
 impl Keyfinder for SyncRecord {}
 
-
