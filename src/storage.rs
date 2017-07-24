@@ -73,8 +73,7 @@ impl Storage {
         let modeldata = model.data_for_storage()?;
         let table = model.table();
 
-        self.dumpy.store(&self.conn, &String::from(table), &modeldata)
-            .map_err(|e| From::from(e))
+        Ok(self.dumpy.store(&self.conn, &String::from(table), &modeldata)?)
     }
 
     /// Get a model's data by id
