@@ -7,6 +7,7 @@
 
 use ::error::{TError, TResult};
 use ::storage::Storage;
+use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
@@ -34,6 +35,20 @@ macro_rules! make_sync_incoming {
                 model.db_save(db)
             }
         }
+
+        fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage) -> ::error::TResult<()> {
+            let mut sync_record = ::models::sync_record::SyncRecord::default();
+            sync_record.generate_id()?;
+            sync_record.action = String::from(action);
+            sync_record.user_id = user_id.clone();
+            sync_record.ty = String::from(self.model_type());
+            sync_record.item_id = match self.id() {
+                Some(id) => id.clone(),
+                None => return Err(::error::TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
+            };
+            sync_record.data = Some(self.data_for_storage()?);
+            sync_record.db_save(db)
+        }
     };
 }
 
@@ -55,8 +70,12 @@ macro_rules! make_basic_sync_model {
 }
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
-    /// Run an incoming sync item
+    /// Allows a model to handle an incoming sync item for its type.
     fn incoming(&self, db: &Storage, sync_item: SyncRecord) -> TResult<()>;
+
+    /// Allows a model to save itself to the outgoing sync database (or perform
+    /// any custom needed actual in addition/instead).
+    fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage) -> ::error::TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
     fn db_save(&self, db: &Storage) -> TResult<()> {
@@ -136,14 +155,20 @@ pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Valu
     model.merge_fields(&serialized)?;
 
     {
+        let user_id = {
+            let isengard = turtl.user_id.read().unwrap();
+            match *isengard {
+                Some(ref id) => id.clone(),
+                None => return Err(TError::MissingField(String::from("sync_model::save_model() -- turtl.user_id has failed us..."))),
+            }
+        };
         let db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
         model.db_save(db)?;
-        let mut sync_record = SyncRecord::default();
-        sync_record.action = String::from(action);
+        model.outgoing(action, &user_id, db)?;
     }
 
     let model_data = model.data()?;
