@@ -173,7 +173,7 @@ impl User {
         let user_guard_r = turtl.user.read().unwrap();
         user_guard_r.trigger("login", &jedi::obj());
         drop(user_guard_r);
-        debug!("user::join() -- auth success, logged in");
+        debug!("user::join() -- auth success, joined and logged in");
         Ok(())
     }
 
@@ -182,7 +182,7 @@ impl User {
         let mut user_guard_w = turtl.user.write().unwrap();
         let user_id = match user_guard_w.id() {
             Some(x) => x.clone(),
-            None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+            None => return Err(TError::MissingData(String::from("user.post_join() -- user has no id"))),
         };
         sync_model::save_model(&String::from("create"), turtl, user_guard_w.as_mut())?;
         drop(user_guard_w);
