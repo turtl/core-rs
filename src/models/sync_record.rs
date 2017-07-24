@@ -1,6 +1,6 @@
 use ::jedi::Value;
 use ::models::model::Model;
-use ::models::protected::Protected;
+use ::models::protected::{Protected, Keyfinder};
 
 /// Define a container for our sync records
 protected! {
@@ -8,7 +8,7 @@ protected! {
     pub struct SyncRecord {
         #[protected_field(public)]
         pub action: String,
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(deserialize_with = "::util::ser::int_converter::deserialize")]
         #[protected_field(public)]
         pub item_id: String,
         #[serde(with = "::util::ser::int_converter")]
@@ -30,4 +30,9 @@ protected! {
     }
 }
 make_storable!(SyncRecord, "sync_outgoing");
+
+make_basic_sync_model!(SyncRecord);
+
+impl Keyfinder for SyncRecord {}
+
 
