@@ -35,12 +35,14 @@ macro_rules! make_sync_incoming {
             }
         }
 
-        fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage) -> ::error::TResult<()> {
+        fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
             if action == "delete" {
                 self.db_delete(db)?;
             } else {
                 self.db_save(db)?;
             }
+            if skip_remote_sync { return Ok(()); }
+
             let mut sync_record = ::models::sync_record::SyncRecord::default();
             sync_record.generate_id()?;
             sync_record.action = String::from(action);
@@ -85,7 +87,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
 
     /// Allows a model to save itself to the outgoing sync database (or perform
     /// any custom needed actual in addition/instead).
-    fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage) -> ::error::TResult<()>;
+    fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
     fn db_save(&self, db: &Storage) -> TResult<()> {
@@ -124,7 +126,7 @@ pub trait MemorySaver: Protected {
 
 /// Serialize this model and save it to the local db
 ///
-pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Value>
+pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
@@ -156,7 +158,7 @@ pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Valu
 
     if model.add_to_keychain() {
         let mut profile_guard = turtl.profile.write().unwrap();
-        (*profile_guard).keychain.upsert_key_save(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()))?;
+        (*profile_guard).keychain.upsert_key_save(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), skip_remote_sync)?;
     }
 
     // TODO: is there a way around all the horrible cloning?
@@ -177,7 +179,7 @@ pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Valu
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
-        model.outgoing(action, &user_id, db)?;
+        model.outgoing(action, &user_id, db, skip_remote_sync)?;
     }
 
     let model_data = model.data()?;
@@ -187,7 +189,7 @@ pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T) -> TResult<Valu
 }
 
 /// Remove a model from memory/storage
-pub fn delete_model<T>(turtl: &Turtl, id: &String) -> TResult<()>
+pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TResult<()>
     where T: Protected + Storable + SyncModel + MemorySaver
 {
     let mut model: T = Default::default();
@@ -206,7 +208,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String) -> TResult<()>
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::delete_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
-        model.outgoing("delete", &user_id, db)?;
+        model.outgoing("delete", &user_id, db, skip_remote_sync)?;
     }
     model.remove_from_mem(turtl)
 }

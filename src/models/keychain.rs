@@ -99,7 +99,7 @@ impl Keychain {
     }
 
     /// Upsert a key to the keychain
-    fn upsert_key_impl(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, save: bool) -> TResult<()> {
+    fn upsert_key_impl(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, save: bool, skip_remote_sync: bool) -> TResult<()> {
         let (user_id, user_key) = {
             let user_guard = turtl.user.read().unwrap();
             let id = match user_guard.id() {
@@ -125,7 +125,7 @@ impl Keychain {
             }
         };
         if save && remove {
-            self.remove_entry(item_id, Some(turtl))?;
+            self.remove_entry(item_id, Some((turtl, skip_remote_sync)))?;
         }
         let mut entry = KeychainEntry::new();
         entry.set_key(Some(user_key.clone()));
@@ -134,7 +134,7 @@ impl Keychain {
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
         if save {
-            sync_model::save_model(&String::from("create"), turtl, &mut entry)?;
+            sync_model::save_model(&String::from("create"), turtl, &mut entry, skip_remote_sync)?;
         } else {
             entry.generate_id()?;
         }
@@ -144,21 +144,21 @@ impl Keychain {
 
     /// Upsert a key to the keychain, don't save
     pub fn upsert_key(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
-        self.upsert_key_impl(turtl, item_id, key, ty, false)
+        self.upsert_key_impl(turtl, item_id, key, ty, false, true)
     }
 
     /// Upsert a key to the keychain, then save (sync)
-    pub fn upsert_key_save(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
-        self.upsert_key_impl(turtl, item_id, key, ty, true)
+    pub fn upsert_key_save(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, skip_remote_sync: bool) -> TResult<()> {
+        self.upsert_key_impl(turtl, item_id, key, ty, true, skip_remote_sync)
     }
 
     /// Remove a keychain entry
-    pub fn remove_entry(&mut self, item_id: &String, sync_save: Option<&Turtl>) -> TResult<()> {
+    pub fn remove_entry(&mut self, item_id: &String, sync_save: Option<(&Turtl, bool)>) -> TResult<()> {
         match sync_save {
-            Some(turtl) => {
+            Some((turtl, skip_remote_sync)) => {
                 for entry in &mut self.entries {
                     if &entry.item_id != item_id { continue; }
-                    sync_model::delete_model::<KeychainEntry>(turtl, entry.id().unwrap())?;
+                    sync_model::delete_model::<KeychainEntry>(turtl, entry.id().unwrap(), skip_remote_sync)?;
                 }
             },
             None => {},

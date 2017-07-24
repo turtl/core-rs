@@ -1,7 +1,8 @@
 v0.7:
 - syncing:
   - add/edit/delete model (user, space, board, note, invite)
-	- TEST removing of models via sync_models in turtl::tests::stores_models
+    - ?? sync_model: concept of skip remote sync ??
+    - space: on remove, remove_from_mem notes/boards
   - file syncing
   - notify UI of API -> core sync
   - notify UI of sync/login status
@@ -10,24 +11,21 @@ v0.7:
   - track sync item failures via `freeze_sync_record`
   - sync errors are now embedded in each failed sync item, no more passing errors
     to `notify_sync_failure`
-  - generic sync endpoint for various objects
-    - add/edit/delete notes/boards/spaces/keychain/user/etc
-  - effective way to test sync via tests or at least client?
-  - outgoing file uploads
-    - can we do this without queuing? perhaps a stateless query that says
-      "here's all the notes w/ files i have, what are their file ids?"
-  	then compare the ids to what we have locally
-  - incoming file downloads
-    - store files in filesystem (not sqlite)
-    - filenames should be the <note.id>_<note.file.id>.enc
+  - file syncing
+    - outgoing file uploads
+      - can we do this without queuing? perhaps a stateless query that says
+        "here's all the notes w/ files i have, what are their file ids?"
+        then compare the ids to what we have locally
+    - incoming file downloads
+      - store files in filesystem (not sqlite)
+      - filenames should be the <note.id>_<note.file.id>.enc
 - user
-  - join
-    - create spaces/boards
   - change password
-  - delete account
+- invites
+  - copy invite system from js
+  - NOTE: invite sending/accepting requires connection
+  - make sure to save keychain after adding invite space key
 - get sync info (pending, failed)
-- share space
-- save file
 - send feedback
 - implement sync.immediate
 - migration crate
@@ -39,10 +37,6 @@ v0.7:
 	- create a default space "Personal" or some shit
 	- move all boards into the new space
 	- move all notes into the new space
-- invites
-  - copy invite system from js
-  - NOTE: invite sending/accepting requires connection
-  - make sure to save keychain after adding invite space key
 - premium
 
 later:

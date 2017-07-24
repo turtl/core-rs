@@ -47,5 +47,10 @@ impl MemorySaver for Space {
         profile_guard.spaces.push(self);
         Ok(())
     }
+
+    fn remove_from_mem(&self, turtl: &Turtl) -> TResult<()> {
+        // TODO: remove space. notes, boards
+        Ok(())
+    }
 }
 

@@ -782,7 +782,7 @@ mod tests {
             "title":"get a job"
         }"#)).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model("create", &turtl, &mut space).unwrap();
+        let space_val: Value = sync_model::save_model("create", &turtl, &mut space, false).unwrap();
         let mut note: Note = jedi::parse(&String::from(r#"{
             "user_id":69,
             "space_id":"8884442",
@@ -796,7 +796,7 @@ mod tests {
         let space_id: String = jedi::get(&["id"], &space_val).unwrap();
         note.space_id = space_id.clone();
         // save our note to "disk"
-        let val: Value = sync_model::save_model("create", &turtl, &mut note).unwrap();
+        let val: Value = sync_model::save_model("create", &turtl, &mut note, false).unwrap();
         let saved_model: Note = jedi::from_val(val).unwrap();
         assert!(saved_model.id().is_some());
         assert_eq!(saved_model.space_id, space_id);
@@ -806,8 +806,9 @@ mod tests {
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
 
-        sync_model::delete_model::<Note>(&turtl, &id).unwrap();
-        // TODO: test removing models via sync_model::delete()
+        sync_model::delete_model::<Note>(&turtl, &id, false).unwrap();
+        let notes: Vec<Note> = turtl.load_notes(&vec![id.clone()]).unwrap();
+        assert_eq!(notes.len(), 0);
     }
 }
 

@@ -184,7 +184,7 @@ impl User {
             Some(x) => x.clone(),
             None => return Err(TError::MissingData(String::from("user.post_join() -- user has no id"))),
         };
-        sync_model::save_model(&String::from("create"), turtl, user_guard_w.as_mut())?;
+        sync_model::save_model(&String::from("create"), turtl, user_guard_w.as_mut(), false)?;
         drop(user_guard_w);
 
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
@@ -193,7 +193,7 @@ impl User {
             space.user_id = user_id.clone();
             space.title = Some(String::from(title));
             space.color = Some(String::from(color));
-            let val = sync_model::save_model(&String::from("create"), turtl, &mut space)?;
+            let val = sync_model::save_model(&String::from("create"), turtl, &mut space, false)?;
             let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
@@ -203,7 +203,7 @@ impl User {
             board.user_id = user_id.clone();
             board.space_id = space_id.clone();
             board.title = Some(String::from(title));
-            let val = sync_model::save_model(&String::from("create"), turtl, &mut board)?;
+            let val = sync_model::save_model(&String::from("create"), turtl, &mut board, false)?;
             let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
@@ -278,7 +278,7 @@ impl User {
                 return Err(TError::MissingField(String::from("user.set_setting() -- missing user.settings (None)")));
             }
         }
-        sync_model::save_model(&String::from("update"), turtl, self)?;
+        sync_model::save_model(&String::from("update"), turtl, self, false)?;
         Ok(())
     }
 

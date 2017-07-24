@@ -100,23 +100,23 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     let val = match ty.as_ref() {
                         "user" => {
                             let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model, false)?
                         },
                         "space" => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model, false)?
                         },
                         "board" => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model, false)?
                         },
                         "note" => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model, false)?
                         },
                         "invite" => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model)?
+                            sync_model::save_model(&action, turtl, &mut model, false)?
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     };
@@ -126,19 +126,19 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     let id: String = jedi::get(&["4", "id"], &data)?;
                     match ty.as_ref() {
                         "user" => {
-                            sync_model::delete_model::<User>(turtl, &id)?;
+                            sync_model::delete_model::<User>(turtl, &id, false)?;
                         },
                         "space" => {
-                            sync_model::delete_model::<Space>(turtl, &id)?;
+                            sync_model::delete_model::<Space>(turtl, &id, false)?;
                         },
                         "board" => {
-                            sync_model::delete_model::<Board>(turtl, &id)?;
+                            sync_model::delete_model::<Board>(turtl, &id, false)?;
                         },
                         "note" => {
-                            sync_model::delete_model::<Note>(turtl, &id)?;
+                            sync_model::delete_model::<Note>(turtl, &id, false)?;
                         },
                         "invite" => {
-                            sync_model::delete_model::<Invite>(turtl, &id)?;
+                            sync_model::delete_model::<Invite>(turtl, &id, false)?;
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     }
