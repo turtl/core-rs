@@ -164,7 +164,7 @@ pub trait Protected: Model + fmt::Debug {
     fn set_key(&mut self, key: Option<Key>);
 
     /// Get this model's "type" (ie, "note", "board", etc).
-    fn model_type(&self) -> &str;
+    fn model_type(&self) -> String;
 
     /// Grab the public fields for this model
     fn public_fields(&self) -> Vec<&'static str>;
