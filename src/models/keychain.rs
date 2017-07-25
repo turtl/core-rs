@@ -81,14 +81,13 @@ protected! {
 make_storable!(KeychainEntry, "keychain");
 make_basic_sync_model!(KeychainEntry);
 
+impl Keyfinder for KeychainEntry {}
+impl MemorySaver for KeychainEntry {}
+
 #[derive(Debug)]
 pub struct Keychain {
     pub entries: Vec<KeychainEntry>,
 }
-
-impl Keyfinder for KeychainEntry {}
-
-impl MemorySaver for KeychainEntry {}
 
 impl Keychain {
     /// Create an empty Keychain
