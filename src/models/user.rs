@@ -11,7 +11,7 @@ use ::models::protected::{Keyfinder, Protected};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
+use ::sync::sync_model::{self, MemorySaver};
 
 protected! {
     #[derive(Serialize, Deserialize)]
