@@ -38,14 +38,10 @@ impl SyncOutgoing {
 
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let query = "SELECT id, data FROM sync_outgoing ORDER BY id ASC";
-        let mut query = self.db.conn.prepare(query)?;
-        let rows = query.query_map(&[], |row| {
-            row.get("data")
-        })?;
+        let notes = self.db.all("outgoing_sync")?;
         let mut objects: Vec<SyncRecord> = Vec::new();
-        for data in rows {
-            objects.push(jedi::parse(&data?)?);
+        for data in notes {
+            objects.push(jedi::from_val(data)?);
         }
         Ok(objects)
     }

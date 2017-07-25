@@ -806,8 +806,13 @@ mod tests {
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
 
-        sync_model::delete_model::<Note>(&turtl, &id, false).unwrap();
+        sync_model::delete_model::<Space>(&turtl, &space_id, false).unwrap();
+        let profile_guard = turtl.profile.read().unwrap();
         let notes: Vec<Note> = turtl.load_notes(&vec![id.clone()]).unwrap();
+        // we should have 0 spaces after removing the space
+        assert_eq!(profile_guard.spaces.len(), 0);
+        // and 0 notes because the space removal should remove all notes in that
+        // space
         assert_eq!(notes.len(), 0);
     }
 }

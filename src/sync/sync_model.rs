@@ -119,7 +119,7 @@ pub trait MemorySaver: Protected {
     }
 
     /// Remove a model from Turtl's memory on delete
-    fn remove_from_mem(&self, _turtl: &Turtl) -> TResult<()> {
+    fn delete_from_mem(&self, _turtl: &Turtl) -> TResult<()> {
         Ok(())
     }
 }
@@ -200,7 +200,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
             let isengard = turtl.user_id.read().unwrap();
             match *isengard {
                 Some(ref id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("sync_model::save_model() -- turtl.user_id has failed us..."))),
+                None => return Err(TError::MissingField(String::from("sync_model::delete_model() -- turtl.user_id has failed us..."))),
             }
         };
         let db_guard = turtl.db.write().unwrap();
@@ -210,6 +210,6 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
         };
         model.outgoing("delete", &user_id, db, skip_remote_sync)?;
     }
-    model.remove_from_mem(turtl)
+    model.delete_from_mem(turtl)
 }
 

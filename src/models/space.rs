@@ -1,8 +1,11 @@
 use ::error::TResult;
 use ::models::model::Model;
+use ::models::board::Board;
+use ::models::note::Note;
 use ::models::protected::{Keyfinder, Protected};
-use ::sync::sync_model::MemorySaver;
+use ::sync::sync_model::{self, MemorySaver};
 use ::turtl::Turtl;
+use ::jedi;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -48,8 +51,33 @@ impl MemorySaver for Space {
         Ok(())
     }
 
-    fn remove_from_mem(&self, turtl: &Turtl) -> TResult<()> {
-        // TODO: remove space. notes, boards
+    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
+        let mut profile_guard = turtl.profile.write().unwrap();
+        let space_id = self.id().unwrap();
+        for board in &profile_guard.boards {
+            if &board.space_id == space_id {
+                sync_model::delete_model::<Board>(turtl, board.id().unwrap(), true)?;
+            }
+        }
+
+        let db_guard = turtl.db.read().unwrap();
+        let notes = match *db_guard {
+            Some(ref db) => db.dumpy.find(&db.conn, &String::from("notes"), &String::from("space_id"), &vec![space_id.clone()])?,
+            None => vec![],
+        };
+        drop(db_guard);
+        for note in notes {
+            let note_id: String = jedi::get(&["id"], &note)?;
+            sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+        }
+
+        profile_guard.spaces.retain(|s| {
+            match s.id() {
+                Some(id) => (space_id != id),
+                None => true,
+            }
+        });
+
         Ok(())
     }
 }

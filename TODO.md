@@ -1,8 +1,8 @@
+current:
+  - figure out why outgoing sync records aren't saving
+
 v0.7:
 - syncing:
-  - add/edit/delete model (user, space, board, note, invite)
-    - ?? sync_model: concept of skip remote sync ??
-    - space: on remove, remove_from_mem notes/boards
   - file syncing
   - notify UI of API -> core sync
   - notify UI of sync/login status
@@ -19,6 +19,7 @@ v0.7:
     - incoming file downloads
       - store files in filesystem (not sqlite)
       - filenames should be the <note.id>_<note.file.id>.enc
+  - send outgoing sync to api
 - user
   - change password
 - invites
