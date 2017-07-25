@@ -116,7 +116,7 @@ impl SyncIncoming {
         // also grab our sync records.
         let records: Vec<SyncRecord> = jedi::get(&["records"], &syncdata)?;
 
-        with_db_write!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
+        with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
             // start a transaction. we don't want to save half-data.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
             for rec in records {
@@ -173,7 +173,7 @@ impl Syncer for SyncIncoming {
     }
 
     fn init(&self) -> TResult<()> {
-        let sync_id = with_db_read!{ db, self.db, "SyncIncoming.init()",
+        let sync_id = with_db!{ db, self.db, "SyncIncoming.init()",
             db.kv_get("sync_id")?
         };
         Messenger::event("sync:incoming:init:start", jedi::obj())?;
@@ -195,7 +195,7 @@ impl Syncer for SyncIncoming {
     }
 
     fn run_sync(&self) -> TResult<()> {
-        let sync_id = with_db_read!{ db, self.db, "SyncIncoming.run_sync()",
+        let sync_id = with_db!{ db, self.db, "SyncIncoming.run_sync()",
             db.kv_get("sync_id")?
         };
         let res = match sync_id {

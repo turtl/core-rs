@@ -38,7 +38,7 @@ impl SyncOutgoing {
 
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let outgoing = with_db_read!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
+        let outgoing = with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
             db.all("outgoing_sync")?
         };
         let mut objects: Vec<SyncRecord> = Vec::new();
@@ -50,7 +50,7 @@ impl SyncOutgoing {
 
     /// Delete a sync record
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
-        with_db_write!{ db, self.db, "SyncOutgoing.delete_sync_record()",
+        with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()",
             db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
         }
         Ok(())
@@ -65,7 +65,7 @@ impl SyncOutgoing {
     fn get_errcount(&self, sync: &SyncRecord) -> TResult<u32> {
         let query = "SELECT errcount FROM sync_outgoing WHERE id = $1 LIMIT 1";
         let mut errcount: u32 = 0;
-        with_db_read!{ db, self.db, "SyncOutgoing.get_errcount()",
+        with_db!{ db, self.db, "SyncOutgoing.get_errcount()",
             let mut query = db.conn.prepare(query)?;
             let rows = query.query_map(&[&sync.id], |row| {
                 let count: i64 = row.get("errcount");
@@ -84,7 +84,7 @@ impl SyncOutgoing {
 
     /// Set errcount += 1 to the given sync record
     fn increment_errcount(&self, sync: &SyncRecord) -> TResult<()> {
-        with_db_write!{ db, self.db, "SyncOutgoing.get_errcount()",
+        with_db!{ db, self.db, "SyncOutgoing.get_errcount()",
             db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id])?;
         }
         Ok(())
@@ -132,6 +132,7 @@ impl Syncer for SyncOutgoing {
 
     fn run_sync(&self) -> TResult<()> {
         let sync = self.get_outgoing_syncs()?;
+        println!("***\n***\nsync: {:?}\n***\n***", sync);
         if sync.len() == 0 { return Ok(()); }
 
         // create two collections: one for normal data syncs, and one for files

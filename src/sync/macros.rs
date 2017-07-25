@@ -1,23 +1,5 @@
 #[macro_export]
-macro_rules! with_db_read {
-    ($dbvar:ident, $dbobj:expr, $errprefix:expr, $( $rest:tt )*) => {
-        {
-            // TODO: gensym anyone?
-            let db_guard__ = $dbobj.read().unwrap();
-            match db_guard__.as_ref() {
-                Some($dbvar) => {
-                    $( $rest )*
-                }
-                None => {
-                    return Err(::error::TError::MissingField(format!("{} -- `{}` is None", $errprefix, stringify!($dbobj))));
-                }
-            }
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! with_db_write {
+macro_rules! with_db {
     ($dbvar:ident, $dbobj:expr, $errprefix:expr, $( $rest:tt )*) => {
         {
             // TODO: gensym anyone?
