@@ -63,7 +63,7 @@ make_basic_sync_model!{ FileData,
         Ok(sync_item)
     }
 
-    fn db_save(&self, db: &Storage) -> TResult<()> {
+    fn db_save(&self, db: &mut Storage) -> TResult<()> {
         db.save(self)
         // TODO: add to file download queue
     }

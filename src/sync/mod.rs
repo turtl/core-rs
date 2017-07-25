@@ -13,6 +13,8 @@
 //! plaintext private data. Keeping this in mind, the Sync object should always
 //! be in a separate thread from the main Turtl object.
 
+#[macro_use]
+mod macros;
 mod incoming;
 mod outgoing;
 #[macro_use]
@@ -184,7 +186,7 @@ pub trait Syncer {
 /// thread needs its own connection. We don't have the ability to create the
 /// connections in this scope (no access to Turtl by design) so we need to
 /// just have them passed in.
-pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Storage, db_in: Storage) -> TResult<SyncState> {
+pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = config.write().unwrap();
@@ -193,9 +195,10 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Storage, db
     }
 
     // start our outging sync process
-    let config_out = config.clone();
     let (tx_out, rx_out) = mpsc::channel::<TResult<()>>();
+    let config_out = config.clone();
     let api_out = api.clone();
+    let db_out = db.clone();
     let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
         let sync = SyncOutgoing::new(config_out, api_out, db_out);
         sync.runner(tx_out);
@@ -203,11 +206,10 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db_out: Storage, db
     })?;
 
     // start our incoming sync process
-    let config_in = config.clone();
     let (tx_in, rx_in) = mpsc::channel::<TResult<()>>();
-    let api_in = api.clone();
+    let config_in = config.clone();
     let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
-        let sync = SyncIncoming::new(config_in, api_in, db_in);
+        let sync = SyncIncoming::new(config_in, api, db);
         sync.runner(tx_in);
         info!("sync::start() -- incoming shut down");
     })?;
@@ -284,9 +286,8 @@ mod tests {
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
-        let db_out = Storage::new(&String::from(":memory:"), jedi::obj()).unwrap();
-        let db_in = Storage::new(&String::from(":memory:"), jedi::obj()).unwrap();
-        let mut state = start(sync_config, api, db_out, db_in).unwrap();
+        let db = Arc::new(RwLock::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
+        let mut state = start(sync_config, api, db).unwrap();
         (state.shutdown)();
         loop {
             let hn = state.join_handles.pop();

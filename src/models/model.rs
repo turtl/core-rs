@@ -125,6 +125,13 @@ pub trait Model: Emitter + Serialize + DeserializeOwned + Default {
     fn is_new(&self) -> bool {
         self.id().is_none()
     }
+
+    /// Return a mutable reference to this model. Useful in cases where the
+    /// model is wrapped in a container (RwLock, et al) and you need a ref to
+    /// it.
+    fn as_mut<'a>(&'a mut self) -> &'a mut Self {
+        self
+    }
 }
 
 #[macro_export]

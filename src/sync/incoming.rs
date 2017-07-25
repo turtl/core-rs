@@ -34,7 +34,7 @@ pub struct SyncIncoming {
 
     /// Holds our user-specific db. This is mainly for persisting k/v data (such
     /// as our last sync_id).
-    db: Storage,
+    db: Arc<RwLock<Option<Storage>>>,
 
     /// For each type we get back from an outgoing poll, defines a collection
     /// that is able to handle that incoming item (for instance a "note" coming
@@ -44,7 +44,7 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Storage) -> SyncIncoming {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::KeychainEntry::new(),
@@ -116,22 +116,24 @@ impl SyncIncoming {
         // also grab our sync records.
         let records: Vec<SyncRecord> = jedi::get(&["records"], &syncdata)?;
 
-        // start a transaction. we don't want to save half-data.
-        self.db.conn.execute("BEGIN TRANSACTION", &[])?;
-        for rec in records {
-            self.run_sync_item(rec)?;
+        with_db_write!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
+            // start a transaction. we don't want to save half-data.
+            db.conn.execute("BEGIN TRANSACTION", &[])?;
+            for rec in records {
+                self.run_sync_item(db, rec)?;
+            }
+            // make sure we save our sync_id as the LAST STEP of our transaction.
+            // if this fails, then next time we load we just start from the same
+            // spot we were at before. SYNC BUGS HATE HIM!!!1
+            db.kv_set("sync_id", &sync_id)?;
+            // ok, commit
+            db.conn.execute("COMMIT TRANSACTION", &[])?;
         }
-        // make sure we save our sync_id as the LAST STEP of our transaction.
-        // if this fails, then next time we load we just start from the same
-        // spot we were at before. SYNC BUGS HATE HIM!!!1
-        self.db.kv_set("sync_id", &sync_id)?;
-        // ok, commit
-        self.db.conn.execute("COMMIT TRANSACTION", &[])?;
         Ok(())
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, sync_item: SyncRecord) -> TResult<()> {
+    fn run_sync_item(&self, db: &mut Storage, sync_item: SyncRecord) -> TResult<()> {
         // check if we have missing data, and if so, if it's on purpose
         if sync_item.data.is_none() {
             let missing = match sync_item.missing {
@@ -149,13 +151,13 @@ impl SyncIncoming {
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
         match sync_item.ty.as_ref() {
-            "user" => self.handlers.user.incoming(&self.db, sync_item),
-            "keychain" => self.handlers.keychain.incoming(&self.db, sync_item),
-            "space" => self.handlers.space.incoming(&self.db, sync_item),
-            "board" => self.handlers.board.incoming(&self.db, sync_item),
-            "note" => self.handlers.note.incoming(&self.db, sync_item),
-            "file" => self.handlers.file.incoming(&self.db, sync_item),
-            "invite" => self.handlers.invite.incoming(&self.db, sync_item),
+            "user" => self.handlers.user.incoming(db, sync_item),
+            "keychain" => self.handlers.keychain.incoming(db, sync_item),
+            "space" => self.handlers.space.incoming(db, sync_item),
+            "board" => self.handlers.board.incoming(db, sync_item),
+            "note" => self.handlers.note.incoming(db, sync_item),
+            "file" => self.handlers.file.incoming(db, sync_item),
+            "invite" => self.handlers.invite.incoming(db, sync_item),
             _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.ty))),
         }
     }
@@ -171,7 +173,9 @@ impl Syncer for SyncIncoming {
     }
 
     fn init(&self) -> TResult<()> {
-        let sync_id = self.db.kv_get("sync_id")?;
+        let sync_id = with_db_read!{ db, self.db, "SyncIncoming.init()",
+            db.kv_get("sync_id")?
+        };
         Messenger::event("sync:incoming:init:start", jedi::obj())?;
         let skip_init = {
             let config_guard = self.config.read().unwrap();
@@ -191,7 +195,9 @@ impl Syncer for SyncIncoming {
     }
 
     fn run_sync(&self) -> TResult<()> {
-        let sync_id = self.db.kv_get("sync_id")?;
+        let sync_id = with_db_read!{ db, self.db, "SyncIncoming.run_sync()",
+            db.kv_get("sync_id")?
+        };
         let res = match sync_id {
             Some(ref x) => self.sync_from_api(x, true),
             None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),

@@ -36,7 +36,7 @@ pub fn setup_client_id(storage: Arc<RwLock<Storage>>) -> TResult<()> {
 /// This structure holds state for persisting (encrypted) data to disk.
 pub struct Storage {
     pub conn: Connection,
-    pub dumpy: Arc<Dumpy>,
+    pub dumpy: Dumpy,
 }
 
 impl Storage {
@@ -57,7 +57,7 @@ impl Storage {
         }?;
 
         // set up dumpy
-        let dumpy = Arc::new(Dumpy::new(schema));
+        let dumpy = Dumpy::new(schema);
         dumpy.init(&conn)?;
 
         Ok(Storage {
@@ -144,7 +144,6 @@ impl Storage {
 
 // NOTE: since we open our db connection in full-mutex mode, we can safely pass
 // it around between threads willy-nilly.
-unsafe impl Send for Storage {}
 unsafe impl Sync for Storage {}
 
 #[cfg(test)]

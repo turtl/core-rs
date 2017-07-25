@@ -15,7 +15,7 @@ use ::models::sync_record::SyncRecord;
 
 macro_rules! make_sync_incoming {
     ($n:ty) => {
-        fn incoming(&self, db: &::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
+        fn incoming(&self, db: &mut ::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
             if sync_item.action == "delete" {
                 let mut model: $n = Default::default();
                 model.id = Some(sync_item.item_id);
@@ -35,7 +35,7 @@ macro_rules! make_sync_incoming {
             }
         }
 
-        fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
+        fn outgoing(&self, action: &str, user_id: &String, db: &mut ::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
             if action == "delete" {
                 self.db_delete(db)?;
             } else {
@@ -83,32 +83,25 @@ macro_rules! make_basic_sync_model {
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Allows a model to handle an incoming sync item for its type.
-    fn incoming(&self, db: &Storage, sync_item: SyncRecord) -> TResult<()>;
+    fn incoming(&self, db: &mut Storage, sync_item: SyncRecord) -> TResult<()>;
 
     /// Allows a model to save itself to the outgoing sync database (or perform
     /// any custom needed actual in addition/instead).
-    fn outgoing(&self, action: &str, user_id: &String, db: &::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
+    fn outgoing(&self, action: &str, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
-    fn db_save(&self, db: &Storage) -> TResult<()> {
+    fn db_save(&self, db: &mut Storage) -> TResult<()> {
         db.save(self)
     }
 
     /// A default delete function that takes a db/model and deletes it.
-    fn db_delete(&self, db: &Storage) -> TResult<()> {
+    fn db_delete(&self, db: &mut Storage) -> TResult<()> {
         db.delete(self)
     }
 
     /// Transform this model's data from an incoming sync (if required).
     fn transform(&self, sync_item: SyncRecord) -> TResult<SyncRecord> {
         Ok(sync_item)
-    }
-
-    /// Return a mutable reference to this model. Useful in cases where the
-    /// model is wrapped in a container (RwLock, et al) and you need a ref to
-    /// it.
-    fn as_mut<'a>(&'a mut self) -> &'a mut Self {
-        self
     }
 }
 
@@ -174,8 +167,8 @@ pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T, skip_remote_syn
                 None => return Err(TError::MissingField(String::from("sync_model::save_model() -- turtl.user_id has failed us..."))),
             }
         };
-        let db_guard = turtl.db.write().unwrap();
-        let db = match (*db_guard).as_ref() {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
@@ -203,8 +196,8 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
                 None => return Err(TError::MissingField(String::from("sync_model::delete_model() -- turtl.user_id has failed us..."))),
             }
         };
-        let db_guard = turtl.db.write().unwrap();
-        let db = match (*db_guard).as_ref() {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::delete_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };

@@ -23,12 +23,12 @@ pub struct SyncOutgoing {
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling the "outgoing" table for local changes that need to be
     /// synced to our heroic API.
-    db: Storage,
+    db: Arc<RwLock<Option<Storage>>>,
 }
 
 impl SyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Storage) -> SyncOutgoing {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> SyncOutgoing {
         SyncOutgoing {
             config: config,
             api: api,
@@ -38,9 +38,11 @@ impl SyncOutgoing {
 
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let notes = self.db.all("outgoing_sync")?;
+        let outgoing = with_db_read!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
+            db.all("outgoing_sync")?
+        };
         let mut objects: Vec<SyncRecord> = Vec::new();
-        for data in notes {
+        for data in outgoing {
             objects.push(jedi::from_val(data)?);
         }
         Ok(objects)
@@ -48,7 +50,9 @@ impl SyncOutgoing {
 
     /// Delete a sync record
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
-        self.db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
+        with_db_write!{ db, self.db, "SyncOutgoing.delete_sync_record()",
+            db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
+        }
         Ok(())
     }
 
@@ -60,25 +64,29 @@ impl SyncOutgoing {
     /// Get how many times a sync record has failed
     fn get_errcount(&self, sync: &SyncRecord) -> TResult<u32> {
         let query = "SELECT errcount FROM sync_outgoing WHERE id = $1 LIMIT 1";
-        let mut query = self.db.conn.prepare(query)?;
-        let rows = query.query_map(&[&sync.id], |row| {
-            let count: i64 = row.get("errcount");
-            count
-        })?;
         let mut errcount: u32 = 0;
-        for data in rows {
-            match data {
-                Ok(x) => errcount = x as u32,
-                Err(_) => (),
+        with_db_read!{ db, self.db, "SyncOutgoing.get_errcount()",
+            let mut query = db.conn.prepare(query)?;
+            let rows = query.query_map(&[&sync.id], |row| {
+                let count: i64 = row.get("errcount");
+                count
+            })?;
+            for data in rows {
+                match data {
+                    Ok(x) => errcount = x as u32,
+                    Err(_) => (),
+                }
+                break;
             }
-            break;
-        }
+        };
         Ok(errcount)
     }
 
     /// Set errcount += 1 to the given sync record
     fn increment_errcount(&self, sync: &SyncRecord) -> TResult<()> {
-        self.db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id])?;
+        with_db_write!{ db, self.db, "SyncOutgoing.get_errcount()",
+            db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id])?;
+        }
         Ok(())
     }
 
@@ -119,7 +127,6 @@ impl Syncer for SyncOutgoing {
     }
 
     fn init(&self) -> TResult<()> {
-        self.db.conn.execute("CREATE TABLE IF NOT EXISTS sync_outgoing (id, data, errcount)", &[])?;
         Ok(())
     }
 

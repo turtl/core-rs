@@ -62,7 +62,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: RwLock<Option<Storage>>,
+    pub db: Arc<RwLock<Option<Storage>>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (invites come to mind). Use sparingly.
@@ -96,7 +96,7 @@ impl Turtl {
             msg: Messenger::new(),
             work: Thredder::new("work", num_workers as u32),
             kv: kv,
-            db: RwLock::new(None),
+            db: Arc::new(RwLock::new(None)),
             search: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
@@ -209,11 +209,8 @@ impl Turtl {
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
     pub fn sync_start(&self) -> TResult<()> {
-        // create the ol' in/out (in/out) db connections for our sync system
-        let db_out = self.create_user_db()?;
-        let db_in = self.create_user_db()?;
         // start the sync, and save the resulting state into Turtl
-        let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), db_out, db_in)?;
+        let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), self.db.clone())?;
         {
             let mut state_guard = self.sync_state.write().unwrap();
             *state_guard = Some(sync_state);
@@ -719,7 +716,7 @@ mod tests {
             for board in &boards { db.save(board).unwrap(); }
             for note in &notes { db.save(note).unwrap(); }
         }
-        turtl.db = RwLock::new(Some(db));
+        turtl.db = Arc::new(RwLock::new(Some(db)));
 
         turtl.load_profile().unwrap();
         let profile_guard = turtl.profile.read().unwrap();
@@ -775,7 +772,7 @@ mod tests {
         }
 
         let db = turtl.create_user_db().unwrap();
-        turtl.db = RwLock::new(Some(db));
+        turtl.db = Arc::new(RwLock::new(Some(db)));
 
         let mut space: Space = jedi::parse(&String::from(r#"{
             "user_id":69,
@@ -814,6 +811,32 @@ mod tests {
         // and 0 notes because the space removal should remove all notes in that
         // space
         assert_eq!(notes.len(), 0);
+    }
+
+    #[test]
+    fn syncs_outgoing() {
+        let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
+        let mut user: User = jedi::parse(&String::from(r#"{"id":"51","storage":104857600}"#)).unwrap();
+        let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
+        user.do_login(user_key, user_auth);
+
+        let mut turtl = with_test(false);
+        turtl.user = RwLock::new(user);
+        {
+            let user_guard = turtl.user.read().unwrap();
+            let mut isengard = turtl.user_id.write().unwrap();
+            *isengard = Some(user_guard.id().unwrap().clone());
+        }
+
+        let db = turtl.create_user_db().unwrap();
+        turtl.db = Arc::new(RwLock::new(Some(db)));
+
+        let mut space: Space = jedi::from_val(json!({
+            "user_id":69,
+            "title":"get a job"
+        })).unwrap();
+        // save our space to "disk"
+        let space_val: Value = sync_model::save_model("create", &turtl, &mut space, false).unwrap();
     }
 }
 
