@@ -8,7 +8,7 @@ extern crate syn;
 use std::collections::HashMap;
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(Protected, attributes(protected_field))]
+#[proc_macro_derive(Protected, attributes(protected_modeltype, protected_field))]
 pub fn protected(input: TokenStream) -> TokenStream {
     let s = input.to_string();
 
@@ -136,8 +136,44 @@ fn find_protected_fields<'a>(body: &'a syn::Body, field_type: &str, restrict: bo
     }
 }
 
+fn get_struct_modeltype(attrs: &Vec<::syn::Attribute>) -> Option<String> {
+    // [Attribute {
+    //      style: Outer,
+    //      value: List(
+    //        Ident("protected_modeltype"),
+    //        [MetaItem(Word(Ident("keychain")))]
+    //      ),
+    //      is_sugared_doc: false
+    // }]
+    let mut modeltype = None;
+    for attr in attrs {
+        match attr.value {
+            ::syn::MetaItem::List(ref id, ref nested) => {
+                if id.as_ref() == "protected_modeltype" {
+                    for meta in nested {
+                        match meta {
+                            &syn::NestedMetaItem::MetaItem(ref meta) => {
+                                match meta {
+                                    &syn::MetaItem::Word(ref ident) => {
+                                        modeltype = Some(String::from(ident.as_ref()));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    modeltype
+}
+
 fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
     let name = &ast.ident;
+    let modeltype = get_struct_modeltype(&ast.attrs);
     let rename_field_map = find_rename_fields(&ast.body);
     let convert_field_map = find_convert_fields(&ast.body);
     let public_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.body, "public", false);
@@ -182,6 +218,14 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
             }
         }
     };
+    let model_type_inner = match modeltype {
+        Some(modeltype) => {
+            quote! { #modeltype.to_lowercase() }
+        }
+        None => {
+            quote! { stringify!(#name).to_lowercase() }
+        }
+    };
     let public_fields_merge_map: Vec<_> = public_fields_only2
         .into_iter()
         .map(&des_mapper)
@@ -212,8 +256,8 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 self._set_key_on_submodels();
             }
 
-            fn model_type(&self) -> &str {
-                stringify!(#name)
+            fn model_type(&self) -> String {
+                #model_type_inner
             }
 
             fn public_fields(&self) -> Vec<&'static str> {
