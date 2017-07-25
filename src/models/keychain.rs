@@ -62,6 +62,7 @@ pub fn keyref_from_encrypted(keydata: &HashMap<String, String>) -> KeyRef<String
 
 protected! {
     #[derive(Serialize, Deserialize)]
+    #[protected_modeltype(keychain)]
     pub struct KeychainEntry {
         #[serde(rename = "type")]
         #[protected_field(public)]
