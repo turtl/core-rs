@@ -836,7 +836,15 @@ mod tests {
             "title":"get a job"
         })).unwrap();
         // save our space to "disk"
-        let space_val: Value = sync_model::save_model("create", &turtl, &mut space, false).unwrap();
+        sync_model::save_model("create", &turtl, &mut space, false).unwrap();
+
+        // load our outgoing sync records and verify them
+        let db_guard = turtl.db.read().unwrap();
+        let db = db_guard.as_ref().unwrap();
+        let syncs = db.all("sync_outgoing").unwrap();
+        assert_eq!(syncs.len(), 2);
+        assert_eq!(jedi::get::<String>(&["type"], &syncs[0]).unwrap(), String::from("keychain"));
+        assert_eq!(jedi::get::<String>(&["type"], &syncs[1]).unwrap(), String::from("space"));
     }
 }
 
