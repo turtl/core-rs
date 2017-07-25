@@ -132,7 +132,6 @@ impl Syncer for SyncOutgoing {
 
     fn run_sync(&self) -> TResult<()> {
         let sync = self.get_outgoing_syncs()?;
-        println!("***\n***\nsync: {:?}\n***\n***", sync);
         if sync.len() == 0 { return Ok(()); }
 
         // create two collections: one for normal data syncs, and one for files
