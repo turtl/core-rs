@@ -11,6 +11,13 @@ use ::models::sync_record::{SyncAction, SyncRecord};
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
+#[derive(Deserialize, Debug)]
+struct SyncResponse {
+    success: Vec<SyncRecord>,
+    #[serde(default)]
+    failures: Vec<SyncRecord>,
+}
+
 /// Holds the state for data going from turtl -> API (outgoing sync data).
 pub struct SyncOutgoing {
     /// Holds our sync config. Note that this is shared between the sync system
@@ -50,6 +57,8 @@ impl SyncOutgoing {
 
     /// Delete a sync record
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
+        let noid = String::from("<no id>");
+        debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} {})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
         with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()",
             db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
         }
@@ -105,11 +114,11 @@ impl SyncOutgoing {
     /// Notify the app that we have sync failure(s), and also update the error
     /// count on those records.
     /// TODO: implement embedded errors
-    fn notify_sync_failure(&self, fail: Vec<SyncRecord>) -> TResult<()> {
-        for failure in &fail {
+    fn notify_sync_failure(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
+        for failure in fail {
             self.handle_failed_record(failure)?;
         }
-        messaging::ui_event("sync:outgoing:failure", &fail)
+        messaging::ui_event("sync:outgoing:failure", fail)
     }
 }
 
@@ -150,18 +159,13 @@ impl Syncer for SyncOutgoing {
         // records from our local db
         if syncs.len() > 0 {
             info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
-            let sync_result = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
+            let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
 
-            // our successful syncs
-            let success: Vec<SyncRecord> = jedi::get(&["success"], &sync_result)?;
-            // our failed syncs
-            let fails: Option<Vec<SyncRecord>> = jedi::get_opt(&["failures"], &sync_result);
-            let failcount = fails.as_ref().map(|x| x.len()).unwrap_or(0);
-            debug!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", success.len(), failcount);
+            info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
 
             // clear out the successful syncs
             let mut err: TResult<()> = Ok(());
-            for sync in &success {
+            for sync in &sync_result.success {
                 let res = self.delete_sync_record(sync);
                 // track a failure (if it occurs), but then just keep deleting.
                 // we don't want to return and have all these sync items re-run
@@ -172,9 +176,8 @@ impl Syncer for SyncOutgoing {
                 }
             }
 
-            match fails {
-                Some(failures) => { self.notify_sync_failure(failures)?; }
-                None => {}
+            if sync_result.failures.len() > 0 {
+                self.notify_sync_failure(&sync_result.failures)?;
             }
 
             // if we did indeed get an error while deleting our sync records,
@@ -188,6 +191,187 @@ impl Syncer for SyncOutgoing {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserializes_sync_response() {
+        let typical_mac_user = String::from(r#"{
+            "success": [{
+                "id": "015d7db2c0d12ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70002",
+                "user_id": 187,
+                "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70001",
+                "type": "keychain",
+                "action": "add",
+                "sync_ids": [2129],
+                "data": {
+                    "id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70001",
+                    "body": "AAYBAAz3+hdLuX3OoNYIXdTYJOp9keFeNGlvRFL4MiXsBgaa3J3sZ1SZmliayh8HDf4/RaabH6zSWSBK9+i1/NlY8bNyUr2kPhbi9mNX6ufB81w9tA==",
+                    "type": "space",
+                    "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
+                    "user_id": 187
+                }
+            }, {
+                "id": "015d7db2c1012ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70003",
+                "user_id": 187,
+                "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
+                "type": "space",
+                "action": "add",
+                "sync_ids": [2130],
+                "data": {
+                    "id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
+                    "body": "AAYBAAxpk7LxYWqblPdAqb7S5umXqNC+DCCHmDHkX8OmMgxzfNcktnjPprW+a47l4wmkrOw=",
+                    "user_id": 187,
+                    "members": [{
+                        "id": 156,
+                        "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
+                        "user_id": 187,
+                        "role": "owner",
+                        "created": "2017-07-26T07:00:53.516Z",
+                        "updated": "2017-07-26T07:00:53.516Z",
+                        "username": "slippyslappy@turtlapp.com"
+                    }]
+                }
+            }, {
+                "id": "015d7db2c12f2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70006",
+                "user_id": 187,
+                "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70005",
+                "type": "keychain",
+                "action": "add",
+                "sync_ids": [2131],
+                "data": {
+                    "id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70005",
+                    "body": "AAYBAAxJBaGKiNGD75OrycfpRoc0csnrXVgXhR1yATkYOQVVSmiZ7QMTfNovJQC4bPai5iDlhM2wiTXVvzauPg94CmP4H5Ff/z+gmPjBIM9i9E3cqA==",
+                    "type": "space",
+                    "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
+                    "user_id": 187
+                }
+            }, {
+                "id": "015d7db2c1642ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70007",
+                "user_id": 187,
+                "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
+                "type": "space",
+                "action": "add",
+                "sync_ids": [2132],
+                "data": {
+                    "id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
+                    "body": "AAYBAAzqQbPuVE91ThF/o7w/fXaguodk1YgIWvL5veo7yVMfJwOIlMJv6pXt5NUytA==",
+                    "user_id": 187,
+                    "members": [{
+                        "id": 157,
+                        "space_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
+                        "user_id": 187,
+                        "role": "owner",
+                        "created": "2017-07-26T07:00:53.561Z",
+                        "updated": "2017-07-26T07:00:53.561Z",
+                        "username": "slippyslappy@turtlapp.com"
+                    }]
+                }
+            }, {
+                "id": "015d7db2c1902ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000a",
+                "user_id": 187,
+                "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70009",
+                "type": "keychain",
+                "action": "add",
+                "sync_ids": [2133],
+                "data": {
+                    "id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70009",
+                    "body": "AAYBAAwjyacMLB35fvlkN8H3IVm41RBh5GsufEm+/iKeGfhjZ3W5GsDhAf46GQjRhpVmOEX7WO1za0ZU3yXZ4ID8fRBvhsGlwFQlLloyYOQ0ngSsNw==",
+                    "type": "space",
+                    "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
+                    "user_id": 187
+                }
+            }, {
+                "id": "015d7db2c1be2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000b",
+                "user_id": 187,
+                "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
+                "type": "space",
+                "action": "add",
+                "sync_ids": [2134],
+                "data": {
+                    "id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
+                    "body": "AAYBAAw0ca29N5KGorFiB2XqdpzkoFtg+2dRifY3YzxbA+wRzmHlCF8eJpmVc37FcA==",
+                    "user_id": 187,
+                    "members": [{
+                        "id": 158,
+                        "space_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
+                        "user_id": 187,
+                        "role": "owner",
+                        "created": "2017-07-26T07:00:53.588Z",
+                        "updated": "2017-07-26T07:00:53.588Z",
+                        "username": "slippyslappy@turtlapp.com"
+                    }]
+                }
+            }, {
+                "id": "015d7db2c1f72ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000d",
+                "user_id": 187,
+                "item_id": "015d7db2c1d52ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000c",
+                "type": "board",
+                "action": "add",
+                "sync_ids": [2135],
+                "data": {
+                    "id": "015d7db2c1d52ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000c",
+                    "body": "AAYBAAwVidQuy3QEohto4tkqbhHw9GpK9P6uBIVQgPJLVEqK7pQ/SXa7PfVYS2vRg/Uy7t7C",
+                    "keys": [{
+                        "k": "AAYBAAxaE0d2iHJ6wgTt1KGYKvHA+c8fnp6bTqnmf0j8Bwjdd4jQCW+7uv9RvEWoZPRAwCZi8K3fqXD8KEpcvhw=",
+                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                    }],
+                    "user_id": 187,
+                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                }
+            }, {
+                "id": "015d7db2c22e2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000f",
+                "user_id": 187,
+                "item_id": "015d7db2c20d2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000e",
+                "type": "board",
+                "action": "add",
+                "sync_ids": [2136],
+                "data": {
+                    "id": "015d7db2c20d2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000e",
+                    "body": "AAYBAAzQzxlBn5btIdu1W+ghvg1dGcIBb5KisMfbIlXuA0wUepveMkP6kl9Gmycb3O6k",
+                    "keys": [{
+                        "k": "AAYBAAx0XFs6HOEM/m3MPlLX07sUczY9njRXOVaEZcu+QJFVEq9VjT1cfXKdPKXoG3zfAs+AMCflxBTtcycvofo=",
+                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                    }],
+                    "user_id": 187,
+                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                }
+            }, {
+                "id": "015d7db2c2692ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70011",
+                "user_id": 187,
+                "item_id": "015d7db2c2442ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70010",
+                "type": "board",
+                "action": "add",
+                "sync_ids": [2137],
+                "data": {
+                    "id": "015d7db2c2442ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70010",
+                    "body": "AAYBAAzZsJaXHd98bauZcj0m2S8qerUdM6ANclqW01m7h/nRXoepw7gAGyc2l8DfNHQdaE0X",
+                    "keys": [{
+                        "k": "AAYBAAwwkJ8qFNdK3gkWOIifDFOmCuDl9rvRSm/BDMDoYBQrjBJQrUhJCXz3KxcFUZgy64djv/HWZGcNztT//OU=",
+                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                    }],
+                    "user_id": 187,
+                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                }
+            }, {
+                "id": "015d7db2c28a2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70012",
+                "user_id": 187,
+                "type": "user",
+                "action": "edit",
+                "sync_ids": [],
+                "data": {
+                    "body": "AAYBAAxL3NdwlBG5MS1M2A+rWAx+prp7rVndT/KJT9jWsQ5iBZ8D8/hUSmMhiCUxGTrckD5eSxQOiU+PwhhmG8+cu7xKzC7Vrql6pD2RKCAcNg5qY13smLFpZEPAmuQ6te94RNNwsAXj6HwEhOgBnaen6DicXnkyCAK4+ZttwsUm4AUl8jNBJgYQ2Oz7snrsW+A=",
+                    "pubkey": "q2b9mKWhEmlB1FNGqYbiGIDI521HUop8NEL9xL+87So="
+                }
+            }],
+            "failures": []
+        }"#);
+        let res: SyncResponse = jedi::parse(&typical_mac_user).unwrap();
+        assert_eq!(res.success.len(), 10);
     }
 }
 
