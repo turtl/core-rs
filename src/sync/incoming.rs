@@ -150,6 +150,7 @@ impl SyncIncoming {
 
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
+        let sync_clone = sync_item.clone_shallow();
         match sync_item.ty.as_ref() {
             "user" => self.handlers.user.incoming(db, sync_item),
             "keychain" => self.handlers.keychain.incoming(db, sync_item),
@@ -162,7 +163,7 @@ impl SyncIncoming {
         }?;
 
         // let the ui know we got a sync!
-        messaging::ui_event("sync:incoming", &sync_item)?;
+        messaging::ui_event("sync:incoming", &sync_clone)?;
         Ok(())
     }
 }
