@@ -10,7 +10,7 @@ use ::hyper;
 use ::hyper::method::Method;
 use ::hyper::header::{self, Headers};
 pub use ::hyper::status::StatusCode as Status;
-use ::jedi::{self, Value};
+use ::jedi::{self, Value, DeserializeOwned};
 
 use ::error::{TResult, TError};
 use ::crypto;
@@ -96,7 +96,7 @@ impl Api {
     }
 
     /// Send out an API request
-    pub fn call(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<Value> {
+    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<T> {
         info!("api::call() -- req: {} {}", method, resource);
         let ApiReq {mut headers, timeout, data} = builder;
         let endpoint = config::get::<String>(&["api", "endpoint"])?;
@@ -149,32 +149,32 @@ impl Api {
                 str_res
             })
             .map(|out| {
-                info!("api::call() -- res({}): {} {}", out.len(), method2, resource);
+                info!("api::call() -- response({}): {} {}", out.len(), method2, resource);
                 trace!("api::call() -- body: {} {} -- {}", method2, resource, out);
                 out
             })
-            .and_then(|out| jedi::parse::<Value>(&out).map_err(|e| toterr!(e)))
+            .and_then(|out| jedi::parse(&out).map_err(|e| toterr!(e)))
     }
 
     /// Convenience function for api.call(GET)
-    pub fn get(&self, resource: &str, builder: ApiReq) -> TResult<Value> {
+    pub fn get<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Get, resource, builder)
     }
 
     /// Convenience function for api.call(POST)
-    pub fn post(&self, resource: &str, builder: ApiReq) -> TResult<Value> {
+    pub fn post<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Post, resource, builder)
     }
 
     /// Convenience function for api.call(PUT)
     #[allow(dead_code)]
-    pub fn put(&self, resource: &str, builder: ApiReq) -> TResult<Value> {
+    pub fn put<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Put, resource, builder)
     }
 
     /// Convenience function for api.call(DELETE)
     #[allow(dead_code)]
-    pub fn delete(&self, resource: &str, builder: ApiReq) -> TResult<Value> {
+    pub fn delete<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Delete, resource, builder)
     }
 }
