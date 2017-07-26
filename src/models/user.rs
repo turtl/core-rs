@@ -245,7 +245,7 @@ impl User {
                 None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
             }
         };
-        turtl.api.delete(format!("/users/{}", id).as_str(), ApiReq::new())?;
+        turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
         Ok(())
     }
 
