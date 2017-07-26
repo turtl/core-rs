@@ -1,7 +1,5 @@
 v0.7:
 - syncing:
-  - notify core of UI data change
-    - reindex on note change
   - track sync item failures via `freeze_sync_record`
   - sync errors are now embedded in each failed sync item, no more passing errors
     to `notify_sync_failure`
