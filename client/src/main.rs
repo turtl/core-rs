@@ -171,6 +171,10 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
+        // wait for sync to complete. note we do this before the events fire.
+        // this is fine, because they queue.
+        sleep(1000);
+
         // wait until we're loaded
         while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
         // wait until we're indexed
@@ -230,6 +234,9 @@ mod tests {
         while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
         // wait until we're indexed
         while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
+
+        // wait for sync to complete
+        sleep(1000);
 
         let msg = format!(r#"["30","profile:load"]"#);
         send(msg.as_str());
