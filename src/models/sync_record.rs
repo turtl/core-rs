@@ -59,3 +59,15 @@ make_storable!(SyncRecord, "sync_outgoing");
 make_basic_sync_model!(SyncRecord);
 impl Keyfinder for SyncRecord {}
 
+impl SyncRecord {
+    /// Clone the non-data, mostly-important bits of a sync record.
+    pub fn clone_shallow(&self) -> Self {
+        let mut new: SyncRecord = Default::default();
+        new.action = self.action.clone();
+        new.item_id = self.item_id.clone();
+        new.user_id = self.user_id.clone();
+        new.ty = self.ty.clone();
+        new
+    }
+}
+
