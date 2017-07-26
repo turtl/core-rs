@@ -502,7 +502,7 @@ impl Turtl {
                 error!("turtl.index_notes() -- there was a problem indexing notes: {}", e);
                 Err(e)
             })?;
-        let search = Search::new()?;
+        let mut search = Search::new()?;
         for note in &notes {
             match search.index_note(note) {
                 Ok(_) => {},

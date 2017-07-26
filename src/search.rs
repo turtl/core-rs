@@ -64,7 +64,7 @@ impl Search {
     }
 
     /// Index a note
-    pub fn index_note(&self, note: &Note) -> TResult<()> {
+    pub fn index_note(&mut self, note: &Note) -> TResult<()> {
         model_getter!(get_field, "Search.index_note()");
         let id = get_field!(note, id);
         let id_mod = match model::id_timestamp(&id) {
@@ -106,7 +106,7 @@ impl Search {
     }
 
     /// Unindex a note
-    pub fn unindex_note(&self, note: &Note) -> TResult<()> {
+    pub fn unindex_note(&mut self, note: &Note) -> TResult<()> {
         model_getter!(get_field, "Search.unindex_note()");
         let id = get_field!(note, id);
         self.idx.conn.execute("DELETE FROM notes WHERE id = ?", &[&id])?;
@@ -116,7 +116,7 @@ impl Search {
     }
 
     /// Unindex/reindex a note
-    pub fn reindex_note(&self, note: &Note) -> TResult<()> {
+    pub fn reindex_note(&mut self, note: &Note) -> TResult<()> {
         self.unindex_note(note)?;
         self.index_note(note)
     }
@@ -333,7 +333,7 @@ mod tests {
             jedi::parse(&json.replacen("{", r#"{"space_id":"4455","#, 1)).unwrap()
         }
 
-        let search = Search::new().unwrap();
+        let mut search = Search::new().unwrap();
 
         let note1: Note = jedi::parse(&String::from(r#"{"id":"1111","space_id":"4455","user_id":69,"type":"text","title":"CNN News Report","text":"Wow, terrible. Just terrible. So many bad things are happening. Are you safe? We just don't know! You could die tomorrow! You're probably only watching this because you're at the airport...here are some images of airplanes crashing! Oh, by the way, where are your children?! They are probably being molested by dozens and dozens of pedophiles right now, inside of a building that is going to be attacked by terrorists! What can you do about it? NOTHING! Do you have breast cancer??? Stay tuned to learn more!","tags":["news","cnn","airplanes","terrorists","breasts"],"board_id":"6969"}"#)).unwrap();
         let note2: Note = jedi::parse(&String::from(r#"{"id":"2222","space_id":"4455","user_id":69,"type":"link","title":"Fox News Report","text":"Aren't liberals stupid??! I mean, right? Did you know...Obama is BLACK! We have to stop him! We need to block EVERYTHING he does, even if we agreed with it a few years ago, because he's BLACK. How dare him?! Also, we should, like, give tax breaks to corporations. They deserve a break, people. Stop being so greedy and give the corporations a break. COMMUNISTS.","tags":["news","fox","fair","balanced","corporations"],"url":"https://fox.com/news/daily-report"}"#)).unwrap();
