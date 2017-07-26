@@ -156,5 +156,25 @@ impl Keyfinder for Note {
     }
 }
 
-impl MemorySaver for Note {}
+impl MemorySaver for Note {
+    // reindex note on add/update (reindex is idempotent)
+    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
+        let mut search_guard = turtl.search.write().unwrap();
+        match search_guard.as_mut() {
+            Some(ref mut search) => search.reindex_note(&self),
+            // i COULD throw an error here. i'm choosing not to...
+            None => Ok(()),
+        }
+    }
+
+    // remove note from search on delete
+    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
+        let mut search_guard = turtl.search.write().unwrap();
+        match search_guard.as_mut() {
+            Some(ref mut search) => search.unindex_note(&self),
+            // i COULD throw an error here. i'm choosing not to...
+            None => Ok(()),
+        }
+    }
+}
 
