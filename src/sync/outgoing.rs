@@ -2,11 +2,12 @@ use ::std::sync::{Arc, RwLock};
 
 use ::jedi;
 
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
+use ::models::model::Model;
 use ::models::sync_record::{SyncAction, SyncRecord};
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
@@ -58,9 +59,13 @@ impl SyncOutgoing {
     /// Delete a sync record
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
         let noid = String::from("<no id>");
-        debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} {})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
+        debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
+        let sync_id = match sync.id().as_ref() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingField(String::from("SyncOutgoing.delete_sync_record() -- sync record missing `id` field"))),
+        };
         with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()",
-            db.conn.execute("DELETE FROM sync_outgoing WHERE id = $1", &[&sync.id])?;
+            db.dumpy.delete(&db.conn, &String::from("sync_outgoing"), &sync_id)?;
         }
         Ok(())
     }
@@ -160,7 +165,6 @@ impl Syncer for SyncOutgoing {
         if syncs.len() > 0 {
             info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
             let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
-
             info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
 
             // clear out the successful syncs
@@ -201,174 +205,175 @@ mod tests {
     #[test]
     fn deserializes_sync_response() {
         let typical_mac_user = String::from(r#"{
+            "failures": [],
             "success": [{
-                "id": "015d7db2c0d12ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70002",
-                "user_id": 187,
-                "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70001",
-                "type": "keychain",
                 "action": "add",
-                "sync_ids": [2129],
                 "data": {
-                    "id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70001",
-                    "body": "AAYBAAz3+hdLuX3OoNYIXdTYJOp9keFeNGlvRFL4MiXsBgaa3J3sZ1SZmliayh8HDf4/RaabH6zSWSBK9+i1/NlY8bNyUr2kPhbi9mNX6ufB81w9tA==",
+                    "body": "AAYBAAwz3AotVeFd3dUrlGzQqK7SXNyaW5rOYGKH9kf0gY7Rnv+fa9hPBowlX7vbtF6bB334HXxl5VxaDezZeXwahYhXh7fmVepN6Zt9x9mjsMU+Yg==",
+                    "id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0001",
+                    "item_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
                     "type": "space",
-                    "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
-                    "user_id": 187
-                }
-            }, {
-                "id": "015d7db2c1012ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70003",
-                "user_id": 187,
-                "item_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
-                "type": "space",
-                "action": "add",
-                "sync_ids": [2130],
-                "data": {
-                    "id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
-                    "body": "AAYBAAxpk7LxYWqblPdAqb7S5umXqNC+DCCHmDHkX8OmMgxzfNcktnjPprW+a47l4wmkrOw=",
-                    "user_id": 187,
-                    "members": [{
-                        "id": 156,
-                        "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000",
-                        "user_id": 187,
-                        "role": "owner",
-                        "created": "2017-07-26T07:00:53.516Z",
-                        "updated": "2017-07-26T07:00:53.516Z",
-                        "username": "slippyslappy@turtlapp.com"
-                    }]
-                }
-            }, {
-                "id": "015d7db2c12f2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70006",
-                "user_id": 187,
-                "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70005",
+                    "user_id": 190
+                },
+                "id": "015d7dc40752e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0002",
+                "item_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0001",
+                "sync_ids": [2165],
                 "type": "keychain",
-                "action": "add",
-                "sync_ids": [2131],
-                "data": {
-                    "id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70005",
-                    "body": "AAYBAAxJBaGKiNGD75OrycfpRoc0csnrXVgXhR1yATkYOQVVSmiZ7QMTfNovJQC4bPai5iDlhM2wiTXVvzauPg94CmP4H5Ff/z+gmPjBIM9i9E3cqA==",
-                    "type": "space",
-                    "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
-                    "user_id": 187
-                }
+                "user_id": 190
             }, {
-                "id": "015d7db2c1642ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70007",
-                "user_id": 187,
-                "item_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
-                "type": "space",
                 "action": "add",
-                "sync_ids": [2132],
                 "data": {
-                    "id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
-                    "body": "AAYBAAzqQbPuVE91ThF/o7w/fXaguodk1YgIWvL5veo7yVMfJwOIlMJv6pXt5NUytA==",
-                    "user_id": 187,
+                    "body": "AAYBAAw4YM40kJQNI6kiweqmj+BmVPvRLATqqx+HVvrBcrIKZe8iq1K3d3Xxx9/CVUj06/4=",
+                    "id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
                     "members": [{
-                        "id": 157,
-                        "space_id": "015d7db2c1182ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70004",
-                        "user_id": 187,
+                        "created": "2017-07-26T07:19:45.701Z",
+                        "id": 165,
                         "role": "owner",
-                        "created": "2017-07-26T07:00:53.561Z",
-                        "updated": "2017-07-26T07:00:53.561Z",
+                        "space_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
+                        "updated": "2017-07-26T07:19:45.701Z",
+                        "user_id": 190,
                         "username": "slippyslappy@turtlapp.com"
-                    }]
-                }
+                    }],
+                    "user_id": 190
+                },
+                "id": "015d7dc4077fe58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0003",
+                "item_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
+                "sync_ids": [2166],
+                "type": "space",
+                "user_id": 190
             }, {
-                "id": "015d7db2c1902ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000a",
-                "user_id": 187,
-                "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70009",
+                "action": "add",
+                "data": {
+                    "body": "AAYBAAyIG44Upjp74zFzuf7yOejqnkWiNaS2B/aWmesUdPYSXdNYyOYqKg6YLvrYAAp+Lhl6AtvcdoEq295MlvFK/hHwqwKCHmkrXlAnrITVqh8qmw==",
+                    "id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0005",
+                    "item_id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0004",
+                    "type": "space",
+                    "user_id": 190
+                },
+                "id": "015d7dc407b8e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0006",
+                "item_id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0005",
+                "sync_ids": [2167],
                 "type": "keychain",
-                "action": "add",
-                "sync_ids": [2133],
-                "data": {
-                    "id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70009",
-                    "body": "AAYBAAwjyacMLB35fvlkN8H3IVm41RBh5GsufEm+/iKeGfhjZ3W5GsDhAf46GQjRhpVmOEX7WO1za0ZU3yXZ4ID8fRBvhsGlwFQlLloyYOQ0ngSsNw==",
-                    "type": "space",
-                    "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
-                    "user_id": 187
-                }
+                "user_id": 190
             }, {
-                "id": "015d7db2c1be2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000b",
-                "user_id": 187,
-                "item_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
-                "type": "space",
                 "action": "add",
-                "sync_ids": [2134],
                 "data": {
-                    "id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
-                    "body": "AAYBAAw0ca29N5KGorFiB2XqdpzkoFtg+2dRifY3YzxbA+wRzmHlCF8eJpmVc37FcA==",
-                    "user_id": 187,
+                    "body": "AAYBAAxSPeOaLXy8vp59v9dmYu565i41c7UKQwmeyw1Z+W5cRtILmhopGJXCgflIhA==",
+                    "id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0004",
                     "members": [{
-                        "id": 158,
-                        "space_id": "015d7db2c1792ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70008",
-                        "user_id": 187,
+                        "created": "2017-07-26T07:19:45.726Z",
+                        "id": 166,
                         "role": "owner",
-                        "created": "2017-07-26T07:00:53.588Z",
-                        "updated": "2017-07-26T07:00:53.588Z",
+                        "space_id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0004",
+                        "updated": "2017-07-26T07:19:45.726Z",
+                        "user_id": 190,
                         "username": "slippyslappy@turtlapp.com"
-                    }]
-                }
-            }, {
-                "id": "015d7db2c1f72ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000d",
-                "user_id": 187,
-                "item_id": "015d7db2c1d52ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000c",
-                "type": "board",
-                "action": "add",
-                "sync_ids": [2135],
-                "data": {
-                    "id": "015d7db2c1d52ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000c",
-                    "body": "AAYBAAwVidQuy3QEohto4tkqbhHw9GpK9P6uBIVQgPJLVEqK7pQ/SXa7PfVYS2vRg/Uy7t7C",
-                    "keys": [{
-                        "k": "AAYBAAxaE0d2iHJ6wgTt1KGYKvHA+c8fnp6bTqnmf0j8Bwjdd4jQCW+7uv9RvEWoZPRAwCZi8K3fqXD8KEpcvhw=",
-                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
                     }],
-                    "user_id": 187,
-                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
-                }
+                    "user_id": 190
+                },
+                "id": "015d7dc407f0e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0007",
+                "item_id": "015d7dc40799e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0004",
+                "sync_ids": [2168],
+                "type": "space",
+                "user_id": 190
             }, {
-                "id": "015d7db2c22e2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000f",
-                "user_id": 187,
-                "item_id": "015d7db2c20d2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000e",
-                "type": "board",
                 "action": "add",
-                "sync_ids": [2136],
                 "data": {
-                    "id": "015d7db2c20d2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b7000e",
-                    "body": "AAYBAAzQzxlBn5btIdu1W+ghvg1dGcIBb5KisMfbIlXuA0wUepveMkP6kl9Gmycb3O6k",
-                    "keys": [{
-                        "k": "AAYBAAx0XFs6HOEM/m3MPlLX07sUczY9njRXOVaEZcu+QJFVEq9VjT1cfXKdPKXoG3zfAs+AMCflxBTtcycvofo=",
-                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
-                    }],
-                    "user_id": 187,
-                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
-                }
+                    "body": "AAYBAAw0iUD4BYyFPm4w+KaPCOlpYnN1KimKwUK9LXGf7SKsnwO2dJAMi6w27VlZHzBa/yRCqc6mfIBP/b1B8GI/yXXp8+w4F1A05GddhIckH1nmaw==",
+                    "id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0009",
+                    "item_id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0008",
+                    "type": "space",
+                    "user_id": 190
+                },
+                "id": "015d7dc40825e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000a",
+                "item_id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0009",
+                "sync_ids": [2169],
+                "type": "keychain",
+                "user_id": 190
             }, {
-                "id": "015d7db2c2692ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70011",
-                "user_id": 187,
-                "item_id": "015d7db2c2442ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70010",
-                "type": "board",
                 "action": "add",
-                "sync_ids": [2137],
                 "data": {
-                    "id": "015d7db2c2442ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70010",
-                    "body": "AAYBAAzZsJaXHd98bauZcj0m2S8qerUdM6ANclqW01m7h/nRXoepw7gAGyc2l8DfNHQdaE0X",
-                    "keys": [{
-                        "k": "AAYBAAwwkJ8qFNdK3gkWOIifDFOmCuDl9rvRSm/BDMDoYBQrjBJQrUhJCXz3KxcFUZgy64djv/HWZGcNztT//OU=",
-                        "s": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
+                    "body": "AAYBAAwl5a6H1PIsrW8HpP49ckO/KZrDjLfGfupTw1N3KfSshWQHzNlMQGWpFHswTg==",
+                    "id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0008",
+                    "members": [{
+                        "created": "2017-07-26T07:19:45.750Z",
+                        "id": 167,
+                        "role": "owner",
+                        "space_id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0008",
+                        "updated": "2017-07-26T07:19:45.750Z",
+                        "user_id": 190,
+                        "username": "slippyslappy@turtlapp.com"
                     }],
-                    "user_id": 187,
-                    "space_id": "015d7db2c0b92ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70000"
-                }
+                    "user_id": 190
+                },
+                "id": "015d7dc40855e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000b",
+                "item_id": "015d7dc4080de58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0008",
+                "sync_ids": [2170],
+                "type": "space",
+                "user_id": 190
             }, {
-                "id": "015d7db2c28a2ec83616a8c69cb3701422594ad3a2d143ecd36867ad00ce078c8a54d88254b70012",
-                "user_id": 187,
-                "type": "user",
+                "action": "add",
+                "data": {
+                    "body": "AAYBAAxffqJ2+3OGYi6W1YoASj0vzLpBf7fVZe32pN4lDQnDTaxIrdossoCtKNGEVgWxvEA/",
+                    "id": "015d7dc40870e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000c",
+                    "keys": [{
+                        "k": "AAYBAAyv1l1jjpalS2A3zVa8hpUmO5jtOt7pEnDnZ3Wifw+XlOl0JUxlMnxA/IWPnlYL4m3oxQXqiHVZSjk7uOQ=",
+                        "s": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000"
+                    }],
+                    "space_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
+                    "user_id": 190
+                },
+                "id": "015d7dc40894e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000d",
+                "item_id": "015d7dc40870e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000c",
+                "sync_ids": [2171],
+                "type": "board",
+                "user_id": 190
+            }, {
+                "action": "add",
+                "data": {
+                    "body": "AAYBAAyWs9FrPq2i4PffSWYt0MlOL/0Fd2YpzMwhsaw5od2V9/yXsOp9slY5nOmm3zHy",
+                    "id": "015d7dc408abe58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000e",
+                    "keys": [{
+                        "k": "AAYBAAy1ZyTE5AsC38jslKTHrfe2EiNu9VKvBxethW3LqB2mNJCBygLGa20ZeTYUluIOKmI1Z0wW5UvTNe5H+WY=",
+                        "s": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000"
+                    }],
+                    "space_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
+                    "user_id": 190
+                },
+                "id": "015d7dc408d2e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000f",
+                "item_id": "015d7dc408abe58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a000e",
+                "sync_ids": [2172],
+                "type": "board",
+                "user_id": 190
+            }, {
+                "action": "add",
+                "data": {
+                    "body": "AAYBAAzVk+6rmeAGseFA2QvbfK5qQ1tpKHTXTq6LN7q1WKUlEO5zTVmwsnORX6inR54T9kyT",
+                    "id": "015d7dc408e9e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0010",
+                    "keys": [{
+                        "k": "AAYBAAyukg85GyoXNKk20e/Rswrk3OpDII/S5INwDXqcSjnubolAdKbXcwBd+WXBhZcMl2sao9Q9gDbtg6bgE6c=",
+                        "s": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000"
+                    }],
+                    "space_id": "015d7dc4073be58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0000",
+                    "user_id": 190
+                },
+                "id": "015d7dc4090ce58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0011",
+                "item_id": "015d7dc408e9e58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0010",
+                "sync_ids": [2173],
+                "type": "board",
+                "user_id": 190
+            }, {
                 "action": "edit",
-                "sync_ids": [],
                 "data": {
-                    "body": "AAYBAAxL3NdwlBG5MS1M2A+rWAx+prp7rVndT/KJT9jWsQ5iBZ8D8/hUSmMhiCUxGTrckD5eSxQOiU+PwhhmG8+cu7xKzC7Vrql6pD2RKCAcNg5qY13smLFpZEPAmuQ6te94RNNwsAXj6HwEhOgBnaen6DicXnkyCAK4+ZttwsUm4AUl8jNBJgYQ2Oz7snrsW+A=",
-                    "pubkey": "q2b9mKWhEmlB1FNGqYbiGIDI521HUop8NEL9xL+87So="
-                }
-            }],
-            "failures": []
+                    "body": "AAYBAAwdMDWkpn4HU2ZfdPhPnHF/xTwAVspMkj6y0hVzv1jcn2Ku3X2nUl4x60SI1YJDxAZyI+RNa7aTQSZSjtynfvwt8/VEyRH+g9vs+RaWNl3NMwfqjKTD4ZCJbf/WBWQvo0RZU4K1XNIFqJvn4jbOWgvDkqonU4EGWG2QceX+MhItw1/RZMZwEjTtBcFvNn4=",
+                    "pubkey": "CkrVJKDpfKLBTVij5b9oEGvaKI/H1SUuOsF2PpYvUyU="
+                },
+                "id": "015d7dc4092fe58135942d06c3a78eb2350ebf9c4f59b123fc99f726066aa3ede0865114a80a0012",
+                "sync_ids": [],
+                "type": "user",
+                "user_id": 190,
+                "item_id": 190
+            }]
         }"#);
         let res: SyncResponse = jedi::parse(&typical_mac_user).unwrap();
         assert_eq!(res.success.len(), 10);
