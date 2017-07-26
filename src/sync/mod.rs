@@ -264,13 +264,13 @@ mod tests {
     use ::jedi::{self, Value};
     use ::storage::Storage;
     use ::api::Api;
-    use ::models::sync_record::SyncRecord;
+    use ::models::sync_record::{SyncAction, SyncRecord};
 
     #[test]
     fn serializes_sync_record() {
         let sync: SyncRecord = jedi::parse(&String::from(r#"{"id":1234,"user_id":1,"item_id":6969,"action":"add","type":"note","data":{"id":"6969"}}"#)).unwrap();
         assert_eq!(sync.id, Some(String::from("1234")));
-        assert_eq!(sync.action, String::from("add"));
+        assert_eq!(sync.action, SyncAction::Add);
         assert_eq!(sync.sync_ids, None);
         assert_eq!(sync.ty, String::from("note"));
         let data: Value = jedi::to_val(&sync.data).unwrap();

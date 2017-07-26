@@ -8,6 +8,7 @@ use ::models::model::Model;
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::protected::{Keyfinder, Protected};
+use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util::event::Emitter;
@@ -179,13 +180,12 @@ impl User {
 
     /// Once the user has joined, we set up a default profile for them.
     pub fn post_join(turtl: &Turtl) -> TResult<()> {
-        let mut user_guard_w = turtl.user.write().unwrap();
-        let user_id = match user_guard_w.id() {
+        let user_guard = turtl.user.read().unwrap();
+        let user_id = match user_guard.id() {
             Some(x) => x.clone(),
             None => return Err(TError::MissingData(String::from("user.post_join() -- user has no id"))),
         };
-        sync_model::save_model(&String::from("create"), turtl, user_guard_w.as_mut(), false)?;
-        drop(user_guard_w);
+        drop(user_guard);
 
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
             let mut space: Space = Default::default();
@@ -193,7 +193,7 @@ impl User {
             space.user_id = user_id.clone();
             space.title = Some(String::from(title));
             space.color = Some(String::from(color));
-            let val = sync_model::save_model(&String::from("create"), turtl, &mut space, false)?;
+            let val = sync_model::save_model(SyncAction::Add, turtl, &mut space, false)?;
             let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
@@ -203,7 +203,7 @@ impl User {
             board.user_id = user_id.clone();
             board.space_id = space_id.clone();
             board.title = Some(String::from(title));
-            let val = sync_model::save_model(&String::from("create"), turtl, &mut board, false)?;
+            let val = sync_model::save_model(SyncAction::Add, turtl, &mut board, false)?;
             let id: String = jedi::get(&["id"], &val)?;
             Ok(id)
         }
@@ -278,7 +278,7 @@ impl User {
                 return Err(TError::MissingField(String::from("user.set_setting() -- missing user.settings (None)")));
             }
         }
-        sync_model::save_model(&String::from("update"), turtl, self, false)?;
+        sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
         Ok(())
     }
 

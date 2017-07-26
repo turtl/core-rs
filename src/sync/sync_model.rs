@@ -11,53 +11,63 @@ use ::models::protected::{Protected, Keyfinder};
 use ::models::storable::Storable;
 use ::jedi::Value;
 use ::turtl::Turtl;
-use ::models::sync_record::SyncRecord;
+use ::models::sync_record::{SyncAction, SyncRecord};
 
 macro_rules! make_sync_incoming {
     ($n:ty) => {
         fn incoming(&self, db: &mut ::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
-            if sync_item.action == "delete" {
-                let mut model: $n = Default::default();
-                model.id = Some(sync_item.item_id);
-                model.db_delete(db)
-            } else {
-                if sync_item.data.is_none() {
-                    return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id.unwrap_or(String::from("<no id>")), self.model_type())));
+            match sync_item.action {
+                ::models::sync_record::SyncAction::Delete => {
+                    let mut model: $n = Default::default();
+                    model.id = Some(sync_item.item_id);
+                    model.db_delete(db)
                 }
-                let mut sync_item = self.transform(sync_item)?;
-                let mut data = ::jedi::Value::Null;
-                // swap the `data` out from under the SyncRecord so we don't
-                // have to clone it
-                ::std::mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
-                debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), ::jedi::stringify(&data)?);
-                let model: $n = ::jedi::from_val(data)?;
-                model.db_save(db)
+                _ => {
+                    if sync_item.data.is_none() {
+                        return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id.unwrap_or(String::from("<no id>")), self.model_type())));
+                    }
+                    let mut sync_item = self.transform(sync_item)?;
+                    let mut data = ::jedi::Value::Null;
+                    // swap the `data` out from under the SyncRecord so we don't
+                    // have to clone it
+                    ::std::mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
+                    debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), ::jedi::stringify(&data)?);
+                    let model: $n = ::jedi::from_val(data)?;
+                    model.db_save(db)
+                }
+
             }
         }
 
-        fn outgoing(&self, action: &str, user_id: &String, db: &mut ::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
-            if action == "delete" {
-                self.db_delete(db)?;
-            } else {
-                self.db_save(db)?;
+        fn outgoing(&self, action: ::models::sync_record::SyncAction, user_id: &String, db: &mut ::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
+            match action {
+                ::models::sync_record::SyncAction::Delete => {
+                    self.db_delete(db)?;
+                }
+                _ => {
+                    self.db_save(db)?;
+                }
             }
             if skip_remote_sync { return Ok(()); }
 
             let mut sync_record = ::models::sync_record::SyncRecord::default();
             sync_record.generate_id()?;
-            sync_record.action = String::from(action);
+            sync_record.action = action.clone();
             sync_record.user_id = user_id.clone();
             sync_record.ty = String::from(self.model_type());
             sync_record.item_id = match self.id() {
                 Some(id) => id.clone(),
                 None => return Err(::error::TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
             };
-            if action == "delete" {
-                sync_record.data = Some(json!({
-                    "id": self.id().unwrap().clone(),
-                }));
-            } else {
-                sync_record.data = Some(self.data_for_storage()?);
+            match action {
+                ::models::sync_record::SyncAction::Delete => {
+                    sync_record.data = Some(json!({
+                        "id": self.id().unwrap().clone(),
+                    }));
+                }
+                _ => {
+                    sync_record.data = Some(self.data_for_storage()?);
+                }
             }
             sync_record.db_save(db)
         }
@@ -87,7 +97,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
 
     /// Allows a model to save itself to the outgoing sync database (or perform
     /// any custom needed actual in addition/instead).
-    fn outgoing(&self, action: &str, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
+    fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
     fn db_save(&self, db: &mut Storage) -> TResult<()> {
@@ -119,7 +129,7 @@ pub trait MemorySaver: Protected {
 
 /// Serialize this model and save it to the local db
 ///
-pub fn save_model<T>(action: &str, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
+pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
@@ -201,7 +211,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
             Some(x) => x,
             None => return Err(TError::MissingField(format!("sync_model::delete_model() -- {}: turtl is missing `db` object", model.model_type()))),
         };
-        model.outgoing("delete", &user_id, db, skip_remote_sync)?;
+        model.outgoing(SyncAction::Delete, &user_id, db, skip_remote_sync)?;
     }
     model.delete_from_mem(turtl)
 }

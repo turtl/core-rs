@@ -1,13 +1,13 @@
 use ::std::sync::{Arc, RwLock};
 
-use ::jedi::{self, Value};
+use ::jedi;
 
 use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
-use ::models::sync_record::SyncRecord;
+use ::models::sync_record::{SyncAction, SyncRecord};
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
@@ -39,7 +39,7 @@ impl SyncOutgoing {
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
         let outgoing = with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
-            db.all("outgoing_sync")?
+            db.all("sync_outgoing")?
         };
         let mut objects: Vec<SyncRecord> = Vec::new();
         for data in outgoing {
@@ -93,6 +93,7 @@ impl SyncOutgoing {
     /// Increment this SyncRecord's errcount. If it's above a magic number, we
     /// delete the record.
     fn handle_failed_record(&self, failure: &SyncRecord) -> TResult<()> {
+        debug!("SyncOutgoing.handle_failed_record() -- handle failure: {:?}", failure);
         let errcount = self.get_errcount(failure)?;
         if errcount > MAX_ALLOWED_FAILURES {
             self.freeze_sync_record(failure)
@@ -104,12 +105,11 @@ impl SyncOutgoing {
     /// Notify the app that we have sync failure(s), and also update the error
     /// count on those records.
     /// TODO: implement embedded errors
-    fn notify_sync_failure(&self, fail: Vec<SyncRecord>, error: Value) -> TResult<()> {
+    fn notify_sync_failure(&self, fail: Vec<SyncRecord>) -> TResult<()> {
         for failure in &fail {
             self.handle_failed_record(failure)?;
         }
-        let fail_val = jedi::to_val(&fail)?;
-        messaging::ui_event("sync:outgoing:failure", &Value::Array(vec![fail_val, error]))
+        messaging::ui_event("sync:outgoing:failure", &fail)
     }
 }
 
@@ -139,7 +139,7 @@ impl Syncer for SyncOutgoing {
         let mut file_syncs: Vec<SyncRecord> = Vec::new();
         // split our sync records into our normal/file collections
         for rec in sync {
-            if rec.ty == "file" && rec.action == "add" {
+            if rec.ty == "file" && rec.action == SyncAction::Add {
                 file_syncs.push(rec);
             } else {
                 syncs.push(rec);
@@ -149,14 +149,15 @@ impl Syncer for SyncOutgoing {
         // send our "normal" syncs out to the api, and remove and successful
         // records from our local db
         if syncs.len() > 0 {
+            info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
             let sync_result = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
 
             // our successful syncs
             let success: Vec<SyncRecord> = jedi::get(&["success"], &sync_result)?;
             // our failed syncs
-            let fails: Vec<SyncRecord> = jedi::get(&["fail"], &sync_result)?;
-            // the error (if any) we got while syncing
-            let error: Value = jedi::get(&["error"], &sync_result)?;
+            let fails: Option<Vec<SyncRecord>> = jedi::get_opt(&["failures"], &sync_result);
+            let failcount = fails.as_ref().map(|x| x.len()).unwrap_or(0);
+            debug!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", success.len(), failcount);
 
             // clear out the successful syncs
             let mut err: TResult<()> = Ok(());
@@ -171,8 +172,9 @@ impl Syncer for SyncOutgoing {
                 }
             }
 
-            if fails.len() > 0 || error != Value::Null {
-                self.notify_sync_failure(fails, error)?;
+            match fails {
+                Some(failures) => { self.notify_sync_failure(failures)?; }
+                None => {}
             }
 
             // if we did indeed get an error while deleting our sync records,

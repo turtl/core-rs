@@ -4,6 +4,7 @@ use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
+use ::models::sync_record::SyncAction;
 use ::sync::sync_model::{self, MemorySaver};
 use ::turtl::Turtl;
 
@@ -134,7 +135,7 @@ impl Keychain {
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());
         if save {
-            sync_model::save_model(&String::from("create"), turtl, &mut entry, skip_remote_sync)?;
+            sync_model::save_model(SyncAction::Add, turtl, &mut entry, skip_remote_sync)?;
         } else {
             entry.generate_id()?;
         }

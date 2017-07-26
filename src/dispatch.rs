@@ -21,6 +21,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
+use ::models::sync_record::SyncAction;
 use ::sync::sync_model;
 use ::messaging::Event;
 
@@ -92,37 +93,40 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(profile_data)
         },
         "profile:sync:model" => {
-            let action: String = jedi::get(&["2"], &data)?;
+            let action: SyncAction = match jedi::get(&["2"], &data) {
+                Ok(action) => action,
+                Err(e) => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- bad sync action: {}", e))),
+            };
             let ty: String = jedi::get(&["3"], &data)?;
 
-            match action.as_ref() {
-                "create" | "update" => {
+            match action.clone() {
+                SyncAction::Add | SyncAction::Edit => {
                     let val = match ty.as_ref() {
                         "user" => {
                             let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model, false)?
+                            sync_model::save_model(action, turtl, &mut model, false)?
                         },
                         "space" => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model, false)?
+                            sync_model::save_model(action, turtl, &mut model, false)?
                         },
                         "board" => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model, false)?
+                            sync_model::save_model(action, turtl, &mut model, false)?
                         },
                         "note" => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model, false)?
+                            sync_model::save_model(action, turtl, &mut model, false)?
                         },
                         "invite" => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(&action, turtl, &mut model, false)?
+                            sync_model::save_model(action, turtl, &mut model, false)?
                         },
                         _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
                     };
                     Ok(val)
                 },
-                "delete" => {
+                SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
                     match ty.as_ref() {
                         "user" => {
@@ -144,7 +148,6 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     }
                     Ok(jedi::obj())
                 },
-                _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync action {}", action))),
             }
         },
         "profile:get-notes" => {
