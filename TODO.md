@@ -1,11 +1,5 @@
-current:
-  - figure out why outgoing sync records aren't saving
-
 v0.7:
 - syncing:
-  - file syncing
-  - notify UI of API -> core sync
-  - notify UI of sync/login status
   - notify core of UI data change
     - reindex on note change
   - track sync item failures via `freeze_sync_record`

@@ -8,7 +8,7 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
-use ::messaging::Messenger;
+use ::messaging::{self, Messenger};
 use ::models;
 use ::models::sync_record::SyncRecord;
 
@@ -141,7 +141,7 @@ impl SyncIncoming {
                 None => false,
             };
             if missing {
-                info!("sync::incoming::run_sync_item() -- got missing item, probably and add/delete: {:?}", sync_item);
+                info!("sync::incoming::run_sync_item() -- got missing item, probably an add/delete: {:?}", sync_item);
                 return Ok(());
             } else {
                 return Err(TError::BadValue(format!("sync::incoming::run_sync_item() -- bad item: {:?}", sync_item)));
@@ -159,7 +159,11 @@ impl SyncIncoming {
             "file" => self.handlers.file.incoming(db, sync_item),
             "invite" => self.handlers.invite.incoming(db, sync_item),
             _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.ty))),
-        }
+        }?;
+
+        // let the ui know we got a sync!
+        messaging::ui_event("sync:incoming", &sync_item)?;
+        Ok(())
     }
 }
 

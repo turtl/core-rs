@@ -35,7 +35,6 @@ macro_rules! make_sync_incoming {
                     let model: $n = ::jedi::from_val(data)?;
                     model.db_save(db)
                 }
-
             }
         }
 
