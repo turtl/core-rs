@@ -8,6 +8,7 @@ v0.7:
       - filenames should be the <note.id>_<note.file.id>.enc
 - user
   - change password
+  - set space.default = true based on settings
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection

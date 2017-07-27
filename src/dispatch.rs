@@ -22,6 +22,7 @@ use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
 use ::models::sync_record::SyncAction;
+use ::models::feedback::Feedback;
 use ::sync::sync_model;
 use ::sync::outgoing::SyncOutgoing;
 
@@ -195,6 +196,11 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
             Ok(jedi::to_val(&tags)?)
+        },
+        "feedback:send" => {
+            let feedback: Feedback = jedi::get(&["2"], &data)?;
+            feedback.send(turtl)?;
+            Ok(jedi::obj())
         },
         "ping" => {
             info!("ping!");
