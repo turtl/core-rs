@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = String::from(r#"["4","app:start-sync"]"#);
+        let msg = String::from(r#"["4","sync:start"]"#);
         send(msg.as_str());
         let msg = recv("4");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
