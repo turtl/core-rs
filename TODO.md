@@ -12,9 +12,7 @@ v0.7:
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
-- get sync info (pending, failed)
 - send feedback
-- implement sync.immediate
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not

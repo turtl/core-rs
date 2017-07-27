@@ -88,6 +88,16 @@ impl SyncOutgoing {
         db.find("sync_outgoing", "frozen", &vec![String::from("true")])
     }
 
+    /// Public version of get_outgoing_syncs(). Guess what it does.
+    pub fn get_all_pending(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
+        };
+        db.find("sync_outgoing", "frozen", &vec![String::from("false")])
+    }
+
     /// Grab all outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
         with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",

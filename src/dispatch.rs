@@ -79,8 +79,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             SyncOutgoing::delete_sync_item(turtl, &sync_id)?;
             Ok(jedi::obj())
         },
-        "sync:get-all-frozen" => {
+        "sync:get-frozen" => {
             let frozen = SyncOutgoing::get_all_frozen(turtl)?;
+            Ok(jedi::to_val(&frozen)?)
+        },
+        "sync:get-pending" => {
+            let frozen = SyncOutgoing::get_all_pending(turtl)?;
             Ok(jedi::to_val(&frozen)?)
         },
         "sync:unfreeze-item" => {
