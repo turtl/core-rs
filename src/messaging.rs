@@ -208,16 +208,6 @@ pub fn ui_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
     Messenger::event(ev, jedi::to_val(val)?)
 }
 
-/// Send an event to our own dispatch handler
-pub fn app_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
-    let messenger = Messenger::new();
-    let event = Event {
-        e: String::from(ev),
-        d: jedi::to_val(val)?,
-    };
-    messenger.send_rev(format!("::ev{}", jedi::stringify(&event)?))
-}
-
 #[cfg(test)]
 mod tests {
     use std::thread;
