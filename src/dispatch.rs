@@ -23,6 +23,7 @@ use ::models::note::Note;
 use ::models::invite::Invite;
 use ::models::sync_record::SyncAction;
 use ::sync::sync_model;
+use ::sync::outgoing::SyncOutgoing;
 use ::messaging::Event;
 
 /// Does our actual message dispatching
@@ -57,20 +58,34 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.wipe_app_data()?;
             Ok(jedi::obj())
         },
-        "app:start-sync" => {
+        "sync:start" => {
             turtl.sync_start()?;
             Ok(jedi::obj())
         },
-        "app:pause-sync" => {
+        "sync:pause" => {
             turtl.sync_pause();
             Ok(jedi::obj())
         },
-        "app:resume-sync" => {
+        "sync:resume" => {
             turtl.sync_resume();
             Ok(jedi::obj())
         },
-        "app:shutdown-sync" => {
+        "sync:shutdown" => {
             turtl.sync_shutdown(true)?;
+            Ok(jedi::obj())
+        },
+        "sync:delete-item" => {
+            let sync_id: String = jedi::get(&["2"], &data)?;
+            SyncOutgoing::delete_sync_item(turtl, &sync_id)?;
+            Ok(jedi::obj())
+        },
+        "sync:get-all-frozen" => {
+            let frozen = SyncOutgoing::get_all_frozen(turtl)?;
+            Ok(jedi::to_val(&frozen)?)
+        },
+        "sync:unfreeze-item" => {
+            let sync_id: String = jedi::get(&["2"], &data)?;
+            SyncOutgoing::kick_frozen_sync(turtl, &sync_id)?;
             Ok(jedi::obj())
         },
         "app:api:set-endpoint" => {

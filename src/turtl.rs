@@ -274,10 +274,16 @@ impl Turtl {
             Some(x) => x,
             None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
         };
+
+        if cfg!(test) {
+            return Ok(String::from(":memory:"));
+        }
+
         let data_folder = config::get::<String>(&["data_folder"])?;
         if data_folder == ":memory:" {
             return Ok(String::from(":memory:"));
         }
+
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         let re = Regex::new(r"(?i)[^a-z0-9]")?;
         let server = re.replace_all(&api_endpoint, "");
@@ -440,9 +446,9 @@ impl Turtl {
             return Err(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut keychain: Vec<KeychainEntry> = jedi::from_val(jedi::to_val(&db.all("keychain")?)?)?;
-        let mut spaces: Vec<Space> = jedi::from_val(jedi::to_val(&db.all("spaces")?)?)?;
-        let mut boards: Vec<Board> = jedi::from_val(jedi::to_val(&db.all("boards")?)?)?;
+        let mut keychain: Vec<KeychainEntry> = db.all("keychain").unwrap();
+        let mut spaces: Vec<Space> = db.all("spaces").unwrap();
+        let mut boards: Vec<Board> = db.all("boards").unwrap();
 
         // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
@@ -481,7 +487,7 @@ impl Turtl {
             None => return Err(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
         };
 
-        let mut notes: Vec<Note> = jedi::from_val(Value::Array(db.by_id("notes", note_ids)?))?;
+        let mut notes: Vec<Note> = db.by_id("notes", note_ids).unwrap();
         self.find_models_keys(&mut notes)?;
         protected::map_deserialize(self, notes)
     }
@@ -495,7 +501,7 @@ impl Turtl {
             return Err(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut notes: Vec<Note> = jedi::from_val(jedi::to_val(&db.all("notes")?)?)?;
+        let mut notes: Vec<Note> = db.all("notes")?;
         self.find_models_keys(&mut notes)?;
         let notes: Vec<Note> = protected::map_deserialize(self, notes)
             .or_else(|e| -> TResult<Vec<Note>> {
@@ -589,7 +595,7 @@ mod tests {
     use ::models::user::{self, User};
     use ::models::note::Note;
     use ::models::board::Board;
-    use ::models::sync_record::SyncAction;
+    use ::models::sync_record::{SyncRecord, SyncAction};
     use ::sync::sync_model;
 
     protected! {
@@ -842,10 +848,10 @@ mod tests {
         // load our outgoing sync records and verify them
         let db_guard = turtl.db.read().unwrap();
         let db = db_guard.as_ref().unwrap();
-        let syncs = db.all("sync_outgoing").unwrap();
+        let syncs: Vec<SyncRecord> = db.all("sync_outgoing").unwrap();
         assert_eq!(syncs.len(), 2);
-        assert_eq!(jedi::get::<String>(&["type"], &syncs[0]).unwrap(), String::from("keychain"));
-        assert_eq!(jedi::get::<String>(&["type"], &syncs[1]).unwrap(), String::from("space"));
+        assert_eq!(syncs[0].ty, String::from("keychain"));
+        assert_eq!(syncs[1].ty, String::from("space"));
     }
 }
 

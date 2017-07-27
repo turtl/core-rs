@@ -16,7 +16,7 @@
 #[macro_use]
 mod macros;
 mod incoming;
-mod outgoing;
+pub mod outgoing;
 #[macro_use]
 pub mod sync_model;
 
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
         let syncstr: String = jedi::stringify(&sync).unwrap();
-        assert_eq!(syncstr, String::from(r#"{"id":"1234","body":null,"action":"add","item_id":"6969","user_id":1,"type":"note","data":{"id":"6969"}}"#));
+        assert_eq!(syncstr, String::from(r#"{"id":"1234","body":null,"action":"add","item_id":"6969","user_id":1,"type":"note","data":{"id":"6969"},"errcount":0,"frozen":false}"#));
     }
 
     #[test]

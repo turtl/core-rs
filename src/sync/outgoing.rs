@@ -9,6 +9,7 @@ use ::api::{Api, ApiReq};
 use ::messaging;
 use ::models::model::Model;
 use ::models::sync_record::{SyncAction, SyncRecord};
+use ::turtl::Turtl;
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
@@ -44,84 +45,100 @@ impl SyncOutgoing {
         }
     }
 
-    /// Grab all outgoing sync items, in order
-    fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let outgoing = with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
-            db.all("sync_outgoing")?
+    /// Tells the sync system to unfreeze a sync item so it gets queued to be
+    /// included in the next outgoing sync.
+    pub fn kick_frozen_sync(turtl: &Turtl, sync_id: &String) -> TResult<()> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
         };
-        let mut objects: Vec<SyncRecord> = Vec::new();
-        for data in outgoing {
-            objects.push(jedi::from_val(data)?);
+        let sync: Option<SyncRecord> = db.get("sync_outgoing", sync_id)?;
+        match sync {
+            Some(mut rec) => {
+                rec.frozen = false;
+                db.save(&rec)?;
+            }
+            None => {}
         }
-        Ok(objects)
+        Ok(())
     }
 
-    /// Delete a sync record
+    /// Public/static method for deleting a sync record (probably initiated from
+    /// the UI).
+    pub fn delete_sync_item(turtl: &Turtl, sync_id: &String) -> TResult<()> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
+        };
+        let mut sync_record: SyncRecord = Default::default();
+        sync_record.id = Some(sync_id.clone());
+        db.delete(&sync_record)?;
+        Ok(())
+    }
+
+    /// Grab all frozen sync records
+    pub fn get_all_frozen(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
+        };
+        db.find("sync_outgoing", "frozen", &vec![String::from("true")])
+    }
+
+    /// Grab all outgoing sync items, in order
+    fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
+        with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
+            db.find("sync_outgoing", "frozen", &vec![String::from("false")])
+        }
+    }
+
+    /// Delete a sync record from sync_outgoing (like, when we send it to the
+    /// API and it runs successfully...we don't need it sitting around).
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
         let noid = String::from("<no id>");
         debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
-        let sync_id = match sync.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return Err(TError::MissingField(String::from("SyncOutgoing.delete_sync_record() -- sync record missing `id` field"))),
-        };
-        with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()",
-            db.dumpy.delete(&db.conn, &String::from("sync_outgoing"), &sync_id)?;
-        }
-        Ok(())
-    }
-
-    // TODO: mark the sync item as failed
-    fn freeze_sync_record(&self, _sync: &SyncRecord) -> TResult<()> {
-        Ok(())
-    }
-
-    /// Get how many times a sync record has failed
-    fn get_errcount(&self, sync: &SyncRecord) -> TResult<u32> {
-        let query = "SELECT errcount FROM sync_outgoing WHERE id = $1 LIMIT 1";
-        let mut errcount: u32 = 0;
-        with_db!{ db, self.db, "SyncOutgoing.get_errcount()",
-            let mut query = db.conn.prepare(query)?;
-            let rows = query.query_map(&[&sync.id], |row| {
-                let count: i64 = row.get("errcount");
-                count
-            })?;
-            for data in rows {
-                match data {
-                    Ok(x) => errcount = x as u32,
-                    Err(_) => (),
-                }
-                break;
-            }
-        };
-        Ok(errcount)
-    }
-
-    /// Set errcount += 1 to the given sync record
-    fn increment_errcount(&self, sync: &SyncRecord) -> TResult<()> {
-        with_db!{ db, self.db, "SyncOutgoing.get_errcount()",
-            db.conn.execute("UPDATE sync_outgoing SET errcount = errcount + 1 WHERE id = $1", &[&sync.id])?;
-        }
+        with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()", db.delete(sync)?; }
         Ok(())
     }
 
     /// Increment this SyncRecord's errcount. If it's above a magic number, we
-    /// delete the record.
-    fn handle_failed_record(&self, failure: &SyncRecord) -> TResult<()> {
+    /// mark the sync as failed, which excludes it from further outgoing syncs
+    /// until it gets manually shaken/removed.
+    fn handle_failed_sync(&self, failure: &SyncRecord) -> TResult<()> {
         debug!("SyncOutgoing.handle_failed_record() -- handle failure: {:?}", failure);
-        let errcount = self.get_errcount(failure)?;
-        if errcount > MAX_ALLOWED_FAILURES {
-            self.freeze_sync_record(failure)
-        } else {
-            self.increment_errcount(failure)
+        let sync_id = match failure.id().as_ref() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingField(format!("SyncOutgoing.handle_failed_record() -- missing `failure.id` field"))),
+        };
+        let sync_record: Option<SyncRecord> = with_db!{ db, self.db, "SyncOutgoing.handle_failed_record()",
+            db.get("sync_outgoing", &sync_id)?
+        };
+        match sync_record {
+            Some(mut rec) => {
+                if rec.errcount > MAX_ALLOWED_FAILURES {
+                    rec.frozen = true;
+                } else {
+                    rec.errcount += 1;
+                }
+                // save our heroic sync record with our mods (errcount/frozen)
+                with_db!{ db, self.db, "SyncOutgoing.handle_failed_record()",
+                    db.save(&rec)?;
+                }
+            }
+            // already deleted? who knows
+            None => {}
         }
+        Ok(())
     }
 
-    /// Notify the app that we have sync failure(s), and also update the error
-    /// count on those records.
-    /// TODO: implement embedded errors
-    fn notify_sync_failure(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
+    /// Handle each failed sync record, and notify the UI that we have failed
+    /// sync items that might need inspection/alerting.
+    fn handle_sync_failures(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
         for failure in fail {
-            self.handle_failed_record(failure)?;
+            self.handle_failed_sync(failure)?;
         }
         messaging::ui_event("sync:outgoing:failure", fail)
     }
@@ -149,8 +166,8 @@ impl Syncer for SyncOutgoing {
         if sync.len() == 0 { return Ok(()); }
 
         // create two collections: one for normal data syncs, and one for files
-        let mut syncs: Vec<SyncRecord> = Vec::new();
-        let mut file_syncs: Vec<SyncRecord> = Vec::new();
+        let mut syncs: Vec<SyncRecord> = Vec::with_capacity(sync.len());
+        let mut file_syncs: Vec<SyncRecord> = Vec::with_capacity(2);
         // split our sync records into our normal/file collections
         for rec in sync {
             if rec.ty == "file" && rec.action == SyncAction::Add {
@@ -181,7 +198,7 @@ impl Syncer for SyncOutgoing {
             }
 
             if sync_result.failures.len() > 0 {
-                self.notify_sync_failure(&sync_result.failures)?;
+                self.handle_sync_failures(&sync_result.failures)?;
             }
 
             // if we did indeed get an error while deleting our sync records,
@@ -201,6 +218,38 @@ impl Syncer for SyncOutgoing {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::std::sync::{Arc, RwLock};
+    use ::models::sync_record::SyncRecord;
+    use ::config;
+    use ::jedi::{self, Value};
+
+    #[test]
+    fn ignores_frozen_syncs() {
+        let mut sync_config = SyncConfig::new();
+        sync_config.skip_api_init = true;
+        let sync_config = Arc::new(RwLock::new(sync_config));
+        let api = Arc::new(Api::new());
+        let dumpy_schema = config::get::<Value>(&["schema"]).unwrap();
+        let db = Storage::new(&String::from(":memory:"), dumpy_schema).unwrap();
+        let db = Arc::new(RwLock::new(Some(db)));
+
+        let sync1: SyncRecord = jedi::from_val(json!({"id": "1", "action": "add", "item_id": "69", "user_id": 12, "type": "note"})).unwrap();
+        let sync2: SyncRecord = jedi::from_val(json!({"id": "2", "action": "add", "item_id": "69", "user_id": 12, "type": "note"})).unwrap();
+        let mut sync3: SyncRecord = jedi::from_val(json!({"id": "3", "action": "add", "item_id": "69", "user_id": 12, "type": "note"})).unwrap();
+        sync3.frozen = true;
+
+        {
+            let mut db_guard = db.write().unwrap();
+            let dbo = db_guard.as_mut().unwrap();
+            dbo.save(&sync1).unwrap();
+            dbo.save(&sync2).unwrap();
+            dbo.save(&sync3).unwrap();
+        }
+
+        let sync_outgoing = SyncOutgoing::new(sync_config, api, db);
+        let outgoing = sync_outgoing.get_outgoing_syncs().unwrap();
+        assert_eq!(outgoing.len(), 2);
+    }
 
     #[test]
     fn deserializes_sync_response() {

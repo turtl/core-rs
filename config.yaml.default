@@ -45,7 +45,7 @@ schema:
   sync_outgoing:
     indexes:
       - fields:
-        - failed
+        - frozen
 
 # configuration for test client
 client:

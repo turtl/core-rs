@@ -53,6 +53,12 @@ protected! {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub error: Option<SyncError>,
+        #[serde(default)]
+        #[protected_field(public)]
+        pub errcount: u32,
+        #[serde(default)]
+        #[protected_field(public)]
+        pub frozen: bool,
     }
 }
 make_storable!(SyncRecord, "sync_outgoing");

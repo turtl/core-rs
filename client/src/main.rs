@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 
-        let msg = String::from(r#"["4","app:start-sync"]"#);
+        let msg = String::from(r#"["4","sync:start"]"#);
         send(msg.as_str());
         let msg = recv("4");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(note, r#"{"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl","has_file":false,"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592545,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","tags":["free market","america","fuck yeah"],"text":"COMMIES, AMIRITE?\n\n#PRIVATIZEEVERYTHING #FREEMARKET #TOLLROADS #LIBCUCKS","title":"YOU KNOW WUT I HATE?!","type":"text","user_id":51}"#);
         sleep(10);
 
-        let msg = String::from(r#"["6","app:shutdown-sync"]"#);
+        let msg = String::from(r#"["6","sync:shutdown"]"#);
         send(msg.as_str());
         let msg = recv("6");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);

@@ -105,32 +105,38 @@ impl Storage {
             None => return Err(TError::MissingField(String::from("storage::destroy() -- missing `id` field"))),
         };
         let table = model.table();
-        self.dumpy.delete(&self.conn, &String::from(table), &id)
-            .map_err(|e| From::from(e))
+        Ok(self.dumpy.delete(&self.conn, &String::from(table), &id)?)
     }
 
     /// Grab all values from a "table"
-    pub fn all(&self, table: &str) -> TResult<Vec<Value>> {
-        self.dumpy.all(&self.conn, &String::from(table))
-            .map_err(|e| From::from(e))
+    pub fn all<T>(&self, table: &str) -> TResult<Vec<T>>
+        where T: Protected + Storable
+    {
+        Ok(jedi::from_val(Value::Array(self.dumpy.all(&self.conn, &String::from(table))?))?)
+    }
+
+    /// Find values by index/value in a "table"
+    pub fn find<T>(&self, table: &str, index: &str, vals: &Vec<String>) -> TResult<Vec<T>>
+        where T: Protected + Storable
+    {
+        Ok(jedi::from_val(Value::Array(self.dumpy.find(&self.conn, &String::from(table), &String::from(index), vals)?))?)
     }
 
     /// Get ALL objects in a table with the given IDs
-    pub fn by_id(&self, table: &str, ids: &Vec<String>) -> TResult<Vec<Value>> {
-        self.dumpy.by_id(&self.conn, &String::from(table), &ids)
-            .map_err(|e| From::from(e))
+    pub fn by_id<T>(&self, table: &str, ids: &Vec<String>) -> TResult<Vec<T>>
+        where T: Protected + Storable
+    {
+        Ok(jedi::from_val(Value::Array(self.dumpy.by_id(&self.conn, &String::from(table), &ids)?))?)
     }
 
     /// Grab a value from our dumpy k/v store
     pub fn kv_get(&self, key: &str) -> TResult<Option<String>> {
-        self.dumpy.kv_get(&self.conn, key)
-            .map_err(|e| From::from(e))
+        Ok(self.dumpy.kv_get(&self.conn, key)?)
     }
 
     /// Set a value into our dumpy k/v store
     pub fn kv_set(&self, key: &str, val: &String) -> TResult<()> {
-        self.dumpy.kv_set(&self.conn, key, val)
-            .map_err(|e| From::from(e))
+        Ok(self.dumpy.kv_set(&self.conn, key, val)?)
     }
 
     /// Close the db connection
@@ -213,7 +219,7 @@ mod tests {
         assert_eq!(shiba2.name.unwrap(), String::from("Kofi"));
         assert_eq!(shiba2.tags.unwrap(), vec![String::from("serious")]);
 
-        assert_eq!(storage.all("shibas").unwrap().len(), 1);
+        assert_eq!(storage.all::<Shiba>("shibas").unwrap().len(), 1);
     }
 
     #[test]

@@ -1,17 +1,11 @@
 v0.7:
 - syncing:
-  - track sync item failures via `freeze_sync_record`
-  - sync errors are now embedded in each failed sync item, no more passing errors
-    to `notify_sync_failure`
   - file syncing
     - outgoing file uploads
-      - can we do this without queuing? perhaps a stateless query that says
-        "here's all the notes w/ files i have, what are their file ids?"
-        then compare the ids to what we have locally
+      - maybe just use sync_outgoing as our queue?
     - incoming file downloads
       - store files in filesystem (not sqlite)
       - filenames should be the <note.id>_<note.file.id>.enc
-  - send outgoing sync to api
 - user
   - change password
 - invites
@@ -43,4 +37,7 @@ later:
   - encrypting and decrypting BOTH consume a model and return the new type
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
+- implement enum for sync types (instead of "note", "board", etc)
+- update dumpy/storage to use <T: DeserializeOwned> instead of passing Value
+- investigate more stateless way of syncing files?
 

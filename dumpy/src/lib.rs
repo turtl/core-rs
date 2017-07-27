@@ -289,7 +289,7 @@ impl Dumpy {
         let mut qry_parts: Vec<&str> = Vec::with_capacity(ids.len() + 2);
         let mut qry_vals: Vec<SearchVal> = Vec::new();
         qry_vals.push(SearchVal::String(table.clone()));
-        qry_parts.push("SELECT data FROM Dumpy_objects WHERE table_name = ? AND id IN (");
+        qry_parts.push("SELECT data FROM dumpy_objects WHERE table_name = ? AND id IN (");
         for id in ids {
             if id == &ids[ids.len() - 1] {
                 qry_parts.push("?");
