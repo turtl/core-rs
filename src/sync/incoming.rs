@@ -10,7 +10,7 @@ use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::{self, Messenger};
 use ::models;
-use ::models::sync_record::SyncRecord;
+use ::models::sync_record::{SyncType, SyncRecord};
 
 struct Handlers {
     user: models::user::User,
@@ -151,15 +151,14 @@ impl SyncIncoming {
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
         let sync_clone = sync_item.clone_shallow();
-        match sync_item.ty.as_ref() {
-            "user" => self.handlers.user.incoming(db, sync_item),
-            "keychain" => self.handlers.keychain.incoming(db, sync_item),
-            "space" => self.handlers.space.incoming(db, sync_item),
-            "board" => self.handlers.board.incoming(db, sync_item),
-            "note" => self.handlers.note.incoming(db, sync_item),
-            "file" => self.handlers.file.incoming(db, sync_item),
-            "invite" => self.handlers.invite.incoming(db, sync_item),
-            _ => return Err(TError::BadValue(format!("SyncIncoming.run_sync_item() -- unknown sync type encountered: {}", sync_item.ty))),
+        match sync_item.ty {
+            SyncType::User => self.handlers.user.incoming(db, sync_item),
+            SyncType::Keychain => self.handlers.keychain.incoming(db, sync_item),
+            SyncType::Space => self.handlers.space.incoming(db, sync_item),
+            SyncType::Board => self.handlers.board.incoming(db, sync_item),
+            SyncType::Note => self.handlers.note.incoming(db, sync_item),
+            SyncType::File => self.handlers.file.incoming(db, sync_item),
+            SyncType::Invite => self.handlers.invite.incoming(db, sync_item),
         }?;
 
         // let the ui know we got a sync!

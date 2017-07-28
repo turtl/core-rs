@@ -8,7 +8,7 @@ use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
 use ::models::model::Model;
-use ::models::sync_record::{SyncAction, SyncRecord};
+use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::turtl::Turtl;
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
@@ -109,7 +109,7 @@ impl SyncOutgoing {
     /// API and it runs successfully...we don't need it sitting around).
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
         let noid = String::from("<no id>");
-        debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
+        debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {:?})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
         with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()", db.delete(sync)?; }
         Ok(())
     }
@@ -180,7 +180,7 @@ impl Syncer for SyncOutgoing {
         let mut file_syncs: Vec<SyncRecord> = Vec::with_capacity(2);
         // split our sync records into our normal/file collections
         for rec in sync {
-            if rec.ty == "file" && rec.action == SyncAction::Add {
+            if rec.ty == SyncType::File && rec.action == SyncAction::Add {
                 file_syncs.push(rec);
             } else {
                 syncs.push(rec);

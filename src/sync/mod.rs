@@ -264,7 +264,7 @@ mod tests {
     use ::jedi::{self, Value};
     use ::storage::Storage;
     use ::api::Api;
-    use ::models::sync_record::{SyncAction, SyncRecord};
+    use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 
     #[test]
     fn serializes_sync_record() {
@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(sync.id, Some(String::from("1234")));
         assert_eq!(sync.action, SyncAction::Add);
         assert_eq!(sync.sync_ids, None);
-        assert_eq!(sync.ty, String::from("note"));
+        assert_eq!(sync.ty, SyncType::Note);
         let data: Value = jedi::to_val(&sync.data).unwrap();
         assert_eq!(jedi::get::<String>(&["id"], &data).unwrap(), String::from(r#"6969"#));
 
