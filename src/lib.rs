@@ -45,6 +45,7 @@ mod profile;
 mod storage;
 mod search;
 mod dispatch;
+mod schema;
 mod turtl;
 
 use ::std::thread;

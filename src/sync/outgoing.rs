@@ -230,8 +230,8 @@ mod tests {
     use super::*;
     use ::std::sync::{Arc, RwLock};
     use ::models::sync_record::SyncRecord;
-    use ::config;
-    use ::jedi::{self, Value};
+    use ::jedi;
+    use ::schema;
 
     #[test]
     fn ignores_frozen_syncs() {
@@ -239,7 +239,7 @@ mod tests {
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
-        let dumpy_schema = config::get::<Value>(&["schema"]).unwrap();
+        let dumpy_schema = schema::get_schema();
         let db = Storage::new(&String::from(":memory:"), dumpy_schema).unwrap();
         let db = Arc::new(RwLock::new(Some(db)));
 

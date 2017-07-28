@@ -11,42 +11,6 @@ sync:
   enable_incoming: false
   enable_outgoing: false
 
-schema:
-  user:
-  keychain:
-    indexes:
-      - fields:
-        - item_id
-  spaces:
-    indexes:
-      - fields:
-        - user_id
-  boards:
-    indexes:
-      - fields:
-        - space_id
-      - fields:
-        - user_id
-  notes:
-    indexes:
-      - fields:
-        - user_id
-      - fields:
-        - space_id
-      - fields:
-        - board_id
-      - fields:
-        - has_file
-  invites:
-  files:
-    indexes:
-      - fields:
-        - has_data
-  sync_outgoing:
-    indexes:
-      - fields:
-        - frozen
-
 # configuration for test client
 client:
   test:

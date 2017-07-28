@@ -30,6 +30,7 @@ use ::util::thredder::Thredder;
 use ::messaging::{Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
+use ::schema;
 
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
@@ -262,7 +263,7 @@ impl Turtl {
     /// Create a new per-user database for the current user.
     pub fn create_user_db(&self) -> TResult<Storage> {
         let db_location = self.get_user_db_location()?;
-        let dumpy_schema = config::get::<Value>(&["schema"])?;
+        let dumpy_schema = schema::get_schema();
         Storage::new(&db_location, dumpy_schema)
     }
 
