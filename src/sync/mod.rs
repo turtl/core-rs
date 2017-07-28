@@ -197,42 +197,57 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
         (*config_guard).quit = false;
     }
 
-    // start our outging sync process
-    let (tx_out, rx_out) = mpsc::channel::<TResult<()>>();
-    let config_out = config.clone();
-    let api_out = api.clone();
-    let db_out = db.clone();
-    let handle_out = thread::Builder::new().name(String::from("sync:outgoing")).spawn(move || {
-        let sync = SyncOutgoing::new(config_out, api_out, db_out);
-        sync.runner(tx_out);
-        info!("sync::start() -- outgoing shut down");
-    })?;
+    // some holders for our thread handles and init receivers
+    let mut join_handles = Vec::with_capacity(4);
+    let mut rx_vec = Vec::with_capacity(4);
 
-    // start our incoming sync process
-    let (tx_in, rx_in) = mpsc::channel::<TResult<()>>();
-    let config_in = config.clone();
-    let handle_in = thread::Builder::new().name(String::from("sync:incoming")).spawn(move || {
-        let sync = SyncIncoming::new(config_in, api, db);
-        sync.runner(tx_in);
-        info!("sync::start() -- incoming shut down");
-    })?;
-
-    macro_rules! channel_check {
-        ($rx:expr) => {
-            match $rx {
-                Ok(x) => {
-                    match x {
-                        Err(e) => return Err(toterr!(e)),
-                        _ => (),
-                    }
-                },
-                Err(e) => return Err(toterr!(e)),
+    /// Starts a sync class.
+    macro_rules! sync_starter {
+        ($synctype:expr) => {
+            {
+                // create the channel we'll use to send messages from the sync
+                // thread back to here (mainly, a "yes init succeeded" or "no,
+                // init failed")
+                let (tx, rx) = mpsc::channel::<TResult<()>>();
+                let config_c = config.clone();
+                let api_c = api.clone();
+                let db_c = db.clone();
+                let sync = $synctype(config_c, api_c, db_c);
+                let handle = thread::Builder::new().name(format!("sync:{}", sync.get_name())).spawn(move || {
+                    sync.runner(tx);
+                    info!("sync::start() -- {} shut down", sync.get_name());
+                })?;
+                // push our handle/rx onto their respective holder vecs
+                join_handles.push(handle);
+                rx_vec.push(rx);
             }
         }
     }
-    channel_check!(rx_out.recv());
-    channel_check!(rx_in.recv());
 
+    // i try to use the type without the ::new but drew *destroy the value* of
+    // the macro!
+    sync_starter!(SyncOutgoing::new);
+    sync_starter!(SyncIncoming::new);
+    sync_starter!(FileSyncOutgoing::new);
+    sync_starter!(FileSyncIncoming::new);
+
+    // Wait on an "OK! A++++" Ok(()) signal from the sync thread (sent after it
+    // inits successfully) or a "SHITFUCK!" Err() if there was a problem.
+    for rx in rx_vec {
+        match rx.recv() {
+            Ok(x) => {
+                match x {
+                    Err(e) => return Err(toterr!(e)),
+                    _ => (),
+                }
+            },
+            Err(e) => return Err(toterr!(e)),
+        }
+    }
+
+    // define some callbacks Turtl can use to control the sync processes. turtl
+    // could manage this junk itself, but it's nicer to have a single object
+    // that handles the state for us via functions.
     let config1 = config.clone();
     let shutdown = move || {
         let mut guard = config1.write().unwrap();
@@ -250,8 +265,10 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
         guard.enabled = true;
     };
 
+    // uhhh, you have a ffcall. thank you. uhh, hand the phone to me, please.
+    // yes, here you go.
     Ok(SyncState {
-        join_handles: vec![handle_out, handle_in],
+        join_handles: join_handles,
         shutdown: Box::new(shutdown),
         pause: Box::new(pause),
         resume: Box::new(resume),
