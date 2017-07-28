@@ -3,6 +3,7 @@ use ::sync::{SyncConfig, Syncer};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
+use ::error::TResult;
 
 /// Holds the state for outgoing files (uploads)
 pub struct FileSyncOutgoing {
