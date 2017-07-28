@@ -38,6 +38,7 @@ protected! {
         #[protected_field(public)]
         pub has_data: bool,
 
+        #[serde(with = "::util::ser::base64_converter")]
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub data: Option<Vec<u8>>,
@@ -70,4 +71,23 @@ make_basic_sync_model!{ FileData,
 }
 
 impl Keyfinder for FileData {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::jedi;
+
+    #[test]
+    fn filedata_serializes_to_from_base64() {
+        let filedata: Vec<u8> = vec![73, 32, 67, 65, 78, 39, 84, 32, 66, 69, 76, 73, 69, 86, 69, 32, 73, 84, 39, 83, 32, 78, 79, 84, 32, 71, 79, 78, 79, 82, 82, 72, 69, 65, 33, 33];
+        let mut file: FileData = Default::default();
+        file.data = Some(filedata.clone());
+
+        let ser = jedi::stringify(&file).unwrap();
+        assert_eq!(ser, r#"{"body":null,"has_data":false,"data":"SSBDQU4nVCBCRUxJRVZFIElUJ1MgTk9UIEdPTk9SUkhFQSEh"}"#);
+
+        let file2: FileData = jedi::parse(&ser).unwrap();
+        assert_eq!(file2.data.as_ref().unwrap(), &filedata);
+    }
+}
 

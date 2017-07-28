@@ -89,7 +89,6 @@ pub mod int_converter {
 }
 
 pub mod int_opt_converter {
-    use ::error::{TResult, TError};
     use ::serde::ser::Serializer;
     use ::serde::de::{Deserialize, Deserializer};
     use ::jedi::Value;
@@ -130,26 +129,45 @@ pub mod int_opt_converter {
             }
         }
     }
+}
+
+pub mod base64_converter {
+    use ::error::TResult;
+    use ::serde::ser::{self, Serializer};
+    use ::serde::de::{self, Deserializer, Deserialize};
+    use ::jedi::Value;
+    use ::crypto;
 
     #[allow(dead_code)]
-    pub fn from_value(val: Value) -> TResult<Option<String>> {
+    pub fn serialize<S>(val: &Option<Vec<u8>>, ser: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
         match val {
-            Value::Number(num) => {
-                match num.as_i64() {
-                    Some(x) => Ok(Some(x.to_string())),
-                    None => {
-                        match num.as_u64() {
-                            Some(x) => Ok(Some(x.to_string())),
-                            None => Ok(None),
-                        }
-                    }
-                }
+            &Some(ref x) => {
+                let base64: String = crypto::to_base64(x)
+                    .map_err(|_| ser::Error::custom("could not base64 encode the given value"))?;
+                ser.serialize_str(&base64[..])
             },
-            Value::String(s) => {
-                Ok(Some(s))
-            },
-            _ => Err(TError::BadValue(String::from("int_converter::from_value() -- expecting int or string. got another type."))),
+            &None => ser.serialize_none(),
         }
+    }
+
+    pub fn deserialize<'de, D>(des: D) -> Result<Option<Vec<u8>>, D::Error>
+        where D: Deserializer<'de>
+    {
+        let val: Option<String> = Deserialize::deserialize(des)?;
+        match val {
+            Some(x) => {
+                let parsed = crypto::from_base64(&x)
+                    .map_err(|_| de::Error::custom("invalid base64 given"))?;
+                Ok(Some(parsed))
+            }
+            None => { Ok(None) }
+        }
+    }
+
+    pub fn from_value(_val: Value) -> TResult<Option<Option<Vec<u8>>>> {
+        Ok(None)
     }
 }
 

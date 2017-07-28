@@ -170,6 +170,7 @@ impl MemorySaver for Note {
     // remove note from search on delete
     fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
         let mut search_guard = turtl.search.write().unwrap();
+        // TODO: remove note file locally
         match search_guard.as_mut() {
             Some(ref mut search) => search.unindex_note(&self),
             // i COULD throw an error here. i'm choosing not to...
