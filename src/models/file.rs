@@ -40,6 +40,7 @@ protected! {
 
         #[serde(with = "::util::ser::base64_converter")]
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         #[protected_field(private)]
         pub data: Option<Vec<u8>>,
     }
