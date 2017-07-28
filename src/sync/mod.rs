@@ -17,6 +17,7 @@
 mod macros;
 mod incoming;
 pub mod outgoing;
+pub mod files;
 #[macro_use]
 pub mod sync_model;
 
@@ -27,6 +28,8 @@ use ::config;
 
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
+use ::sync::files::outgoing::FileSyncOutgoing;
+use ::sync::files::incoming::FileSyncIncoming;
 use ::util;
 use ::error::TResult;
 use ::storage::Storage;
