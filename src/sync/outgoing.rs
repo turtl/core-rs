@@ -167,10 +167,6 @@ impl Syncer for SyncOutgoing {
         1000
     }
 
-    fn init(&self) -> TResult<()> {
-        Ok(())
-    }
-
     fn run_sync(&self) -> TResult<()> {
         let sync = self.get_outgoing_syncs()?;
         if sync.len() == 0 { return Ok(()); }
