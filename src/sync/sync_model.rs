@@ -53,7 +53,7 @@ macro_rules! make_sync_incoming {
             sync_record.generate_id()?;
             sync_record.action = action.clone();
             sync_record.user_id = user_id.clone();
-            sync_record.ty = String::from(self.model_type());
+            sync_record.ty = ::models::sync_record::SyncType::from_string(self.model_type())?;
             sync_record.item_id = match self.id() {
                 Some(id) => id.clone(),
                 None => return Err(::error::TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),

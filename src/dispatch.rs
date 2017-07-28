@@ -21,7 +21,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncAction, SyncType};
 use ::models::feedback::Feedback;
 use ::sync::sync_model;
 use ::sync::outgoing::SyncOutgoing;
@@ -98,7 +98,6 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::obj())
         },
         "app:shutdown" => {
-            info!("dispatch: got shutdown signal, quitting");
             turtl.sync_shutdown(false)?;
             turtl.events.trigger("app:shutdown", &jedi::obj());
             Ok(jedi::obj())
@@ -114,56 +113,65 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:sync:model" => {
             let action: SyncAction = match jedi::get(&["2"], &data) {
                 Ok(action) => action,
-                Err(e) => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- bad sync action: {}", e))),
+                Err(e) => return Err(TError::BadValue(format!("dispatch: {} -- bad sync action: {}", cmd, e))),
             };
-            let ty: String = jedi::get(&["3"], &data)?;
+            let ty: SyncType = jedi::get(&["3"], &data)?;
 
             match action.clone() {
                 SyncAction::Add | SyncAction::Edit => {
-                    let val = match ty.as_ref() {
-                        "user" => {
+                    let val = match ty {
+                        SyncType::User => {
                             let mut model: User = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
-                        },
-                        "space" => {
+                        }
+                        SyncType::Space => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
-                        },
-                        "board" => {
+                        }
+                        SyncType::Board => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
-                        },
-                        "note" => {
+                        }
+                        SyncType::Note => {
                             let mut model: Note = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
-                        },
-                        "invite" => {
+                        }
+                        SyncType::Invite => {
                             let mut model: Invite = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
-                        },
-                        _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
+                        }
+                        SyncType::File => {
+                            Value::Null
+                        }
+                        _ => {
+                            return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
+                        }
                     };
                     Ok(val)
                 },
                 SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
-                    match ty.as_ref() {
-                        "user" => {
+                    match ty {
+                        SyncType::User => {
                             sync_model::delete_model::<User>(turtl, &id, false)?;
-                        },
-                        "space" => {
+                        }
+                        SyncType::Space => {
                             sync_model::delete_model::<Space>(turtl, &id, false)?;
-                        },
-                        "board" => {
+                        }
+                        SyncType::Board => {
                             sync_model::delete_model::<Board>(turtl, &id, false)?;
-                        },
-                        "note" => {
+                        }
+                        SyncType::Note => {
                             sync_model::delete_model::<Note>(turtl, &id, false)?;
-                        },
-                        "invite" => {
+                        }
+                        SyncType::Invite => {
                             sync_model::delete_model::<Invite>(turtl, &id, false)?;
-                        },
-                        _ => return Err(TError::BadValue(format!("dispatch: profile:sync:model -- unknown sync type {}", ty))),
+                        }
+                        SyncType::File => {
+                        }
+                        _ => {
+                            return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
+                        }
                     }
                     Ok(jedi::obj())
                 },
@@ -178,7 +186,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let qry: Query = jedi::get(&["2"], &data)?;
             let search_guard = turtl.search.read().unwrap();
             if search_guard.is_none() {
-                return Err(TError::MissingField(String::from("dispatch: profile:find-notes -- turtl is missing `search` object")));
+                return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `search` object", cmd)));
             }
             let search = search_guard.as_ref().unwrap();
             let note_ids = search.find(&qry)?;
@@ -191,7 +199,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let limit: i32 = jedi::get(&["4"], &data)?;
             let search_guard = turtl.search.read().unwrap();
             if search_guard.is_none() {
-                return Err(TError::MissingField(String::from("dispatch: profile:find-notes -- turtl is missing `search` object")));
+                return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `search` object", cmd)));
             }
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;

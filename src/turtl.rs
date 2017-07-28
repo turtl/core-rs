@@ -596,7 +596,7 @@ mod tests {
     use ::models::user::{self, User};
     use ::models::note::Note;
     use ::models::board::Board;
-    use ::models::sync_record::{SyncRecord, SyncAction};
+    use ::models::sync_record::{SyncRecord, SyncAction, SyncType};
     use ::sync::sync_model;
 
     protected! {
@@ -851,8 +851,8 @@ mod tests {
         let db = db_guard.as_ref().unwrap();
         let syncs: Vec<SyncRecord> = db.all("sync_outgoing").unwrap();
         assert_eq!(syncs.len(), 2);
-        assert_eq!(syncs[0].ty, String::from("keychain"));
-        assert_eq!(syncs[1].ty, String::from("space"));
+        assert_eq!(syncs[0].ty, SyncType::Keychain);
+        assert_eq!(syncs[1].ty, SyncType::Space);
     }
 }
 

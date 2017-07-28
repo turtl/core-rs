@@ -1,4 +1,5 @@
-use ::jedi::Value;
+use ::jedi::{self, Value};
+use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
 
@@ -15,7 +16,37 @@ pub enum SyncAction {
 
 impl Default for SyncAction {
     // edit, right?
-    fn default() -> SyncAction { SyncAction::Edit }
+    fn default() -> Self { SyncAction::Edit }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum SyncType {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "keychain")]
+    Keychain,
+    #[serde(rename = "space")]
+    Space,
+    #[serde(rename = "board")]
+    Board,
+    #[serde(rename = "note")]
+    Note,
+    #[serde(rename = "file")]
+    File,
+    #[serde(rename = "invite")]
+    Invite,
+}
+
+impl SyncType {
+    pub fn from_string(s: String) -> TResult<Self> {
+        let val = Value::String(s);
+        Ok(jedi::from_val(val)?)
+    }
+}
+
+impl Default for SyncType {
+    // user? doesn't matter
+    fn default() -> Self { SyncType::User }
 }
 
 /// A helpful struct for dealing with sync errors
@@ -39,7 +70,7 @@ protected! {
         pub user_id: String,
         #[serde(rename = "type")]
         #[protected_field(public)]
-        pub ty: String,
+        pub ty: SyncType,
 
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
