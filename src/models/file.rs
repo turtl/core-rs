@@ -15,6 +15,7 @@ use ::std::fs;
 use ::std::io::prelude::*;
 use ::std::path::PathBuf;
 use ::glob;
+use ::regex::Regex;
 
 /// Stores the name of our file directory under the data folder
 const FILEDIR: &'static str = "files";
@@ -71,9 +72,18 @@ make_basic_sync_model!{ FileData,
             None => return Err(TError::MissingField(String::from("FileData.db_delete() -- `self.id` is None, cannot delete file =["))),
         };
 
+        // we could use FileData::file_finder here, but we actually do want to
+        // find ALL files with this note ID and remove them. just a paranoid
+        // precaution.
         let data_folder = config::get::<String>(&["data_folder"])?;
-        let search = format!("{}/{}/{}", data_folder, FILEDIR, FileData::filebuilder(&String::from("*"), &id));
-        let files = glob::glob(&search)?;
+        let mut filepath = PathBuf::from(data_folder);
+        filepath.push(FILEDIR);
+        filepath.push(FileData::filebuilder(None, Some(&id), None));
+        let pathstr = match filepath.to_str() {
+            Some(x) => x,
+            None => return Err(TError::BadValue(format!("FileData.db_delete() -- invalid path: {:?}", filepath))),
+        };
+        let files = glob::glob(&pathstr)?;
         for file in files {
             fs::remove_file(&file?)?;
         }
@@ -85,8 +95,35 @@ impl Keyfinder for FileData {}
 
 impl FileData {
     /// Builds a standard filename
-    fn filebuilder(user_id: &String, note_id: &String) -> String {
-        format!("u_{}.n_{}.enc", user_id, note_id)
+    fn filebuilder(user_id: Option<&String>, note_id: Option<&String>, synced: Option<bool>) -> String {
+        // wildcard, btiches. YEEEEEEEEHAWW!!!
+        let wildcard = String::from("*");
+        let synced = synced.map(|x| if x { "1" } else { "0" })
+            .unwrap_or("*");
+        format!(
+            "u_{}.n_{}.s_{}.enc",
+            user_id.unwrap_or(&wildcard),
+            note_id.unwrap_or(&wildcard),
+            synced,
+        )
+    }
+
+    /// Find the PathBuf for a file, given the pieces that build the filename
+    pub fn file_finder(user_id: Option<&String>, note_id: Option<&String>, synced: Option<bool>) -> TResult<PathBuf> {
+        let data_folder = config::get::<String>(&["data_folder"])?;
+        let mut filepath = PathBuf::from(data_folder);
+        filepath.push(FILEDIR);
+        filepath.push(FileData::filebuilder(user_id, note_id, synced));
+        let pathstr = match filepath.to_str() {
+            Some(x) => x,
+            None => return Err(TError::BadValue(format!("FileData::file_finder() -- invalid path: {:?}", filepath))),
+        };
+        let mut files = glob::glob(pathstr)?;
+        let from = match files.nth(0) {
+            Some(x) => x,
+            None => return Err(TError::NotFound(format!("FileData::file_finder() -- file not found"))),
+        }?;
+        Ok(from)
     }
 
     /// Load a note's file, if we have one.
@@ -100,21 +137,9 @@ impl FileData {
             None => return Err(TError::MissingField(format!("FileData::load_file() -- `note.key` is None when saving file...shame, shame"))),
         };
 
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let mut filepath = PathBuf::from(data_folder);
-        filepath.push(FILEDIR);
-        filepath.push(FileData::filebuilder(&String::from("*"), &note_id));
-        let pathstr = match filepath.to_str() {
-            Some(x) => x,
-            None => return Err(TError::BadValue(format!("FileData::load_file() -- invalid path: {:?}", filepath))),
-        };
-        let mut files = glob::glob(pathstr)?;
-        let filename = match files.nth(0) {
-            Some(x) => x,
-            None => return Err(TError::NotFound(format!("FileData::load_file() -- file for note {} not found", note_id))),
-        };
+        let filename = FileData::file_finder(None, Some(&note_id), None)?;
         let enc = {
-            let mut file = fs::File::open(filename?)?;
+            let mut file = fs::File::open(filename)?;
             let mut enc = Vec::new();
             file.read_to_end(&mut enc)?;
             enc
@@ -127,6 +152,30 @@ impl FileData {
         })?;
 
         Ok(data)
+    }
+
+    /// Change a file's sync status
+    pub fn set_sync_status(note_id: &String, synced: bool) -> TResult<()> {
+        let from = FileData::file_finder(None, Some(&note_id), None)?;
+        let to_str = match from.file_name() {
+            Some(x) => match x.to_str() {
+                Some(y) => y,
+                None => return Err(TError::BadValue(format!("FileData::set_sync_status() -- problem in file's UTF8 encoding: {:?}", from))),
+            },
+            None => return Err(TError::BadValue(format!("FileData::set_sync_status() -- couldn't get filename for path {:?}", from))),
+        };
+
+        lazy_static! {
+            static ref RE_SYNCED: Regex = Regex::new(r#"s_[1|0]"#).unwrap();
+        }
+        let rep = if synced { "s_1" } else { "s_0" };
+        let to_str = RE_SYNCED.replace_all(to_str, rep);
+        let to = from.with_file_name(to_str);
+
+        // nothing to to?
+        if to == from { return Ok(()); }
+        fs::rename(&from, &to)?;
+        Ok(())
     }
 
     /// Encrypt/save this file
@@ -173,7 +222,7 @@ impl FileData {
         let mut filepath = PathBuf::from(data_folder);
         filepath.push(FILEDIR);
         util::create_dir(&filepath)?;
-        filepath.push(FileData::filebuilder(&user_id, &note_id));
+        filepath.push(FileData::filebuilder(Some(&user_id), Some(&note_id), Some(false)));
         let mut fs_file = fs::File::create(&filepath)?;
         fs_file.write_all(enc.as_slice())?;
 
@@ -209,6 +258,7 @@ impl FileData {
 mod tests {
     use super::*;
     use ::jedi;
+    use ::config;
 
     #[test]
     fn filedata_serializes_to_from_base64() {
@@ -257,7 +307,30 @@ mod tests {
         file.save(&turtl, &mut note).unwrap();
         let loaded = FileData::load_file(&turtl, &note).unwrap();
 
+        let note_id = note.id().as_ref().unwrap().clone();
+        // see if the file contents match after decryption
         assert_eq!(String::from_utf8(loaded).unwrap(), r#"{"age":42,"dislikes":"slappy","likes":"slippy","lives":{"city":"santa cruz brahhhh"},"name":"flippy"}"#);
+
+        // now let's test if setting synced status works
+        match FileData::file_finder(None, Some(&note_id), Some(true)) {
+            Err(e) => match e {
+                TError::NotFound(_) => {},
+                _ => panic!("error while grabbing file: {}", e),
+            },
+            _ => panic!("found ready to sync file, should be s_0"),
+        }
+        FileData::set_sync_status(note.id().as_ref().unwrap(), true).unwrap();
+        FileData::file_finder(None, Some(&note_id), Some(true)).unwrap();
+        FileData::set_sync_status(note.id().as_ref().unwrap(), false).unwrap();
+        FileData::file_finder(None, Some(&note_id), Some(false)).unwrap();
+        // now let's test if setting synced status works
+        match FileData::file_finder(None, Some(&note_id), Some(true)) {
+            Err(e) => match e {
+                TError::NotFound(_) => {},
+                _ => panic!("error while grabbing file: {}", e),
+            },
+            _ => panic!("found ready to sync file, should be s_0"),
+        }
 
         let mut db_guard = turtl.db.write().unwrap();
         let db = db_guard.as_mut().unwrap();
