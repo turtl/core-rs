@@ -14,6 +14,8 @@ v0.7:
 - user
   - change password
   - set space.default = true based on settings
+- spaces
+  - remove key from keychain on delete
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection

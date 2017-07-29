@@ -23,10 +23,7 @@
 use ::std::collections::{HashMap};
 use ::std::fmt;
 
-use ::regex::Regex;
 use ::futures::{future, Future};
-use ::encoding::{Encoding, DecoderTrap};
-use ::encoding::all::ISO_8859_1;
 
 use ::jedi::{self, Value, Map as JsonMap};
 
@@ -35,18 +32,6 @@ use ::turtl::Turtl;
 use ::models::model::Model;
 use ::crypto::{self, Key, CryptoOp};
 use ::models::keychain::{KeyRef, Keychain};
-
-/// Detect if a given string is the old v0 format
-pub fn detect_old_format(data: &String) -> TResult<Vec<u8>> {
-    lazy_static! {
-        static ref RE_OLD_FORMAT: Regex = Regex::new(r#":i[0-9a-f]{32}$"#).unwrap();
-    }
-    if RE_OLD_FORMAT.is_match(data) {
-        Ok(Vec::from(data.as_bytes()))
-    } else {
-        Ok(crypto::from_base64(&data)?)
-    }
-}
 
 // -----------------------------------------------------------------------------
 // NOTE: [encrypt|decrypt]_key() do not use async crypto.
@@ -337,7 +322,7 @@ pub trait Protected: Model + fmt::Debug {
                 None => &fakeid,
             };
             let body: Vec<u8> = match self.get_body() {
-                Some(x) => detect_old_format(&x)?,
+                Some(x) => crypto::from_base64(x)?,
                 None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
             };
             let key: &Key = match self.key() {
@@ -348,12 +333,7 @@ pub trait Protected: Model + fmt::Debug {
         };
         let json_str: String = match String::from_utf8(json_bytes) {
             Ok(x) => x,
-            Err(e) => {
-                match ISO_8859_1.decode(e.into_bytes().as_slice(), DecoderTrap::Ignore) {
-                    Ok(x) => x,
-                    Err(_) => return Err(TError::BadValue(format!("Protected::deserialize() -- error decoding UTF8 string"))),
-                }
-            },
+            Err(e) => return Err(TError::BadValue(format!("Protected::deserialize() -- error decoding UTF8 string: {}", e))),
         };
         let parsed: Value = match jedi::parse(&json_str) {
             Ok(x) => x,

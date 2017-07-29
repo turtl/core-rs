@@ -3,10 +3,10 @@ extern crate clouseau;
 extern crate config;
 extern crate crossbeam;
 extern crate dumpy;
-extern crate encoding;
 extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
+extern crate glob;
 extern crate hyper;
 extern crate jedi;
 #[macro_use]
@@ -50,8 +50,6 @@ mod turtl;
 
 use ::std::thread;
 use ::std::sync::Arc;
-use ::std::fs;
-use ::std::io::ErrorKind;
 use ::std::os::raw::c_char;
 use ::std::ffi::CStr;
 use ::std::panic;
@@ -102,25 +100,10 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // load our ocnfiguration
             process_runtime_config(config_str)?;
 
-            // std::fs, for me please, we're lookin at china. we're lookin at
-            // the UN. go ahead and create our data directory.
             let data_folder = config::get::<String>(&["data_folder"])?;
             if data_folder != ":memory:" {
-                match fs::create_dir(&data_folder) {
-                    Ok(()) => {
-                        info!("main::start() -- created data folder: {}", data_folder);
-                    },
-                    Err(e) => {
-                        match e.kind() {
-                            // talked to drew about directory already existing.
-                            // sounds good.
-                            ErrorKind::AlreadyExists => (),
-                            _ => {
-                                return Err(From::from(e));
-                            }
-                        }
-                    }
-                }
+                util::create_dir(&data_folder)?;
+                info!("main::start() -- created data folder: {}", data_folder);
             }
 
             // create our turtl object

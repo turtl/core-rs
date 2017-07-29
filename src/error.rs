@@ -142,6 +142,8 @@ from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
 from_err!(::regex::Error);
 from_err!(::std::sync::mpsc::RecvError);
+from_err!(::glob::PatternError);
+from_err!(::glob::GlobError);
 
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;

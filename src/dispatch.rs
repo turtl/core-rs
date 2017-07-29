@@ -21,6 +21,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
+use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType};
 use ::models::feedback::Feedback;
 use ::sync::sync_model;
@@ -133,14 +134,26 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             sync_model::save_model(action, turtl, &mut model, false)?
                         }
                         SyncType::Note => {
-                            let mut model: Note = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(action, turtl, &mut model, false)?
+                            let mut note: Note = jedi::get(&["4"], &data)?;
+                            // always set to false. this is a public field that
+                            // we let the server manage for us
+                            note.has_file = false;
+                            let filemebbe: Option<FileData> = jedi::get_opt(&["5"], &data);
+                            let note_data = sync_model::save_model(action, turtl, &mut note, false)?;
+                            match filemebbe {
+                                Some(mut file) => {
+                                    file.save(turtl, &mut note)?;
+                                }
+                                None => {}
+                            }
+                            note_data
                         }
                         SyncType::Invite => {
-                            let mut model: Invite = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(action, turtl, &mut model, false)?
-                        }
-                        SyncType::File => {
+                            let model: Invite = jedi::get(&["4"], &data)?;
+                            // invites require a connection and don't go through
+                            // the sync system at all, so we go through the
+                            // model directly instead of sync_model.
+                            drop(model);
                             Value::Null
                         }
                         _ => {
@@ -192,6 +205,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let note_ids = search.find(&qry)?;
             let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
             Ok(jedi::to_val(&notes)?)
+        },
+        "profile:get-file" => {
+            let note_id = jedi::get(&["2"], &data)?;
+            let notes: Vec<Note> = turtl.load_notes(&vec![note_id])?;
+            FileData::load_file(turtl, &notes[0])?;
+            Ok(Value::Null)
         },
         "profile:get-tags" => {
             let space_id: String = jedi::get(&["2"], &data)?;
