@@ -277,7 +277,6 @@ mod tests {
     fn can_save_and_load_files() {
         ::process_runtime_config(String::from("")).unwrap();
         let turtl = ::turtl::tests::with_test(true);
-        config::set(&["data_folder"], &String::from("/tmp")).unwrap();
         let user_id = {
             let user_guard = turtl.user_id.read().unwrap();
             user_guard.as_ref().unwrap().clone()
@@ -302,6 +301,8 @@ mod tests {
 
         let mut file: FileData = Default::default();
         file.data = Some(Vec::from(filedata.as_bytes()));
+
+        config::set(&["data_folder"], &String::from("/tmp")).unwrap();
 
         // talked to drew about encrypting and saving the file. sounds good.
         file.save(&turtl, &mut note).unwrap();

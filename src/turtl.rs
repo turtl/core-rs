@@ -585,7 +585,6 @@ pub mod tests {
 
     use ::std::sync::RwLock;
 
-    use ::config;
     use ::jedi;
 
     use ::crypto::{self, Key};
@@ -612,7 +611,6 @@ pub mod tests {
 
     /// Give us a new Turtl to start running tests on
     pub fn with_test(logged_in: bool) -> Turtl {
-        config::set(&["data_folder"], &String::from(":memory:")).unwrap();
         let turtl = Turtl::new().unwrap();
         if logged_in {
             let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
