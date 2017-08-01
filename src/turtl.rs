@@ -32,6 +32,20 @@ use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
 use ::schema;
 
+pub fn data_folder() -> TResult<String> {
+    let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
+    if cfg!(test) {
+        return Ok(integration);
+    }
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    let final_folder = if data_folder == ":memory:" {
+        integration
+    } else {
+        data_folder
+    };
+    Ok(final_folder)
+}
+
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
 pub struct Turtl {
@@ -107,12 +121,7 @@ impl Turtl {
 
     /// Create/open a new KV store connection
     pub fn open_kv() -> TResult<Storage> {
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let kv_location = if data_folder == ":memory:" {
-            String::from(":memory:")
-        } else {
-            format!("{}/turtl-kv.sqlite", &data_folder)
-        };
+        let kv_location = storage::db_location(&String::from("turtl-kv"))?;
         Ok(Storage::new(&kv_location, jedi::obj())?)
     }
 
@@ -276,19 +285,13 @@ impl Turtl {
             None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
         };
 
-        if cfg!(test) {
-            return Ok(String::from(":memory:"));
+        lazy_static! {
+            static ref RE_API_FORMAT: Regex = Regex::new(r"(?i)[^a-z0-9]").unwrap();
         }
-
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        if data_folder == ":memory:" {
-            return Ok(String::from(":memory:"));
-        }
-
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
-        let re = Regex::new(r"(?i)[^a-z0-9]")?;
-        let server = re.replace_all(&api_endpoint, "");
-        Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, user_id, server))
+        let server = RE_API_FORMAT.replace_all(&api_endpoint, "");
+        let user_db = format!("turtl-user-{}-srv-{}", user_id, server);
+        storage::db_location(&user_db)
     }
 
     /// Given a model that we suspect we have a key entry for, find that model's
@@ -530,7 +533,8 @@ impl Turtl {
 
         let mut kv_guard = self.kv.write().unwrap();
         kv_guard.close()?;
-        let data_folder = config::get::<String>(&["data_folder"])?;
+        let data_folder = data_folder()?;
+        debug!("turtl.wipe_app_data() -- wiping everything in {}", data_folder);
         let paths = fs::read_dir(data_folder)?;
         for entry in paths {
             let entry = entry?;
@@ -555,6 +559,9 @@ impl Turtl {
         self.logout()?;
 
         let db_loc = self.get_user_db_location()?;
+        if db_loc == ":memory:" {
+            return Ok(());
+        }
         info!("turtl.wipe_user_data() -- removing {}", db_loc);
         fs::remove_file(&db_loc)?;
         Ok(())
@@ -580,12 +587,11 @@ impl Drop for Turtl {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
     use ::std::sync::RwLock;
 
-    use ::config;
     use ::jedi;
 
     use ::crypto::{self, Key};
@@ -593,7 +599,7 @@ mod tests {
     use ::models::model::Model;
     use ::models::protected::Protected;
     use ::models::keychain::KeychainEntry;
-    use ::models::user::{self, User};
+    use ::models::user::User;
     use ::models::note::Note;
     use ::models::board::Board;
     use ::models::sync_record::{SyncRecord, SyncAction, SyncType};
@@ -611,15 +617,21 @@ mod tests {
     }
 
     /// Give us a new Turtl to start running tests on
-    fn with_test(logged_in: bool) -> Turtl {
-        config::set(&["data_folder"], &String::from(":memory:")).unwrap();
+    pub fn with_test(logged_in: bool) -> Turtl {
         let turtl = Turtl::new().unwrap();
         if logged_in {
+            let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
+            let mut user: User = jedi::parse(&String::from(r#"{"id":"51","storage":104857600}"#)).unwrap();
+            let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
+            user.do_login(user_key, user_auth);
             let mut user_guard = turtl.user.write().unwrap();
-            let version = 0;
-            let (key, auth) = user::generate_auth(&String::from("timmy@killtheradio.net"), &String::from("gfffft"), version).unwrap();
-            user_guard.id = Some(String::from("0158745252dbaf227c2eb2aca9cd869887e3f394033a7cd25f467f67dcf68a1a6699c3023ba033e1"));
-            user_guard.do_login(key, auth);
+            *user_guard = user;
+            drop(user_guard);
+            let db = turtl.create_user_db().unwrap();
+            let mut db_guard = turtl.db.write().unwrap();
+            *db_guard = Some(db);
+            drop(db_guard);
+            turtl.set_user_id();
         }
         turtl
     }

@@ -1,24 +1,23 @@
 v0.7:
 - syncing:
   - file syncing
-    - store files on FS (not db)
-      - format: "u-<user_id>.n-<note_id>.enc
     - outgoing file uploads
-      - maybe just use sync_outgoing as our queue?
+      - look for s_0
     - incoming file downloads
-      - store files in filesystem (not sqlite)
-      - filenames should be the <note.id>_<note.file.id>.enc
     - remove file .....file on note delete
     - wipe_data should remove file records
   - profile:load -- return user object =]
 - user
   - change password
   - set space.default = true based on settings
+- spaces
+  - remove key from keychain on delete
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
     - app events?
   - make sure to save keychain after adding invite space key
+- bookmarker
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not

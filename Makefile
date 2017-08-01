@@ -12,10 +12,10 @@ build:
 	cargo build
 
 test:
-	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
+	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
 test-st:
-	cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
+	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
 
 doc:
 	cargo doc -p turtl-core --no-deps

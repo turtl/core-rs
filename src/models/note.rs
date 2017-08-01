@@ -20,12 +20,12 @@ protected! {
         #[serde(with = "::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        #[protected_field(public, submodel)]
-        pub file: Option<File>,
         #[serde(default)]
         #[protected_field(public)]
         pub has_file: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[protected_field(public, submodel)]
+        pub file: Option<File>,
         #[serde(rename = "mod", default)]
         #[protected_field(public)]
         pub mod_: i64,

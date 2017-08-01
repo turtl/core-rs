@@ -13,7 +13,7 @@ use ::jedi::Value;
 use ::turtl::Turtl;
 use ::models::sync_record::{SyncAction, SyncRecord};
 
-macro_rules! make_sync_incoming {
+macro_rules! make_sync_fns {
     ($n:ty) => {
         fn incoming(&self, db: &mut ::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
             match sync_item.action {
@@ -51,14 +51,14 @@ macro_rules! make_sync_incoming {
 
             let mut sync_record = ::models::sync_record::SyncRecord::default();
             sync_record.generate_id()?;
-            sync_record.action = action.clone();
+            sync_record.action = action;
             sync_record.user_id = user_id.clone();
             sync_record.ty = ::models::sync_record::SyncType::from_string(self.model_type())?;
             sync_record.item_id = match self.id() {
                 Some(id) => id.clone(),
                 None => return Err(::error::TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
             };
-            match action {
+            match sync_record.action {
                 ::models::sync_record::SyncAction::Delete => {
                     sync_record.data = Some(json!({
                         "id": self.id().unwrap().clone(),
@@ -77,13 +77,13 @@ macro_rules! make_sync_incoming {
 macro_rules! make_basic_sync_model {
     ($n:ty) => {
         impl ::sync::sync_model::SyncModel for $n {
-            make_sync_incoming!{ $n }
+            make_sync_fns!{ $n }
         }
     };
 
     ($n:ty, $( $extra:tt )*) => {
         impl ::sync::sync_model::SyncModel for $n {
-            make_sync_incoming!{ $n }
+            make_sync_fns!{ $n }
 
             $( $extra )*
         }
@@ -199,7 +199,9 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
 
     {
         let user_id = {
+            // no, mr frodo
             let isengard = turtl.user_id.read().unwrap();
+            // go home, sam
             match *isengard {
                 Some(ref id) => id.clone(),
                 None => return Err(TError::MissingField(String::from("sync_model::delete_model() -- turtl.user_id has failed us..."))),

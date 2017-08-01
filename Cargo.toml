@@ -17,10 +17,10 @@ config = { path = "config" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.2.10"
 dumpy = { path = "dumpy" }
-encoding = "0.2.33"
 fern = "0.3.5"
 futures = "0.1.14"
 futures-cpupool = "0.1.5"
+glob = "0.2.11"
 hyper = "0.9.10"
 jedi = { path = "jedi" }
 lazy_static = "0.2.1"
@@ -38,12 +38,4 @@ serde_json = "1.0.2"
 #sodiumoxide = { git = "https://github.com/orthecreedence/sodiumoxide", branch = "aeads" }
 sodiumoxide = { path = "sodiumoxide-aead" }
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
-
-[features]
-#default = ["rusqlite/serde_json"]
-#default = ["openssl/pkcs5_pbkdf2_hmac"]
-
-#[target.'cfg(windows)']
-#rustc-link-search = ["c:/lib","c:/Windows/System32"]
-#rustc-link = ["mswsock"]
 
