@@ -190,16 +190,23 @@ impl FileData {
         Ok(data)
     }
 
+    /// Converts a PathBuf into a string (without the path, just the file
+    /// portion)
+    fn pathbuf_to_string(file: &PathBuf) -> TResult<String> {
+        match file.file_name() {
+            Some(x) => match x.to_str() {
+                Some(y) => Ok(String::from(y)),
+                None => return Err(TError::BadValue(format!("FileData::pathbuf_to_string() -- problem in file's UTF8 encoding: {:?}", file))),
+            },
+            None => return Err(TError::BadValue(format!("FileData::pathbuf_to_string() -- couldn't get filename for path {:?}", file))),
+        }
+    }
+
     /// Change a file's sync status
     pub fn set_sync_status(note_id: &String, synced: FileSyncStatus) -> TResult<()> {
         let from = FileData::file_finder(None, Some(&note_id), None)?;
-        let to_str = match from.file_name() {
-            Some(x) => match x.to_str() {
-                Some(y) => y,
-                None => return Err(TError::BadValue(format!("FileData::set_sync_status() -- problem in file's UTF8 encoding: {:?}", from))),
-            },
-            None => return Err(TError::BadValue(format!("FileData::set_sync_status() -- couldn't get filename for path {:?}", from))),
-        };
+        let to_string = FileData::pathbuf_to_string(&from)?;
+        let to_str = &to_string[..];
 
         lazy_static! {
             static ref RE_SYNCED: Regex = Regex::new(r#"s_[0-9]"#).unwrap();
@@ -213,6 +220,16 @@ impl FileData {
         if to == from { return Ok(()); }
         fs::rename(&from, &to)?;
         Ok(())
+    }
+
+    /// Given a file's filename, return the note id
+    pub fn get_note_id(file: &PathBuf) -> TResult<String> {
+        lazy_static! {
+            static ref RE_NOTE_ID: Regex = Regex::new(r#"^.*?n_(?P<n>[a-f0-9]+)\..*"#).unwrap();
+        }
+        let filestr = FileData::pathbuf_to_string(&file)?;
+        let note_id = RE_NOTE_ID.replace_all(&filestr[..], "$n");
+        Ok(note_id)
     }
 
     /// Encrypt/save this file

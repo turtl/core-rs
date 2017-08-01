@@ -8,7 +8,7 @@ use ::std::mem;
 
 use ::config;
 use ::hyper;
-use ::hyper::method::Method;
+pub use ::hyper::method::Method;
 use ::hyper::client::request::Request;
 use ::hyper::client::response::Response;
 use ::hyper::header::{self, Headers};
