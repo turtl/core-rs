@@ -160,6 +160,10 @@ impl Turtl {
             Some(id) => {
                 let mut isengard = self.user_id.write().unwrap();
                 *isengard = Some(id.clone());
+
+                let mut sync_config_guard = self.sync_config.write().unwrap();
+                sync_config_guard.user_id = Some(id.clone());
+                drop(sync_config_guard);
             }
             None => {}
         }
@@ -169,6 +173,10 @@ impl Turtl {
     fn clear_user_id(&self) {
         let mut isengard = self.user_id.write().unwrap();
         *isengard = None;
+
+        let mut sync_config_guard = self.sync_config.write().unwrap();
+        sync_config_guard.user_id = None;
+        drop(sync_config_guard);
     }
 
     /// Log a user in

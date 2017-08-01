@@ -4,10 +4,13 @@
 use ::std::sync::RwLock;
 use ::std::io::Read;
 use ::std::time::Duration;
+use ::std::mem;
 
 use ::config;
 use ::hyper;
 use ::hyper::method::Method;
+use ::hyper::client::request::Request;
+use ::hyper::client::response::Response;
 use ::hyper::header::{self, Headers};
 pub use ::hyper::status::StatusCode as Status;
 use ::jedi::{self, Value, DeserializeOwned};
@@ -67,6 +70,22 @@ impl ApiReq {
     }
 }
 
+/// Used to store some info we want when we send a response to call_end()
+pub struct CallInfo {
+    method: Method,
+    resource: String,
+}
+
+impl CallInfo {
+    /// Create a new call info object
+    fn new(method: Method, resource: String) -> Self {
+        Self {
+            method: method,
+            resource: resource,
+        }
+    }
+}
+
 /// Our Api object. Responsible for making outbound calls to our Turtl server.
 pub struct Api {
     config: RwLock<ApiConfig>,
@@ -95,19 +114,8 @@ impl Api {
         config_guard.auth = None;
     }
 
-    /// Send out an API request
-    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<T> {
-        info!("api::call() -- req: {} {}", method, resource);
-        let ApiReq {mut headers, timeout, data} = builder;
-        let endpoint = config::get::<String>(&["api", "endpoint"])?;
-        let mut url = String::with_capacity(endpoint.len() + resource.len());
-        url.push_str(&endpoint[..]);
-        url.push_str(resource);
-        let resource = String::from(resource);
-        let method2 = method.clone();
-
-        let mut client = hyper::Client::new();
-        let body = jedi::stringify(&data)?;
+    /// Set our standard auth header into a Headers set
+    fn set_standard_headers(&self, headers: &mut Headers) {
         let auth = {
             let ref guard = self.config.read().unwrap();
             guard.auth.clone()
@@ -119,12 +127,64 @@ impl Api {
         if headers.get_raw("Content-Type").is_none() {
             headers.set(header::ContentType::json());
         }
+    }
+
+    /// Build a full URL given a resource
+    fn build_url(&self, resource: &str) -> TResult<String> {
+        let endpoint = config::get::<String>(&["api", "endpoint"])?;
+        let mut url = String::with_capacity(endpoint.len() + resource.len());
+        url.push_str(&endpoint[..]);
+        url.push_str(resource);
+        Ok(url)
+    }
+
+    /// Start an API request. call_start()/call_end() can be used to stream a
+    /// large HTTP body
+    pub fn call_start(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<(Request<hyper::net::Streaming>, CallInfo)> {
+        info!("api::call_start() -- req: {} {}", method, resource);
+        let ApiReq {mut headers, timeout, data: _data} = builder;
+        let url = self.build_url(resource)?;
+        let resource = String::from(resource);
+        let method2 = method.clone();
+        self.set_standard_headers(&mut headers);
+        let mut request = Request::new(method, hyper::Url::parse(&url[..])?)?;
+        request.set_read_timeout(Some(timeout));
+        {
+            // ridiculous. there has to be a better way??
+            let mut reqheaders = request.headers_mut();
+            for header in headers.iter() {
+                let name_string = String::from(header.name());
+                reqheaders.set_raw(name_string, vec![Vec::from(header.value_string().as_bytes())]);
+            }
+        }
+        Ok((request.start()?, CallInfo::new(method2, resource)))
+    }
+
+    /// Send out an API request
+    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, mut builder: ApiReq) -> TResult<T> {
+        info!("api::call() -- req: {} {}", method, resource);
+        let ApiReq {mut headers, timeout, data} = builder;
+        let endpoint = config::get::<String>(&["api", "endpoint"])?;
+        let url = self.build_url(resource)?;
+        let resource = String::from(resource);
+        let method2 = method.clone();
+
+        let mut client = hyper::Client::new();
+        let body = jedi::stringify(&data)?;
+        self.set_standard_headers(&mut headers);
         client.set_read_timeout(Some(timeout));
-        client
+        let res = client
             .request(method, &url[..])
             .body(&body)
             .headers(headers)
-            .send()
+            .send();
+        self.call_end(res, CallInfo::new(method2, resource))
+    }
+
+    /// Finish an API request (takes a response result given back by
+    /// Request.send())
+    pub fn call_end<T: DeserializeOwned>(&self, response: Result<Response, hyper::error::Error>, callinfo: CallInfo) -> TResult<T> {
+        response
             .map_err(|e| {
                 match e {
                     hyper::Error::Io(err) => TError::Io(err),
@@ -146,11 +206,11 @@ impl Api {
                     };
                     return Err(TError::Api(res.status, errstr));
                 }
-                str_res
+                str_res.map(move |x| (x, res))
             })
-            .map(|out| {
-                info!("api::call() -- response({}): {} {}", out.len(), method2, resource);
-                trace!("api::call() -- body: {} {} -- {}", method2, resource, out);
+            .map(|(out, res)| {
+                info!("api::call() -- response({}): {:?} {} {}", out.len(), res.status_raw(), &callinfo.method, &callinfo.resource);
+                trace!("  api::call() -- body: {}", out);
                 out
             })
             .and_then(|out| jedi::parse(&out).map_err(|e| toterr!(e)))

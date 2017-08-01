@@ -140,6 +140,7 @@ from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::hyper::Error);
+from_err!(::hyper::error::ParseError);
 from_err!(::regex::Error);
 from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);

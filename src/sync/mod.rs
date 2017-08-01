@@ -31,7 +31,7 @@ use ::sync::incoming::SyncIncoming;
 use ::sync::files::outgoing::FileSyncOutgoing;
 use ::sync::files::incoming::FileSyncIncoming;
 use ::util;
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::storage::Storage;
 use ::api::Api;
 use ::messaging;
@@ -52,7 +52,7 @@ pub struct SyncConfig {
     /// Whether or not to run syncing
     pub enabled: bool,
     /// The current logged in user_id
-    pub user_id: String,
+    pub user_id: Option<String>,
     /// Whether or not to skip calling out to the API on init (useful for
     /// testing)
     pub skip_api_init: bool,
@@ -64,7 +64,7 @@ impl SyncConfig {
         SyncConfig {
             quit: false,
             enabled: false,
-            user_id: String::from(""),
+            user_id: None,
             skip_api_init: false,
         }
     }
@@ -130,7 +130,11 @@ pub trait Syncer {
         let local_config = self.get_config();
         let guard = local_config.read().unwrap();
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
-        Ok(format!("{}:{}", guard.user_id, api_endpoint))
+        let user_id = match guard.user_id.as_ref() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("Syncer.sync_key() -- sync config `user_id` is None"))),
+        };
+        Ok(format!("{}:{}", user_id, api_endpoint))
     }
 
     /// Runs our syncer, with some quick checks on run status.
