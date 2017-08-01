@@ -17,8 +17,20 @@ use ::std::path::PathBuf;
 use ::glob;
 use ::regex::Regex;
 
-/// Stores the name of our file directory under the data folder
-const FILEDIR: &'static str = "files";
+/// Return the location where we store files
+pub fn file_folder() -> TResult<String> {
+    let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
+    if cfg!(test) {
+        return Ok(integration);
+    }
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    let file_folder = if data_folder == ":memory:" {
+        integration
+    } else {
+        format!("{}/files", data_folder)
+    };
+    Ok(file_folder)
+}
 
 protected! {
     /// Defines the object we find inside of Note.File (a description of the
@@ -75,9 +87,7 @@ make_basic_sync_model!{ FileData,
         // we could use FileData::file_finder here, but we actually do want to
         // find ALL files with this note ID and remove them. just a paranoid
         // precaution.
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let mut filepath = PathBuf::from(data_folder);
-        filepath.push(FILEDIR);
+        let mut filepath = PathBuf::from(file_folder()?);
         filepath.push(FileData::filebuilder(None, Some(&id), None));
         let pathstr = match filepath.to_str() {
             Some(x) => x,
@@ -110,9 +120,7 @@ impl FileData {
 
     /// Find the PathBuf for a file, given the pieces that build the filename
     pub fn file_finder(user_id: Option<&String>, note_id: Option<&String>, synced: Option<bool>) -> TResult<PathBuf> {
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let mut filepath = PathBuf::from(data_folder);
-        filepath.push(FILEDIR);
+        let mut filepath = PathBuf::from(file_folder()?);
         filepath.push(FileData::filebuilder(user_id, note_id, synced));
         let pathstr = match filepath.to_str() {
             Some(x) => x,
@@ -218,9 +226,7 @@ impl FileData {
         })?;
 
         // now, save the encrypted file data to disk
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let mut filepath = PathBuf::from(data_folder);
-        filepath.push(FILEDIR);
+        let mut filepath = PathBuf::from(file_folder()?);
         util::create_dir(&filepath)?;
         filepath.push(FileData::filebuilder(Some(&user_id), Some(&note_id), Some(false)));
         let mut fs_file = fs::File::create(&filepath)?;
@@ -258,7 +264,6 @@ impl FileData {
 mod tests {
     use super::*;
     use ::jedi;
-    use ::config;
 
     #[test]
     fn filedata_serializes_to_from_base64() {
@@ -275,7 +280,6 @@ mod tests {
 
     #[test]
     fn can_save_and_load_files() {
-        ::process_runtime_config(String::from("")).unwrap();
         let turtl = ::turtl::tests::with_test(true);
         let user_id = {
             let user_guard = turtl.user_id.read().unwrap();
@@ -301,8 +305,6 @@ mod tests {
 
         let mut file: FileData = Default::default();
         file.data = Some(Vec::from(filedata.as_bytes()));
-
-        config::set(&["data_folder"], &String::from("/tmp")).unwrap();
 
         // talked to drew about encrypting and saving the file. sounds good.
         file.save(&turtl, &mut note).unwrap();

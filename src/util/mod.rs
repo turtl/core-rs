@@ -20,7 +20,7 @@ pub fn sleep(millis: u64) {
 pub fn create_dir<P: AsRef<Path>>(dir: P) -> TResult<()> {
     // std::fs, for me please, we're lookin at china. we're lookin at the UN. go
     // ahead and create our directory.
-    match fs::create_dir(dir) {
+    match fs::create_dir_all(dir) {
         Ok(_) => {
             Ok(())
         },

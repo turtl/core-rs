@@ -150,8 +150,8 @@ mod tests {
     #[test]
     fn join_delete_account() {
         let handle = init();
-        let username: String = config::get(&["client", "test", "username"]).unwrap();
-        let password: String = config::get(&["client", "test", "password"]).unwrap();
+        let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
+        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
         let msg = format!(r#"["69","app:wipe-app-data"]"#);
         send(msg.as_str());
@@ -209,8 +209,8 @@ mod tests {
     #[test]
     fn login_sync_load_logout() {
         let handle = init();
-        let username: String = config::get(&["client", "test", "username"]).unwrap();
-        let password: String = config::get(&["client", "test", "password"]).unwrap();
+        let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
+        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
         let msg = format!(r#"["69","app:wipe-app-data"]"#);
         send(msg.as_str());

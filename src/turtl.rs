@@ -107,12 +107,7 @@ impl Turtl {
 
     /// Create/open a new KV store connection
     pub fn open_kv() -> TResult<Storage> {
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        let kv_location = if data_folder == ":memory:" {
-            String::from(":memory:")
-        } else {
-            format!("{}/turtl-kv.sqlite", &data_folder)
-        };
+        let kv_location = storage::db_location(&String::from("turtl-kv"))?;
         Ok(Storage::new(&kv_location, jedi::obj())?)
     }
 
@@ -276,19 +271,13 @@ impl Turtl {
             None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
         };
 
-        if cfg!(test) {
-            return Ok(String::from(":memory:"));
+        lazy_static! {
+            static ref RE_API_FORMAT: Regex = Regex::new(r"(?i)[^a-z0-9]").unwrap();
         }
-
-        let data_folder = config::get::<String>(&["data_folder"])?;
-        if data_folder == ":memory:" {
-            return Ok(String::from(":memory:"));
-        }
-
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
-        let re = Regex::new(r"(?i)[^a-z0-9]")?;
-        let server = re.replace_all(&api_endpoint, "");
-        Ok(format!("{}/turtl-user-{}-srv-{}.sqlite", data_folder, user_id, server))
+        let server = RE_API_FORMAT.replace_all(&api_endpoint, "");
+        let user_db = format!("turtl-user-{}-srv-{}", user_id, server);
+        storage::db_location(&user_db)
     }
 
     /// Given a model that we suspect we have a key entry for, find that model's

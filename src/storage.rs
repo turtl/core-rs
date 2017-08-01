@@ -8,6 +8,7 @@ use ::crypto;
 use ::rusqlite::{self, Connection};
 use ::jedi::{self, Value};
 use ::dumpy::Dumpy;
+use ::config;
 
 use ::models::model::{self};
 use ::models::protected::Protected;
@@ -15,7 +16,19 @@ use ::models::storable::Storable;
 
 use ::error::{TResult, TError};
 
-/// Make ModelDataRef a ToSql type
+/// Given a db filename, return the foll path we'll use for the db file
+pub fn db_location(db_name: &String) -> TResult<String> {
+    if cfg!(test) {
+        return Ok(String::from(":memory:"))
+    }
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    let db_location = if data_folder == ":memory:" {
+        String::from(":memory:")
+    } else {
+        format!("{}/{}.sqlite", data_folder, db_name)
+    };
+    Ok(db_location)
+}
 
 /// Make sure we have a client ID, and sync it with the model system
 pub fn setup_client_id(storage: Arc<RwLock<Storage>>) -> TResult<()> {

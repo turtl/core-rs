@@ -39,11 +39,3 @@ serde_json = "1.0.2"
 sodiumoxide = { path = "sodiumoxide-aead" }
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
-[features]
-#default = ["rusqlite/serde_json"]
-#default = ["openssl/pkcs5_pbkdf2_hmac"]
-
-#[target.'cfg(windows)']
-#rustc-link-search = ["c:/lib","c:/Windows/System32"]
-#rustc-link = ["mswsock"]
-
