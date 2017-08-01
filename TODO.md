@@ -2,10 +2,8 @@ v0.7:
 - syncing:
   - file syncing
     - outgoing file uploads
-      - maybe just use sync_outgoing as our queue?
+      - look for s_0
     - incoming file downloads
-      - store files in filesystem (not sqlite)
-      - filenames should be the <note.id>_<note.file.id>.enc
     - remove file .....file on note delete
     - wipe_data should remove file records
   - profile:load -- return user object =]
