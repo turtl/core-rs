@@ -3,11 +3,15 @@ use ::fern;
 use ::log;
 use ::time;
 use ::error::TResult;
+use ::std::env;
 
 /// a simple wrapper (pretty much direct from documentation) that sets up
 /// logging to STDOUT via fern/log
 pub fn setup_logger() -> TResult<()> {
-    let levelstr: String = config::get(&["loglevel"])?;
+    let levelstr: String = match env::var("TURTL_LOGLEVEL") {
+        Ok(x) => x,
+        Err(_) => config::get(&["loglevel"])?
+    };
     let level = match levelstr.to_lowercase().as_ref() {
         "off" => log::LogLevelFilter::Off,
         "error" => log::LogLevelFilter::Error,
