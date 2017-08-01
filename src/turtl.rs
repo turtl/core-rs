@@ -32,6 +32,20 @@ use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
 use ::schema;
 
+pub fn data_folder() -> TResult<String> {
+    let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
+    if cfg!(test) {
+        return Ok(integration);
+    }
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    let final_folder = if data_folder == ":memory:" {
+        integration
+    } else {
+        data_folder
+    };
+    Ok(final_folder)
+}
+
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
 pub struct Turtl {
@@ -519,7 +533,8 @@ impl Turtl {
 
         let mut kv_guard = self.kv.write().unwrap();
         kv_guard.close()?;
-        let data_folder = config::get::<String>(&["data_folder"])?;
+        let data_folder = data_folder()?;
+        debug!("turtl.wipe_app_data() -- wiping everything in {}", data_folder);
         let paths = fs::read_dir(data_folder)?;
         for entry in paths {
             let entry = entry?;
@@ -544,6 +559,9 @@ impl Turtl {
         self.logout()?;
 
         let db_loc = self.get_user_db_location()?;
+        if db_loc == ":memory:" {
+            return Ok(());
+        }
         info!("turtl.wipe_user_data() -- removing {}", db_loc);
         fs::remove_file(&db_loc)?;
         Ok(())
