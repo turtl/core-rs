@@ -26,8 +26,9 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::models::note::Note;
+use ::models::file::FileData;
 use ::util::thredder::Thredder;
-use ::messaging::{Messenger, Response};
+use ::messaging::{self, Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
 use ::schema;
@@ -235,9 +236,9 @@ impl Turtl {
         }
 
         self.load_profile()?;
-        Messenger::event("profile:loaded", jedi::obj())?;
+        messaging::ui_event("profile:loaded", &jedi::obj())?;
         self.index_notes()?;
-        Messenger::event("profile:indexed", jedi::obj())?;
+        messaging::ui_event("profile:indexed", &jedi::obj())?;
         Ok(())
     }
 
@@ -563,15 +564,28 @@ impl Turtl {
 
     /// Wipe any local database(s) for the current user (and log them out)
     pub fn wipe_user_data(&self) -> TResult<()> {
+        let user_id = {
+            let isengard = self.user_id.read().unwrap();
+            match isengard.as_ref() {
+                Some(x) => x.clone(),
+                None => return Err(TError::MissingField(String::from("turtl.wipe_user_data() -- missing `turtl.user_id`...shucks"))),
+            }
+        };
         self.sync_shutdown(true)?;
-        self.logout()?;
 
         let db_loc = self.get_user_db_location()?;
-        if db_loc == ":memory:" {
-            return Ok(());
+        if db_loc != ":memory:" {
+            info!("turtl.wipe_user_data() -- removing {}", db_loc);
+            fs::remove_file(&db_loc)?;
         }
-        info!("turtl.wipe_user_data() -- removing {}", db_loc);
-        fs::remove_file(&db_loc)?;
+
+        let files = FileData::file_finder_all(Some(&user_id), None)?;
+        for file in files {
+            fs::remove_file(&file)?;
+        }
+
+        self.logout()?;
+
         Ok(())
     }
 

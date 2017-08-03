@@ -16,6 +16,7 @@ use ::config;
 use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
+use ::models::model::Model;
 use ::models::user::User;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -104,8 +105,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::obj())
         },
         "profile:load" => {
+            let user_guard = turtl.user.read().unwrap();
             let profile_guard = turtl.profile.read().unwrap();
             let profile_data = json!({
+                "user": &user_guard.as_ref(),
                 "spaces": &profile_guard.spaces,
                 "boards": &profile_guard.boards,
             });

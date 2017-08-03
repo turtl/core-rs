@@ -43,7 +43,7 @@ impl Syncer for FileSyncIncoming {
         1000
     }
 
-    fn run_sync(&self) -> TResult<()> {
+    fn run_sync(&mut self) -> TResult<()> {
         Ok(())
     }
 }

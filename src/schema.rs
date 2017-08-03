@@ -16,6 +16,11 @@ pub fn get_schema() -> Value {
                 {"fields": ["user_id"]}
             ]
         },
+        "file_sync": {
+            "indexes": [
+                {"fields": ["type"]}
+            ]
+        },
         "invites": {},
         "keychain": {
             "indexes": [

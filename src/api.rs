@@ -4,7 +4,6 @@
 use ::std::sync::RwLock;
 use ::std::io::Read;
 use ::std::time::Duration;
-use ::std::mem;
 
 use ::config;
 use ::hyper;
@@ -148,7 +147,7 @@ impl Api {
         let method2 = method.clone();
         self.set_standard_headers(&mut headers);
         let mut request = Request::new(method, hyper::Url::parse(&url[..])?)?;
-        request.set_read_timeout(Some(timeout));
+        request.set_read_timeout(Some(timeout))?;
         {
             // ridiculous. there has to be a better way??
             let mut reqheaders = request.headers_mut();
@@ -161,10 +160,9 @@ impl Api {
     }
 
     /// Send out an API request
-    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, mut builder: ApiReq) -> TResult<T> {
+    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<T> {
         info!("api::call() -- req: {} {}", method, resource);
         let ApiReq {mut headers, timeout, data} = builder;
-        let endpoint = config::get::<String>(&["api", "endpoint"])?;
         let url = self.build_url(resource)?;
         let resource = String::from(resource);
         let method2 = method.clone();

@@ -4,15 +4,6 @@ include!("./_lib.rs");
 mod tests {
     use super::*;
 
-    use ::std::thread;
-    use ::carrier;
-
-    fn end(handle: thread::JoinHandle<()>) {
-        send(r#"["4269","app:shutdown"]"#);
-        handle.join().unwrap();
-        carrier::wipe();
-    }
-
     #[test]
     fn set_api_endpoint() {
         let handle = init();

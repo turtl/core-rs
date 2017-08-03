@@ -21,7 +21,6 @@ mod tests {
     #[test]
     fn join_delete_account() {
         let handle = init();
-        let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
         let msg = format!(r#"["69","app:wipe-app-data"]"#);
@@ -57,7 +56,7 @@ mod tests {
         let profile_json = recv("30");
         sleep(10);
 
-        let msg = format!(r#"["3","user:delete-account","{}","{}"]"#, username, password);
+        let msg = format!(r#"["3","user:delete-account"]"#);
         send(msg.as_str());
         let msg = recv("3");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);

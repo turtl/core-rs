@@ -8,8 +8,10 @@ api:
   endpoint: "https://api.turtlapp.com/v2"
 
 sync:
-  enable_incoming: false
-  enable_outgoing: false
+  enable_incoming: true
+  enable_outgoing: true
+  enable_files_incoming: true
+  enable_files_outgoing: true
 
 # configuration integration tests
 integration_tests:

@@ -30,6 +30,12 @@ pub fn init() -> thread::JoinHandle<()> {
     })
 }
 
+pub fn end(handle: thread::JoinHandle<()>) {
+    send(r#"["4269","app:shutdown"]"#);
+    handle.join().unwrap();
+    carrier::wipe();
+}
+
 pub fn send(msg: &str) {
     let channel: String = config::get(&["messaging", "reqres"]).unwrap();
     carrier::send_string(&format!("{}-core-in", channel), String::from(&msg[..])).unwrap();

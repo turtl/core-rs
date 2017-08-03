@@ -26,9 +26,10 @@ protected! {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public, submodel)]
         pub file: Option<File>,
-        #[serde(rename = "mod", default)]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "mod")]
         #[protected_field(public)]
-        pub mod_: i64,
+        pub mod_: Option<i64>,
 
         #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]

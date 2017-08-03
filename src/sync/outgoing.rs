@@ -9,7 +9,9 @@ use ::api::{Api, ApiReq};
 use ::messaging;
 use ::models::model::Model;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
+use ::models::file_sync::{FileSyncType, FileSync};
 use ::turtl::Turtl;
+use ::sync::sync_model::SyncModel;
 
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
@@ -167,7 +169,7 @@ impl Syncer for SyncOutgoing {
         1000
     }
 
-    fn run_sync(&self) -> TResult<()> {
+    fn run_sync(&mut self) -> TResult<()> {
         let sync = self.get_outgoing_syncs()?;
         if sync.len() == 0 { return Ok(()); }
 
@@ -187,7 +189,8 @@ impl Syncer for SyncOutgoing {
         // records from our local db
         if syncs.len() > 0 {
             info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
-            let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(jedi::to_val(&syncs)?))?;
+            let syncs_json = jedi::to_val(&syncs)?;
+            let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(syncs_json))?;
             info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
 
             // clear out the successful syncs
@@ -214,7 +217,18 @@ impl Syncer for SyncOutgoing {
         }
 
         if file_syncs.len() > 0 {
-            // TODO: queue file outgoing sync and remove sync_outgoing recs
+            for file_sync in file_syncs {
+                let mut fsync: FileSync = Default::default();
+                let note_id = &file_sync.item_id;
+                fsync.id = Some(note_id.clone());
+                fsync.ty = FileSyncType::Outgoing;
+                with_db!{ db, self.db, "SyncOutgoing.run_sync()",
+                    info!("SyncOutgoing.run_sync() -- processing outgoing file sync for note {}", file_sync.item_id);
+                    // move the record from sync_outgoing to file_sync
+                    fsync.db_save(db)?;
+                    file_sync.db_delete(db)?;
+                }
+            }
         }
 
         Ok(())

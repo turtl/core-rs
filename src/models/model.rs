@@ -126,6 +126,12 @@ pub trait Model: Emitter + Serialize + DeserializeOwned + Default {
         self.id().is_none()
     }
 
+    /// Return a reference to this model. Useful in cases where the model is
+    /// wrapped in a container (RwLock, et al) and you need a ref to it.
+    fn as_ref<'a>(&self) -> &Self {
+        self
+    }
+
     /// Return a mutable reference to this model. Useful in cases where the
     /// model is wrapped in a container (RwLock, et al) and you need a ref to
     /// it.

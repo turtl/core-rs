@@ -90,7 +90,7 @@ pub trait Syncer {
     ///
     /// Essentially, this is the meat of the syncer. This is the entry point for
     /// the custom work this syncer does.
-    fn run_sync(&self) -> TResult<()>;
+    fn run_sync(&mut self) -> TResult<()>;
 
     /// Run any initialization this Syncer needs.
     fn init(&self) -> TResult<()> {
@@ -111,14 +111,16 @@ pub trait Syncer {
 
     /// Check to see if we're enabled
     fn is_enabled(&self) -> bool {
-        let config_enabled_res = if self.get_name() == "outgoing" {
-            config::get(&["sync", "enable_outgoing"])
-        } else {
-            config::get(&["sync", "enable_incoming"])
+        let config_enabled_key = match self.get_name().as_ref() {
+            "outgoing" => "enable_outgoing",
+            "incoming" => "enable_incoming",
+            "files:outgoing" => "enable_files_outgoing",
+            "files:incoming" => "enable_files_incoming",
+            _ => "<unknown>",
         };
-        let config_enabled: bool = match config_enabled_res {
+        let config_enabled: bool = match config::get(&["sync", config_enabled_key]) {
             Ok(x) => x,
-            Err(_) => true,
+            Err(_) => false,
         };
         let local_config = self.get_config();
         let guard = local_config.read().unwrap();
@@ -138,7 +140,7 @@ pub trait Syncer {
     }
 
     /// Runs our syncer, with some quick checks on run status.
-    fn runner(&self, init_tx: mpsc::Sender<TResult<()>>) {
+    fn runner(&mut self, init_tx: mpsc::Sender<TResult<()>>) {
         info!("sync::runner() -- {} init", self.get_name());
         let init_res = self.init();
         macro_rules! send_or_return {
@@ -216,7 +218,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
                 let config_c = config.clone();
                 let api_c = api.clone();
                 let db_c = db.clone();
-                let sync = $synctype(config_c, api_c, db_c);
+                let mut sync = $synctype(config_c, api_c, db_c);
                 let handle = thread::Builder::new().name(format!("sync:{}", sync.get_name())).spawn(move || {
                     sync.runner(tx);
                     info!("sync::start() -- {} shut down", sync.get_name());

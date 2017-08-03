@@ -15,6 +15,7 @@ pub mod space;
 pub mod board;
 pub mod note;
 pub mod file;
+pub mod file_sync;
 pub mod invite;
 pub mod feedback;
 

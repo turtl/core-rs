@@ -198,7 +198,7 @@ impl Syncer for SyncIncoming {
         res
     }
 
-    fn run_sync(&self) -> TResult<()> {
+    fn run_sync(&mut self) -> TResult<()> {
         let sync_id = with_db!{ db, self.db, "SyncIncoming.run_sync()",
             db.kv_get("sync_id")?
         };

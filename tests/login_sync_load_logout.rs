@@ -8,15 +8,7 @@ use jedi::Value;
 mod tests {
     use super::*;
 
-    use ::std::thread;
-    use ::carrier;
     use ::config;
-
-    fn end(handle: thread::JoinHandle<()>) {
-        send(r#"["4269","app:shutdown"]"#);
-        handle.join().unwrap();
-        carrier::wipe();
-    }
 
     #[test]
     fn login_sync_load_logout() {
@@ -55,9 +47,11 @@ mod tests {
         let msg = recv("30");
         let val: Value = jedi::parse(&msg).unwrap();
         let data: Value = jedi::get(&["d"], &val).unwrap();
+        let user_id: String = jedi::get(&["user", "id"], &data).unwrap();
         let spaces: Vec<Value> = jedi::get(&["spaces"], &data).unwrap();
         let boards: Vec<Value> = jedi::get(&["boards"], &data).unwrap();
         let ptitle: String = jedi::get(&["spaces", "0", "title"], &data).unwrap();
+        assert!(user_id.len() > 0);
         assert_eq!(spaces.len(), 3);
         assert_eq!(boards.len(), 3);
         assert_eq!(ptitle, "Personal");

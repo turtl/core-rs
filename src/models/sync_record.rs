@@ -52,6 +52,7 @@ impl Default for SyncType {
 /// A helpful struct for dealing with sync errors
 #[derive(Serialize, Deserialize)]
 pub struct SyncError {
+    #[serde(with = "::util::ser::int_converter")]
     pub code: String,
     pub msg: String,
 }
