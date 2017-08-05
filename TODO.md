@@ -1,8 +1,6 @@
 v0.7:
 - syncing:
   - file syncing
-    - outgoing file uploads
-      - look for s_0
     - incoming file downloads
     - remove file .....file on note delete
     - wipe_data should remove file records

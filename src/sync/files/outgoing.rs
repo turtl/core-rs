@@ -24,9 +24,6 @@ pub struct FileSyncOutgoing {
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling for file records that need uploading.
     db: Arc<RwLock<Option<Storage>>>,
-
-    /// Stores (in-mem) state of what files are being uploaded.
-    processing: HashMap<String, bool>,
 }
 
 impl FileSyncOutgoing {
@@ -36,11 +33,12 @@ impl FileSyncOutgoing {
             config: config,
             api: api,
             db: db,
-            processing: HashMap::new(),
         }
     }
 
-    /// Returns a list of note_ids for notes that have pending file uploads
+    /// Returns a list of note_ids for notes that have pending file uploads.
+    /// This uses the `file_sync` table, which basically just holds type/note_id
+    /// and acts as a sort of "queue" for file operations.
     fn get_outgoing_files(&self) -> TResult<Vec<String>> {
         let recs: Vec<FileSync> = with_db!{ db, self.db, "FileSyncOutgoing.get_outgoing_files()",
             db.find("file_sync", "type", &vec![jedi::parse::<String>(&jedi::stringify(&FileSyncType::Outgoing)?)?])?
@@ -67,7 +65,7 @@ impl FileSyncOutgoing {
         Ok(())
     }
 
-    /// Returns a list of files that are wating to be synced to the servers
+    /// Returns a list of files that are waiting to be synced to the servers
     fn get_unsynced_files(&self) -> TResult<Vec<PathBuf>> {
         let local_config = self.get_config();
         let guard = local_config.read().unwrap();
@@ -76,11 +74,9 @@ impl FileSyncOutgoing {
             None => return Err(TError::MissingField(String::from("FileSyncOutgoing.get_unsynced_files() -- sync config `user_id` is None"))),
         };
 
+        // grab the note ids for notes that have queued file uploads.
         let note_ids = self.get_outgoing_files()?;
-        let note_ids = note_ids.into_iter()
-            .filter(|x| !self.processing.contains_key(x))
-            .collect::<Vec<String>>();
-
+        // for each note id, grab the associated outgoing file
         let mut files: Vec<PathBuf> = Vec::with_capacity(note_ids.len());
         for note_id in note_ids {
             let file = match FileData::file_finder(Some(user_id), Some(&note_id)) {
@@ -97,26 +93,38 @@ impl FileSyncOutgoing {
 
     /// Stream a local file up to our heroic API
     fn upload_file(&mut self, file: PathBuf) -> TResult<()> {
-        let note_id: String = FileData::get_note_id(&file)?;
-        self.processing.insert(note_id.clone(), true);
-        let url = format!("/notes/{}/attachment", note_id);
-        let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream"));
-        let (mut stream, info) = self.api.call_start(api::Method::Put, &url[..], req)?;
-        let mut file = fs::File::open(&file)?;
-        let mut buf = [0; 4096];
-        loop {
-            let read = file.read(&mut buf[..])?;
-            if read <= 0 { break; }
-            let (read_bytes, _) = buf.split_at(read);
-            let written = stream.write(read_bytes)?;
-            if read != written {
-                return Err(TError::Msg(format!("FileSyncOutgoing.upload_file() -- problem uploading file: grabbed {} bytes, only sent {}", read, written)));
+        let upload = |self, file| -> TResult<()> {
+            let note_id: String = FileData::get_note_id(&file)?;
+
+            // start our API call to the note file attachment endpoint
+            let url = format!("/notes/{}/attachment", note_id);
+            let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream"));
+            // get an API stream we can start piping file data into
+            let (mut stream, info) = self.api.call_start(api::Method::Put, &url[..], req)?;
+            // open our local, unsynced file and start moving it 4K at a time into
+            // the API upload stream
+            let mut file = fs::File::open(&file)?;
+            let mut buf = [0; 4096];
+            loop {
+                let read = file.read(&mut buf[..])?;
+                if read <= 0 { break; }
+                let (read_bytes, _) = buf.split_at(read);
+                let written = stream.write(read_bytes)?;
+                if read != written {
+                    return Err(TError::Msg(format!("FileSyncOutgoing.upload_file() -- problem uploading file: grabbed {} bytes, only sent {} wtf wtf lol", read, written)));
+                }
             }
-        }
-        stream.flush()?;
-        self.api.call_end::<Value>(stream.send(), info)?;
+            // write all our output and finalize the API call
+            stream.flush()?;
+
+            self.api.call_end::<Value>(stream.send(), info)?;
+        };
+
+        // if we're still here, the upload succeeded. remove the `file_sync`
+        // record that tells us we should be uploading this file
         self.delete_file_sync_record(&note_id)?;
-        self.processing.remove(&note_id);
+        // let the UI know how great we are. you will love this app. tremendous
+        // app.
         messaging::ui_event("sync:file:uploaded", &json!({"note_id": note_id}))?;
         Ok(())
     }
