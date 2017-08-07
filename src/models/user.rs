@@ -1,5 +1,5 @@
 use ::std::collections::HashMap;
-use ::jedi::{self, Value, Serialize, DeserializeOwned};
+use ::jedi::{self, Value, Serialize};
 
 use ::error::{TResult, TError};
 use ::crypto::{self, Key};
