@@ -16,6 +16,7 @@ use ::config;
 use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::util::event::{self, Emitter};
+use ::util::thredder::Thredder;
 use ::storage::{self, Storage};
 use ::api::Api;
 use ::profile::Profile;
@@ -27,7 +28,6 @@ use ::models::board::Board;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::models::note::Note;
 use ::models::file::FileData;
-use ::util::thredder::Thredder;
 use ::messaging::{self, Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
@@ -215,6 +215,15 @@ impl Turtl {
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = None;
+        Ok(())
+    }
+
+    /// Change the current user's username/password
+    pub fn change_user_password(&self, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
+        let mut user_guard = self.user.write().unwrap();
+        user_guard.change_password(self, current_username, current_password, new_username, new_password)?;
+        drop(user_guard);
+        self.logout()?;
         Ok(())
     }
 

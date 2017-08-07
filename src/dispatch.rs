@@ -47,6 +47,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             util::sleep(1000);
             Ok(jedi::obj())
         },
+        "user:change-password" => {
+            let current_username = jedi::get(&["2"], &data)?;
+            let current_password = jedi::get(&["3"], &data)?;
+            let new_username = jedi::get(&["4"], &data)?;
+            let new_password = jedi::get(&["5"], &data)?;
+            turtl.change_user_password(current_username, current_password, new_username, new_password)?;
+            Ok(jedi::obj())
+        },
         "user:delete-account" => {
             turtl.delete_account()?;
             Ok(jedi::obj())
@@ -186,6 +194,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     }
                     Ok(jedi::obj())
                 },
+                _ => {
+                    warn!("dispatch: {} -- got an unexpected sync action: {:?} (doing nothing, i guess)", cmd, action);
+                    Ok(jedi::obj())
+                }
             }
         },
         "profile:get-notes" => {

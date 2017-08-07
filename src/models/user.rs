@@ -11,8 +11,12 @@ use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::api::ApiReq;
+use ::util;
 use ::util::event::Emitter;
 use ::sync::sync_model::{self, MemorySaver};
+use ::sync::incoming::SyncIncoming;
+
+pub const CURRENT_AUTH_VERSION: u16 = 0;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -21,6 +25,9 @@ protected! {
         pub auth: Option<String>,
         #[serde(skip)]
         pub logged_in: bool,
+
+        #[protected_field(public)]
+        pub username: String,
 
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
@@ -50,8 +57,6 @@ make_basic_sync_model!(User);
 impl Keyfinder for User {}
 
 impl MemorySaver for User {}
-
-pub const CURRENT_AUTH_VERSION: u16 = 0;
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16) -> TResult<Key> {
@@ -148,6 +153,7 @@ impl User {
         let userdata = {
             let mut user = User::default();
             user.set_key(Some(key.clone()));
+            user.username = username.clone();
             user.pubkey = Some(pk);
             user.privkey = Some(sk);
             Protected::serialize(&mut user)?
@@ -175,6 +181,79 @@ impl User {
         user_guard_r.trigger("login", &jedi::obj());
         drop(user_guard_r);
         debug!("user::join() -- auth success, joined and logged in");
+        Ok(())
+    }
+
+    /// Change the current user's password.
+    ///
+    /// We do this by creating a new user object, generating a key/auth for it,
+    /// using that user's new key to re-encrypt the entire in-memory keychain,
+    /// then senting the new username, new auth, and new keychain over the to
+    /// API in one bulk post.
+    ///
+    /// The idea is that this is all or nothing. In previous versions of Turtl
+    /// we tried to shoehorn this through the sync system, but this tends to be
+    /// a delicate procedure and you really want everything to work or nothing.
+    pub fn change_password(&mut self, turtl: &Turtl, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
+        let user_id = match self.id() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingField(String::from("User.change_password() -- `turtl.user.id` is None"))),
+        };
+
+        let (_, auth) = generate_auth(&current_username, &current_password, CURRENT_AUTH_VERSION)?;
+        if Some(auth) != self.auth {
+            return Err(TError::BadValue(String::from("User.change_password() -- invalid current username/password given.")));
+        }
+
+        let mut new_user = self.clone()?;
+        new_user.username = new_username;
+        let (new_key, new_auth) = generate_auth(&new_user.username, &new_password, CURRENT_AUTH_VERSION)?;
+        new_user.set_key(Some(new_key.clone()));
+        let new_userdata = Protected::serialize(&mut new_user)?;
+
+        let encrypted_keychain = {
+            let profile_guard = turtl.profile.read().unwrap();
+            let mut new_keys = Vec::with_capacity(profile_guard.keychain.entries.len());
+            for entry in &profile_guard.keychain.entries {
+                let mut new_entry = entry.clone()?;
+                new_entry.set_key(Some(new_key.clone()));
+                let entrydata = Protected::serialize(&mut new_entry)?;
+                new_keys.push(entrydata);
+            }
+            new_keys
+        };
+
+        #[derive(Deserialize, Debug)]
+        struct PWChangeResponse {
+            sync_ids: Vec<u64>,
+        }
+        let auth_change = json!({
+            "user": new_userdata,
+            "auth": new_auth,
+            "keychain": encrypted_keychain,
+        });
+        let url = format!("/users/{}", user_id);
+        let res: PWChangeResponse = turtl.api.put(&url[..], ApiReq::new().data(auth_change))?;
+        let mut db_guard = turtl.db.write().unwrap();
+        match db_guard.as_mut() {
+            Some(db) => SyncIncoming::ignore_on_next(db, &res.sync_ids)?,
+            None => return Err(TError::MissingField(String::from("User.change_password() -- `turtl.db` is None!!!1"))),
+        }
+        drop(db_guard);
+
+        turtl.api.set_auth(new_user.username.clone(), new_auth.clone())?;
+        let _user_id: u64 = turtl.api.post("/auth", ApiReq::new())?;
+        self.do_login(new_key.clone(), new_auth);
+        sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
+
+        // save the new key into the keychain entries
+        let mut profile_guard = turtl.profile.write().unwrap();
+        for entry in &mut profile_guard.keychain.entries {
+            entry.set_key(Some(new_key.clone()));
+            sync_model::save_model(SyncAction::Edit, turtl, entry, true)?;
+        }
+        drop(profile_guard);
+        util::sleep(3000);
         Ok(())
     }
 
@@ -280,26 +359,6 @@ impl User {
         }
         sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
         Ok(())
-    }
-
-    /// Get a user setting
-    pub fn get_setting<T>(&self, key: &str) -> Option<T>
-        where T: DeserializeOwned
-    {
-        match self.settings.as_ref() {
-            Some(ref settings) => {
-                match settings.get(key) {
-                    Some(val) => {
-                        match jedi::from_val(val.clone()) {
-                            Ok(x) => Some(x),
-                            Err(_) => None,
-                        }
-                    },
-                    None => None,
-                }
-            },
-            None => None,
-        }
     }
 }
 

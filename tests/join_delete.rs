@@ -18,6 +18,7 @@ mod tests {
     fn join_delete_account() {
         let handle = init();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
+        let new_password = format!("{}_newLOLOL", password);
 
         let msg = format!(r#"["69","app:wipe-app-data"]"#);
         send(msg.as_str());
@@ -42,15 +43,43 @@ mod tests {
         sleep(1000);
 
         // wait until we're loaded
-        while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
+        wait_on("profile:loaded");
         // wait until we're indexed
-        while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
+        wait_on("profile:indexed");
 
         let msg = format!(r#"["30","profile:load"]"#);
         send(msg.as_str());
         // load the profile json for later
         let profile_json = recv("30");
         sleep(10);
+
+        // change our password. this will log us out, so we need to log in again
+        // to delete the account
+        let msg = format!(r#"["31","user:change-password","slippyslappy@turtlapp.com","{}","slippyslappy@turtlapp.com","{}"]"#, password, new_password);
+        send(msg.as_str());
+        // load the profile json for later
+        let msg = recv("31");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        // log in with our BRAND NEW username/password
+        let msg = format!(r#"["32","user:login","slippyslappy@turtlapp.com","{}"]"#, new_password);
+        send(msg.as_str());
+        // load the profile json for later
+        let msg = recv("32");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = String::from(r#"["33","sync:start"]"#);
+        send(msg.as_str());
+        let msg = recv("33");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        // wait on the profile load. we shouldn't get any errors about bad
+        // keychain since we logged in w/ new un/pw
+        wait_on("profile:loaded");
+        wait_on("profile:indexed");
 
         let msg = format!(r#"["3","user:delete-account"]"#);
         send(msg.as_str());

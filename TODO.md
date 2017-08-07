@@ -1,6 +1,4 @@
 v0.7:
-- user
-  - change password
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection

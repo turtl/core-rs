@@ -17,6 +17,8 @@ pub enum SyncAction {
     Edit,
     #[serde(rename = "delete")]
     Delete,
+    #[serde(rename = "change-password")]
+    ChangePassword,
 }
 
 impl Default for SyncAction {

@@ -15,7 +15,7 @@
 
 #[macro_use]
 mod macros;
-mod incoming;
+pub mod incoming;
 pub mod outgoing;
 pub mod files;
 #[macro_use]
