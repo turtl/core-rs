@@ -197,6 +197,13 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     let mut model: T = Default::default();
     model.set_id(id.clone());
 
+    // if this model adds itself to the keychain on create, then it should be
+    // removed from the keychain on delete.
+    if model.add_to_keychain() {
+        let mut profile_guard = turtl.profile.write().unwrap();
+        (*profile_guard).keychain.remove_entry(model.id().as_ref().unwrap(), Some((turtl, skip_remote_sync)))?;
+    }
+
     {
         let user_id = {
             // no, mr frodo

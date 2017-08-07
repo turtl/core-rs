@@ -1,13 +1,6 @@
 v0.7:
-- syncing:
-  - file syncing
-    - remove file .....file on note delete
-  - profile:load -- return user object =]
 - user
   - change password
-  - set space.default = true based on settings
-- spaces
-  - remove key from keychain on delete
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection

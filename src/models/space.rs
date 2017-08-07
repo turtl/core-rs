@@ -76,6 +76,7 @@ impl MemorySaver for Space {
             sync_model::delete_model::<Note>(turtl, &note_id, true)?;
         }
 
+        // remove the space from memory
         profile_guard.spaces.retain(|s| {
             match s.id() {
                 Some(id) => (space_id != id),
