@@ -1,13 +1,14 @@
 use ::jedi;
 use ::turtl::Turtl;
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
-use ::models::file::File;
+use ::models::file::{File, FileData};
 use ::models::sync_record::SyncRecord;
 use ::crypto::Key;
 use ::sync::sync_model::MemorySaver;
+use ::std::fs;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -171,12 +172,22 @@ impl MemorySaver for Note {
     // remove note from search on delete
     fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
         let mut search_guard = turtl.search.write().unwrap();
-        // TODO: remove note file locally
         match search_guard.as_mut() {
-            Some(ref mut search) => search.unindex_note(&self),
+            Some(ref mut search) => search.unindex_note(&self)?,
             // i COULD throw an error here. i'm choosing not to...
-            None => Ok(()),
+            None => {},
+        };
+
+        // delete all local file(s) associated with this note
+        let note_id = match self.id() {
+            Some(x) => x.clone(),
+            None => return Err(TError::MissingField(String::from("Note.delete_from_mem() -- missing `self.id`, cannot remove local files"))),
+        };
+        let files = FileData::file_finder_all(Some(&self.user_id), Some(&note_id))?;
+        for file in files {
+            fs::remove_file(&file)?;
         }
+        Ok(())
     }
 }
 
