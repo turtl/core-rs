@@ -1,8 +1,4 @@
-extern crate jedi;
-
 include!("./_lib.rs");
-
-use jedi::Value;
 
 #[cfg(test)]
 mod tests {

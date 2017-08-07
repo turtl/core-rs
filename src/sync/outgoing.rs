@@ -4,6 +4,7 @@ use ::jedi;
 
 use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
+use ::sync::incoming::SyncIncoming;
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
@@ -112,14 +113,22 @@ impl Syncer for SyncOutgoing {
         // clear out the successful syncs
         let mut err: TResult<()> = Ok(());
         for sync in &sync_result.success {
+            // if the record synced successfully, we delete it here
             let res = self.delete_sync_record(sync);
+            // grab any extra sync_ids created from this sync item (the api
+            // keeps close track of them) and ignore them on the next incoming
+            // sync. this keeps us from double-syncing some items.
+            let res2 = with_db!{ db, self.db, "SyncOutgoing.run_sync()",
+                match sync.sync_ids.as_ref() {
+                    Some(x) => SyncIncoming::ignore_on_next(db, x),
+                    None => Ok(()),
+                }
+            };
             // track a failure (if it occurs), but then just keep deleting.
             // we don't want to return and have all these sync items re-run
             // just because one of them failed to delete.
-            match res {
-                Ok(_) => (),
-                Err(_) => if err.is_ok() { err = res },
-            }
+            if res.is_err() && err.is_ok() { err = res; }
+            if res2.is_err() && err.is_ok() { err = res2; }
         }
 
         if sync_result.failures.len() > 0 {

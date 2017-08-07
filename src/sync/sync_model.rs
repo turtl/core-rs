@@ -19,8 +19,8 @@ macro_rules! make_sync_fns {
             match sync_item.action {
                 ::models::sync_record::SyncAction::Delete => {
                     let mut model: $n = Default::default();
-                    model.id = Some(sync_item.item_id);
-                    model.db_delete(db)
+                    model.id = Some(sync_item.item_id.clone());
+                    model.db_delete(db, Some(&sync_item))
                 }
                 _ => {
                     if sync_item.data.is_none() {
@@ -33,7 +33,7 @@ macro_rules! make_sync_fns {
                     ::std::mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
                     debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), ::jedi::stringify(&data)?);
                     let model: $n = ::jedi::from_val(data)?;
-                    model.db_save(db)
+                    model.db_save(db, Some(&sync_item))
                 }
             }
         }
@@ -41,10 +41,10 @@ macro_rules! make_sync_fns {
         fn outgoing(&self, action: ::models::sync_record::SyncAction, user_id: &String, db: &mut ::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
             match action {
                 ::models::sync_record::SyncAction::Delete => {
-                    self.db_delete(db)?;
+                    self.db_delete(db, None)?;
                 }
                 _ => {
-                    self.db_save(db)?;
+                    self.db_save(db, None)?;
                 }
             }
             if skip_remote_sync { return Ok(()); }
@@ -68,7 +68,7 @@ macro_rules! make_sync_fns {
                     sync_record.data = Some(self.data_for_storage()?);
                 }
             }
-            sync_record.db_save(db)
+            sync_record.db_save(db, None)
         }
     };
 }
@@ -99,12 +99,12 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
 
     /// A default save function that takes a db/model and saves it.
-    fn db_save(&self, db: &mut Storage) -> TResult<()> {
+    fn db_save(&self, db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {
         db.save(self)
     }
 
     /// A default delete function that takes a db/model and deletes it.
-    fn db_delete(&self, db: &mut Storage) -> TResult<()> {
+    fn db_delete(&self, db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {
         db.delete(self)
     }
 

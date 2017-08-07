@@ -1,12 +1,8 @@
 v0.7:
 - syncing:
   - file syncing
-    - incoming file downloads
     - remove file .....file on note delete
-    - wipe_data should remove file records
   - profile:load -- return user object =]
-  - remove FileDAta::pathbuf_to_string/get_note_id if still not needed after
-    implementing incoming file sync
 - user
   - change password
   - set space.default = true based on settings

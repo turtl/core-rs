@@ -2,9 +2,9 @@ use ::jedi::Value;
 use ::error::{TResult, TError};
 use ::storage::Storage;
 use ::models::model::Model;
-use ::models::sync_record::SyncAction;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
+use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::sync::sync_model::SyncModel;
 use ::turtl::Turtl;
 use ::std::mem;
@@ -68,13 +68,27 @@ protected! {
 
 make_storable!(FileData, "files");
 make_basic_sync_model!{ FileData,
-    // NOP - we do not want to sync to db LOOL
-    fn db_save(&self, _db: &mut Storage) -> TResult<()> {
+    // this one is weird. we detect if this is saving from an incoming sync
+    // (API -> turtl), and if so, save a SyncRecord to the `sync` table w/ sync
+    // type FileIncoming (lets the incoming file sync system know we have a
+    // customer), OR if it's an outgoing sync, DO NOTHING.
+    fn db_save(&self, db: &mut Storage, sync_item: Option<&SyncRecord>) -> TResult<()> {
+        // only incoming syncs have a non-None value for sync_item. we will use
+        // this to detect if is incoming vs outgoing.
+        if let Some(sync) = sync_item {
+            // ha ha! incoming..
+            let mut sync_record = sync.clone_shallow();
+            sync_record.generate_id()?;
+            // change the type. heh heh, yes, very clever indeed...
+            sync_record.ty = SyncType::FileIncoming;
+            // ...and queue the file for download in our incoming sync queue
+            sync_record.db_save(db, None)?;
+        }
         Ok(())
     }
 
     // remove the file
-    fn db_delete(&self, _db: &mut Storage) -> TResult<()> {
+    fn db_delete(&self, _db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {
         let id = match self.id().as_ref() {
             Some(id) => id.clone(),
             None => return Err(TError::MissingField(String::from("FileData.db_delete() -- `self.id` is None, cannot delete file =["))),
@@ -136,6 +150,14 @@ impl FileData {
         Ok(files.swap_remove(0))
     }
 
+    /// Given a user_id/note_id, return the PathBuf to a location the file
+    /// should be saved.
+    pub fn new_file(user_id: &String, note_id: &String) -> TResult<PathBuf> {
+        let mut filepath = PathBuf::from(file_folder()?);
+        filepath.push(FileData::filebuilder(Some(user_id), Some(note_id)));
+        Ok(filepath)
+    }
+
     /// Load a note's file, if we have one.
     pub fn load_file(turtl: &Turtl, note: &Note) -> TResult<Vec<u8>> {
         let note_id = match note.id().as_ref() {
@@ -163,31 +185,6 @@ impl FileData {
 
         Ok(data)
     }
-
-    // TODO: remove these if not implemented after finishing incoming file sync
-    /*
-    /// Converts a PathBuf into a string (without the path, just the file
-    /// portion)
-    fn pathbuf_to_string(file: &PathBuf) -> TResult<String> {
-        match file.file_name() {
-            Some(x) => match x.to_str() {
-                Some(y) => Ok(String::from(y)),
-                None => return Err(TError::BadValue(format!("FileData::pathbuf_to_string() -- problem in file's UTF8 encoding: {:?}", file))),
-            },
-            None => return Err(TError::BadValue(format!("FileData::pathbuf_to_string() -- couldn't get filename for path {:?}", file))),
-        }
-    }
-
-    /// Given a file's filename, return the note id
-    pub fn get_note_id(file: &PathBuf) -> TResult<String> {
-        lazy_static! {
-            static ref RE_NOTE_ID: Regex = Regex::new(r#"^.*?n_(?P<n>[a-f0-9]+)\..*"#).unwrap();
-        }
-        let filestr = FileData::pathbuf_to_string(&file)?;
-        let note_id = RE_NOTE_ID.replace_all(&filestr[..], "$n");
-        Ok(note_id)
-    }
-    */
 
     /// Encrypt/save this file
     pub fn save(&mut self, turtl: &Turtl, note: &mut Note) -> TResult<()> {
@@ -243,6 +240,7 @@ impl FileData {
                 Some(x) => x,
                 None => return Err(TError::MissingField(format!("FileData.save() -- `turtl.db` is None when saving file...can't save sync record (deleting file)"))),
             };
+
             // run the sync. this would normally write an object to the "files"
             // table, but since we've overwritten db_save() to do NOTHING we can
             // rest easy here knowing we won't get random records in tables that
@@ -321,7 +319,7 @@ mod tests {
 
         let mut db_guard = turtl.db.write().unwrap();
         let db = db_guard.as_mut().unwrap();
-        file.db_delete(db).unwrap();
+        file.db_delete(db, None).unwrap();
 
         match FileData::load_file(&turtl, &note) {
             Ok(_) => panic!("Found file for note {}, should be deleted", note.id().as_ref().unwrap()),

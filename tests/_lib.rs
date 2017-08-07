@@ -1,11 +1,13 @@
 extern crate config;
 extern crate carrier;
 extern crate turtl_core;
+extern crate jedi;
 
 use ::std::env;
 use ::std::thread;
 use ::std::time::Duration;
 use turtl_core::error::TResult;
+use ::jedi::Value;
 
 #[allow(dead_code)]
 pub fn sleep(millis: u64) {
@@ -60,5 +62,14 @@ pub fn recv_msg(mid: &str) -> TResult<String> {
 pub fn recv_event() -> String {
     let channel: String = config::get(&["messaging", "events"]).unwrap();
     String::from_utf8(carrier::recv(channel.as_str()).unwrap()).unwrap()
+}
+
+pub fn wait_on(evname: &str) {
+    loop {
+        let ev = recv_event();
+        let parsed: Value = jedi::parse(&ev).unwrap();
+        let parsed_evname: String = jedi::get(&["e"], &parsed).unwrap();
+        if parsed_evname == evname { break; }
+    }
 }
 

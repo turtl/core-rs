@@ -545,6 +545,7 @@ impl Turtl {
         let data_folder = data_folder()?;
         debug!("turtl.wipe_app_data() -- wiping everything in {}", data_folder);
         let paths = fs::read_dir(data_folder)?;
+        // wipe all databases
         for entry in paths {
             let entry = entry?;
             let path = entry.path();
@@ -558,6 +559,14 @@ impl Turtl {
             fs::remove_file(&path)?;
             info!("turtl.wipe_app_data() -- removing {}", path.display());
         }
+
+        // wipe all note files
+        let files = FileData::file_finder_all(None, None)?;
+        for file in files {
+            fs::remove_file(&file)?;
+            info!("turtl.wipe_app_data() -- removing {}", file.display());
+        }
+
         (*kv_guard) = Turtl::open_kv()?;
         Ok(())
     }

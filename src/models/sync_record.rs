@@ -122,7 +122,8 @@ impl SyncRecord {
     pub fn find(db: &mut Storage, ty: Option<SyncType>) -> TResult<Vec<SyncRecord>> {
         let mut args = vec![];
         if let Some(x) = ty {
-            args.push(jedi::parse(&jedi::stringify(&x)?)?);
+            let ty_string: String = jedi::parse(&jedi::stringify(&x)?)?;
+            args.push(ty_string+"|");
         }
         db.find("sync", "sync", &args)
     }

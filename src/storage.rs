@@ -152,6 +152,10 @@ impl Storage {
         Ok(self.dumpy.kv_set(&self.conn, key, val)?)
     }
 
+    pub fn kv_delete(&self, key: &str) -> TResult<()> {
+        Ok(self.dumpy.kv_delete(&self.conn, key)?)
+    }
+
     /// Close the db connection
     pub fn close(&mut self) -> TResult<()> {
         let mut conn = Connection::open_in_memory()?;

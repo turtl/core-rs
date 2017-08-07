@@ -1,8 +1,6 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::io::ErrorKind;
-
-use ::jedi::{self, Value};
-
+use ::jedi;
 use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
@@ -10,7 +8,10 @@ use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging::{self, Messenger};
 use ::models;
+use ::models::model::Model;
 use ::models::sync_record::{SyncType, SyncRecord};
+
+const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
 /// Defines a struct for deserializing our incoming sync response
 #[derive(Deserialize, Debug)]
@@ -72,6 +73,44 @@ impl SyncIncoming {
         }
     }
 
+    /// Get all sync ids that should be ignored on the next sync run
+    fn get_ignored_impl(db: &mut Storage) -> TResult<Vec<String>> {
+        let ignored = match db.kv_get(SYNC_IGNORE_KEY)? {
+            Some(x) => jedi::parse(&x)?,
+            None => Vec::new(),
+        };
+        Ok(ignored)
+    }
+
+    /// Static handler for ignoring sync items.
+    ///
+    /// Tracks which sync items we should ignore on incoming. The idea is that
+    /// when an outgoing sync creates a note, that note will already be created
+    /// on our side (client side). So the outgoing sync adds the sync ids of the
+    /// syncs created while adding that note to the ignore list, and when the
+    /// incoming sync returns, it won't re-run the syncs for the items we are
+    /// already up-to-date on locally. Note that this is not strictly necessary
+    /// since the sync system should be able to handle situations like this
+    /// (such as double-adding a note), however it can be much more efficient
+    /// especially in the case of file syncing.
+    pub fn ignore_on_next(db: &mut Storage, sync_ids: &Vec<u64>) -> TResult<()> {
+        let mut ignored = SyncIncoming::get_ignored_impl(db)?;
+        for sync_id in sync_ids {
+            ignored.push(sync_id.to_string());
+        }
+        db.kv_set("sync:incoming:ignore", &jedi::stringify(&ignored)?)
+    }
+
+    /// Get all sync ids that should be ignored on the next sync run
+    fn get_ignored(&self) -> TResult<Vec<String>> {
+        with_db!{ db, self.db, "SyncIncoming.get_ignored()", SyncIncoming::get_ignored_impl(db) }
+    }
+
+    /// Clear out ignored sync ids
+    fn clear_ignored(&self) -> TResult<()> {
+        with_db!{ db, self.db, "SyncIncoming.clear_ignored()", db.kv_delete(SYNC_IGNORE_KEY) }
+    }
+
     /// Grab the latest changes from the API (anything after the given sync ID).
     /// Also, if `poll` is true, we long-poll.
     fn sync_from_api(&self, sync_id: &String, poll: bool) -> TResult<()> {
@@ -117,49 +156,39 @@ impl SyncIncoming {
         // same, but with enabled
         if !self.is_enabled() && !force { return Ok(()); }
 
+        // grab sync ids we're ignoring
+        let ignored = self.get_ignored()?;
+
         // destructure our response
         let SyncResponse { sync_id, records } = syncdata;
-
-        // split our sync records up. file syncs will go into the `sync` table
-        // with a type of SyncType::FileIncoming, everyone else gets handled
-        // immediately.
-        let mut item_syncs = Vec::with_capacity(records.len());
-        let mut file_syncs = Vec::with_capacity(4);
-        for sync in records {
-            // NOTE: it's unlikely/impossible that we'd EVER have the type
-            // FileIncoming here, but i like to be cautious.
-            if sync.ty == SyncType::File || sync.ty == SyncType::FileIncoming {
-                file_syncs.push(sync);
-            } else {
-                item_syncs.push(sync);
-            }
-        }
 
         with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
             // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
-
-            // move our file sync records into the `sync` table
-            for mut sync in file_syncs {
-                sync.ty = SyncType::FileIncoming;
-                sync.db_save(db)?;
-            }
-
-            // run each of our non-file syncs locally. this generally means
-            // saving the contained item to our local DB and notifying the UI
-            // we have a changed item (so it can reload if needed)
-            for rec in item_syncs {
+            for rec in records {
+                // are we ignoring this sync?
+                match rec.id() {
+                    Some(id) => {
+                        if ignored.contains(id) { continue; }
+                    }
+                    None => {}
+                }
                 self.run_sync_item(db, rec)?;
             }
-
             // make sure we save our sync_id as the LAST STEP of our transaction.
             // if this fails, then next time we load we just start from the same
             // spot we were at before. SYNC BUGS HATE HIM!!!1
             db.kv_set("sync_id", &sync_id.to_string())?;
-
             // ok, commit
             db.conn.execute("COMMIT TRANSACTION", &[])?;
         }
+
+        // clear out the sync ignore list
+        match self.clear_ignored() {
+            Ok(_) => {},
+            Err(e) => error!("SyncIncoming.update_local_db_from_api_sync() -- error clearing out ignored syncs (but continue because it's not really a big deal): {}", e),
+        }
+
         Ok(())
     }
 
@@ -188,12 +217,8 @@ impl SyncIncoming {
             SyncType::Space => self.handlers.space.incoming(db, sync_item),
             SyncType::Board => self.handlers.board.incoming(db, sync_item),
             SyncType::Note => self.handlers.note.incoming(db, sync_item),
-            SyncType::File => self.handlers.file.incoming(db, sync_item),
+            SyncType::File | SyncType::FileIncoming => self.handlers.file.incoming(db, sync_item),
             SyncType::Invite => self.handlers.invite.incoming(db, sync_item),
-            _ => {
-                error!("SyncIncoming.run_sync_item() -- sync type {:?} is not implemented", sync_item.ty);
-                return Err(TError::NotImplemented);
-            },
         }?;
 
         // let the ui know we got a sync!

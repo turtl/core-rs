@@ -10,7 +10,8 @@ use ::hyper;
 pub use ::hyper::method::Method;
 use ::hyper::client::request::Request;
 use ::hyper::client::response::Response;
-use ::hyper::header::{self, Headers};
+use ::hyper::header;
+pub use ::hyper::header::Headers;
 pub use ::hyper::status::StatusCode as Status;
 use ::jedi::{self, Value, DeserializeOwned};
 
@@ -113,8 +114,8 @@ impl Api {
         config_guard.auth = None;
     }
 
-    /// Set our standard auth header into a Headers set
-    fn set_standard_headers(&self, headers: &mut Headers) {
+    /// Write our auth headers into a header collection
+    pub fn set_auth_headers(&self, headers: &mut Headers) {
         let auth = {
             let ref guard = self.config.read().unwrap();
             guard.auth.clone()
@@ -123,6 +124,11 @@ impl Api {
             Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),
             None => (),
         }
+    }
+
+    /// Set our standard auth header into a Headers set
+    fn set_standard_headers(&self, headers: &mut Headers) {
+        self.set_auth_headers(headers);
         if headers.get_raw("Content-Type").is_none() {
             headers.set(header::ContentType::json());
         }

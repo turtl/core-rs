@@ -1,8 +1,4 @@
-extern crate jedi;
-
 include!("./_lib.rs");
-
-use jedi::Value;
 
 #[cfg(test)]
 mod tests {
@@ -35,9 +31,11 @@ mod tests {
         sleep(10);
 
         // wait until we're loaded
-        while recv_event() != r#"{"e":"profile:loaded","d":{}}"# {}
+        wait_on("profile:loaded");
         // wait until we're indexed
-        while recv_event() != r#"{"e":"profile:indexed","d":{}}"# {}
+        wait_on("profile:indexed");
+        // wait for our first file to download
+        wait_on("sync:file:downloaded");
 
         // wait for sync to complete
         sleep(1000);
@@ -83,6 +81,12 @@ mod tests {
         let msg = String::from(r#"["3","user:logout"]"#);
         send(msg.as_str());
         let msg = recv("3");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
+        sleep(10);
+
+        let msg = format!(r#"["6969","app:wipe-app-data"]"#);
+        send(msg.as_str());
+        let msg = recv("6969");
         assert_eq!(msg, r#"{"e":0,"d":{}}"#);
         sleep(10);
 

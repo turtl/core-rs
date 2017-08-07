@@ -1,6 +1,7 @@
 use ::std::sync::{Arc, RwLock};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
+use ::sync::incoming::SyncIncoming;
 use ::storage::Storage;
 use ::api::{self, Api, ApiReq};
 use ::messaging;
@@ -9,7 +10,7 @@ use ::models::file::FileData;
 use ::models::sync_record::{SyncType, SyncRecord};
 use ::std::fs;
 use ::std::io::{Read, Write};
-use ::jedi::Value;
+use ::jedi::{self, Value};
 
 /// Holds the state for outgoing files (uploads)
 pub struct FileSyncOutgoing {
@@ -38,12 +39,12 @@ impl FileSyncOutgoing {
     /// Returns a list of note_ids for notes that have pending file uploads.
     /// This uses the `sync` table.
     fn get_outgoing_file_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let syncs = with_db!{ db, self.db, "FileSyncOutgoing.get_outgoing_files()",
+        let syncs = with_db!{ db, self.db, "FileSyncOutgoing.get_outgoing_file_syncs()",
             SyncRecord::find(db, Some(SyncType::File))
         }?;
         let mut final_syncs = Vec::with_capacity(syncs.len());
         for sync in syncs {
-            // NOTE: in the normal outgoing sync process, we break. here, we
+            // NOTE: in the normal sync process, we break on frozen. here, we
             // continue. the reason being that file syncs don't necessarily
             // benefit from being run in order like normal outgoing syncs do.
             if sync.frozen { continue; }
@@ -69,18 +70,20 @@ impl FileSyncOutgoing {
 
         // define a container function that grabs our file and runs the upload.
         // if anything in here fails, we mark 
-        let upload = |this: &FileSyncOutgoing, note_id, file| -> TResult<()> {
+        let upload = |note_id, file| -> TResult<Value> {
+            // open our local file. we should test if it's readable/exists
+            // before making API calls
+            let mut file = fs::File::open(&file)?;
             // start our API call to the note file attachment endpoint
             let url = format!("/notes/{}/attachment", note_id);
             let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream"));
             // get an API stream we can start piping file data into
-            let (mut stream, info) = this.api.call_start(api::Method::Put, &url[..], req)?;
-            // open our local, unsynced file and start moving it 4K at a time into
-            // the API upload stream
-            let mut file = fs::File::open(&file)?;
+            let (mut stream, info) = self.api.call_start(api::Method::Put, &url[..], req)?;
+            // start streaming our file into the API call 4K at a time
             let mut buf = [0; 4096];
             loop {
                 let read = file.read(&mut buf[..])?;
+                // all done! (EOF)
                 if read <= 0 { break; }
                 let (read_bytes, _) = buf.split_at(read);
                 let written = stream.write(read_bytes)?;
@@ -90,12 +93,22 @@ impl FileSyncOutgoing {
             }
             // write all our output and finalize the API call
             stream.flush()?;
-            this.api.call_end::<Value>(stream.send(), info)?;
-            Ok(())
+            self.api.call_end(stream.send(), info)
         };
 
-        match upload(self, &note_id, file) {
-            Ok(_) => {}
+        match upload(&note_id, file) {
+            Ok(res) => {
+                let sync_ids: Vec<u64> = jedi::from_val(jedi::get(&["sync_ids"], &res)?)?;
+                with_db!{ db, self.db, "FileSyncOutgoing.upload_file()",
+                    // note that if we do have an error here, the worst that
+                    // happens is we download the file right after uploading.
+                    // so basically ignore errors.
+                    match SyncIncoming::ignore_on_next(db, &sync_ids) {
+                        Ok(_) => {},
+                        Err(e) => error!("FileSyncOutgoing.upload() -- error ignoring sync items (but continuing regardless): {}", e),
+                    }
+                };
+            }
             Err(e) => {
                 // our upload failed? send to our sync failure handler
                 with_db!{ db, self.db, "FileSyncOutgoing.upload_file()",
@@ -107,7 +120,7 @@ impl FileSyncOutgoing {
 
         // if we're still here, the upload succeeded. remove the sync record so
         // we know to stop trying to upload this file.
-        with_db!{ db, self.db, "FileSyncOutgoing.upload_file()", sync.db_delete(db)? };
+        with_db!{ db, self.db, "FileSyncOutgoing.upload_file()", sync.db_delete(db, None)? };
 
         // let the UI know how great we are. you will love this app. tremendous
         // app. everyone says so.
