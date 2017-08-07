@@ -1,4 +1,9 @@
 v0.7:
+- user
+  - change password requires connection
+    - app events?
+  - handle change-password sync record (log out!)
+  - notify UI when logged in/logged out
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
