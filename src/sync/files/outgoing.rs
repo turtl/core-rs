@@ -90,7 +90,6 @@ impl FileSyncOutgoing {
             }
             // write all our output and finalize the API call
             stream.flush()?;
-
             this.api.call_end::<Value>(stream.send(), info)?;
             Ok(())
         };
@@ -100,18 +99,18 @@ impl FileSyncOutgoing {
             Err(e) => {
                 // our upload failed? send to our sync failure handler
                 with_db!{ db, self.db, "FileSyncOutgoing.upload_file()",
-                    return SyncRecord::handle_failed_sync(db, sync);
+                    SyncRecord::handle_failed_sync(db, sync)?;
                 };
                 return Err(e);
             }
         }
 
-        // if we're still here, the upload succeeded. remove the `file_sync`
-        // record that tells us we should be uploading this file
+        // if we're still here, the upload succeeded. remove the sync record so
+        // we know to stop trying to upload this file.
         with_db!{ db, self.db, "FileSyncOutgoing.upload_file()", sync.db_delete(db)? };
 
         // let the UI know how great we are. you will love this app. tremendous
-        // app.
+        // app. everyone says so.
         messaging::ui_event("sync:file:uploaded", &json!({"note_id": note_id}))?;
         Ok(())
     }

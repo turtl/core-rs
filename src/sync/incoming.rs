@@ -12,6 +12,15 @@ use ::messaging::{self, Messenger};
 use ::models;
 use ::models::sync_record::{SyncType, SyncRecord};
 
+/// Defines a struct for deserializing our incoming sync response
+#[derive(Deserialize, Debug)]
+struct SyncResponse {
+    #[serde(default)]
+    records: Vec<SyncRecord>,
+    #[serde(default)]
+    sync_id: u64,
+}
+
 struct Handlers {
     user: models::user::User,
     keychain: models::keychain::KeychainEntry,
@@ -69,7 +78,7 @@ impl SyncIncoming {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
         let timeout = if poll { 60 } else { 10 };
-        let syncres = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
+        let syncres: TResult<SyncResponse> = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
         // if we have a timeout just return Ok(()) (the sync system is built to
         // timeout if no response is received)
         let syncdata = match syncres {
@@ -101,31 +110,53 @@ impl SyncIncoming {
 
     /// Take sync data we got from the API and update our local database with
     /// it. Kewl.
-    fn update_local_db_from_api_sync(&self, syncdata: Value, force: bool) -> TResult<()> {
+    fn update_local_db_from_api_sync(&self, syncdata: SyncResponse, force: bool) -> TResult<()> {
         // sometimes the sync call takes a while, and it's possible we've quit
         // mid-call. if this is the case, throw out our sync result.
         if self.should_quit() && !force { return Ok(()); }
         // same, but with enabled
         if !self.is_enabled() && !force { return Ok(()); }
-        // if our sync data is blank, then alright, forget it. YOU KNOW WHAT?
-        // HEY JUST FORGET IT!
-        if syncdata == Value::Null { return Ok(()); }
 
-        // the api sends back the latest sync id out of the bunch. grab it.
-        let sync_id = (jedi::get::<u64>(&["sync_id"], &syncdata)?).to_string();
-        // also grab our sync records.
-        let records: Vec<SyncRecord> = jedi::get(&["records"], &syncdata)?;
+        // destructure our response
+        let SyncResponse { sync_id, records } = syncdata;
+
+        // split our sync records up. file syncs will go into the `sync` table
+        // with a type of SyncType::FileIncoming, everyone else gets handled
+        // immediately.
+        let mut item_syncs = Vec::with_capacity(records.len());
+        let mut file_syncs = Vec::with_capacity(4);
+        for sync in records {
+            // NOTE: it's unlikely/impossible that we'd EVER have the type
+            // FileIncoming here, but i like to be cautious.
+            if sync.ty == SyncType::File || sync.ty == SyncType::FileIncoming {
+                file_syncs.push(sync);
+            } else {
+                item_syncs.push(sync);
+            }
+        }
 
         with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
-            // start a transaction. we don't want to save half-data.
+            // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
-            for rec in records {
+
+            // move our file sync records into the `sync` table
+            for mut sync in file_syncs {
+                sync.ty = SyncType::FileIncoming;
+                sync.db_save(db)?;
+            }
+
+            // run each of our non-file syncs locally. this generally means
+            // saving the contained item to our local DB and notifying the UI
+            // we have a changed item (so it can reload if needed)
+            for rec in item_syncs {
                 self.run_sync_item(db, rec)?;
             }
+
             // make sure we save our sync_id as the LAST STEP of our transaction.
             // if this fails, then next time we load we just start from the same
             // spot we were at before. SYNC BUGS HATE HIM!!!1
-            db.kv_set("sync_id", &sync_id)?;
+            db.kv_set("sync_id", &sync_id.to_string())?;
+
             // ok, commit
             db.conn.execute("COMMIT TRANSACTION", &[])?;
         }

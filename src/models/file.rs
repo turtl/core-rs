@@ -15,7 +15,6 @@ use ::std::fs;
 use ::std::io::prelude::*;
 use ::std::path::PathBuf;
 use ::glob;
-use ::regex::Regex;
 
 /// Return the location where we store files
 pub fn file_folder() -> TResult<String> {
