@@ -1,13 +1,11 @@
 v0.7:
 - user
-  - change password requires connection
-    - app events?
+  - NOTE: change password requires connection
   - handle change-password sync record (log out!)
   - notify UI when logged in/logged out
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
-    - app events?
   - make sure to save keychain after adding invite space key
 - bookmarker
 - migration crate

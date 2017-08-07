@@ -185,7 +185,9 @@ pub trait Syncer {
     /// for updating the UI on our connection state
     fn connected(&self, yesno: bool) {
         messaging::ui_event("sync:connected", &yesno)
-            .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected event: {}", e));
+            .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected UI event: {}", e));
+        messaging::app_event("sync:connected", &yesno)
+            .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected app event: {}", e));
     }
 }
 

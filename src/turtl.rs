@@ -90,6 +90,8 @@ pub struct Turtl {
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Holds our sync state data
     sync_state: Arc<RwLock<Option<SyncState>>>,
+    /// Whether or not we're connected to the API
+    pub connected: RwLock<bool>,
 }
 
 impl Turtl {
@@ -116,6 +118,7 @@ impl Turtl {
             search: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
+            connected: RwLock::new(false),
         };
         Ok(turtl)
     }

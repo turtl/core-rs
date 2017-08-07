@@ -40,6 +40,13 @@ mod tests {
         // wait for sync to complete
         sleep(1000);
 
+        let msg = format!(r#"["27","app:connected"]"#);
+        send(msg.as_str());
+        let msg = recv("27");
+        let data = jedi::parse(&msg).unwrap();
+        let connected: bool = jedi::get(&["d"], &data).unwrap();
+        assert_eq!(connected, true);
+
         let msg = format!(r#"["30","profile:load"]"#);
         send(msg.as_str());
         let msg = recv("30");

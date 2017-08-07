@@ -26,6 +26,7 @@ use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
 use ::sync::sync_model;
+use ::messaging::Event;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -58,6 +59,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "user:delete-account" => {
             turtl.delete_account()?;
             Ok(jedi::obj())
+        },
+        "app:connected" => {
+            let connguard = turtl.connected.read().unwrap();
+            let connected: bool = *connguard;
+            drop(connguard);
+            Ok(Value::Bool(connected))
         },
         "app:wipe-user-data" => {
             turtl.wipe_user_data()?;
@@ -249,9 +256,32 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
     }
 }
 
+/// Event dispatching. This acts as a way for parts of the app that don't have
+/// access to the Turtl object to trigger events.
+fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
+    info!("dispatch::dispatch_event() -- {}", cmd);
+    match cmd.as_ref() {
+        "sync:connected" => {
+            let yesno: bool = jedi::from_val(data)?;
+            let mut connguard = turtl.connected.write().unwrap();
+            *connguard = yesno;
+        }
+        _ => {
+            warn!("dispatch_event() -- encountered unknown event: {}", cmd);
+        }
+    }
+    Ok(())
+}
+
 /// process a message from the messaging system. this is the main communication
 /// heart of turtl core.
 pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
+    if &msg[0..4] == "::ev" {
+        let event: Event = jedi::parse(&String::from(&msg[4..]))?;
+        let Event {e, d} = event;
+        return dispatch_event(&e, turtl, d);
+    }
+
     let data: Value = jedi::parse(msg)?;
 
     // grab the request id from the data
