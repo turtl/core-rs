@@ -159,6 +159,10 @@ impl SyncIncoming {
             SyncType::Note => self.handlers.note.incoming(db, sync_item),
             SyncType::File => self.handlers.file.incoming(db, sync_item),
             SyncType::Invite => self.handlers.invite.incoming(db, sync_item),
+            _ => {
+                error!("SyncIncoming.run_sync_item() -- sync type {:?} is not implemented", sync_item.ty);
+                return Err(TError::NotImplemented);
+            },
         }?;
 
         // let the ui know we got a sync!

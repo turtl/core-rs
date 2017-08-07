@@ -883,7 +883,7 @@ pub mod tests {
         // load our outgoing sync records and verify them
         let db_guard = turtl.db.read().unwrap();
         let db = db_guard.as_ref().unwrap();
-        let syncs: Vec<SyncRecord> = db.all("sync_outgoing").unwrap();
+        let syncs: Vec<SyncRecord> = db.all("sync").unwrap();
         assert_eq!(syncs.len(), 2);
         assert_eq!(syncs[0].ty, SyncType::Keychain);
         assert_eq!(syncs[1].ty, SyncType::Space);

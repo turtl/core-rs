@@ -165,6 +165,8 @@ impl FileData {
         Ok(data)
     }
 
+    // TODO: remove these if not implemented after finishing incoming file sync
+    /*
     /// Converts a PathBuf into a string (without the path, just the file
     /// portion)
     fn pathbuf_to_string(file: &PathBuf) -> TResult<String> {
@@ -186,6 +188,7 @@ impl FileData {
         let note_id = RE_NOTE_ID.replace_all(&filestr[..], "$n");
         Ok(note_id)
     }
+    */
 
     /// Encrypt/save this file
     pub fn save(&mut self, turtl: &Turtl, note: &mut Note) -> TResult<()> {
@@ -241,7 +244,10 @@ impl FileData {
                 Some(x) => x,
                 None => return Err(TError::MissingField(format!("FileData.save() -- `turtl.db` is None when saving file...can't save sync record (deleting file)"))),
             };
-            // run the sync.
+            // run the sync. this would normally write an object to the "files"
+            // table, but since we've overwritten db_save() to do NOTHING we can
+            // rest easy here knowing we won't get random records in tables that
+            // shouldn't exist.
             self.outgoing(SyncAction::Add, &user_id, db, false)?;
             Ok(())
         };

@@ -16,11 +16,6 @@ pub fn get_schema() -> Value {
                 {"fields": ["user_id"]}
             ]
         },
-        "file_sync": {
-            "indexes": [
-                {"fields": ["type"]}
-            ]
-        },
         "invites": {},
         "keychain": {
             "indexes": [
@@ -38,9 +33,11 @@ pub fn get_schema() -> Value {
                 {"fields": ["user_id"]}
             ]
         },
-        "sync_outgoing": {
+        // formerly sync_outgoing, and it mostly is, but also used to queue
+        // incoming file downloads
+        "sync": {
             "indexes": [
-                {"fields": ["frozen"]}
+                {"name": "sync", "fields": ["type", "frozen"]}
             ]
         },
         "user": {}

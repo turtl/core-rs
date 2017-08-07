@@ -1,7 +1,12 @@
 use ::jedi::{self, Value};
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
+use ::storage::Storage;
+use ::turtl::Turtl;
+
+/// How many times a sync record can fail before it's "frozen"
+static MAX_ALLOWED_FAILURES: u32 = 3;
 
 /// Makes sure we only accept certain actions for syncing
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -33,6 +38,11 @@ pub enum SyncType {
     Note,
     #[serde(rename = "file")]
     File,
+    // we could have a type for FileOutgoing, but since almost all syncs that
+    // use the `sync` table are outgoing, we can just assume the "File" means
+    // "FileOutgoing"
+    #[serde(rename = "file:incoming")]
+    FileIncoming,
     #[serde(rename = "invite")]
     Invite,
 }
@@ -93,7 +103,7 @@ protected! {
         pub frozen: bool,
     }
 }
-make_storable!(SyncRecord, "sync_outgoing");
+make_storable!(SyncRecord, "sync");
 make_basic_sync_model!(SyncRecord);
 impl Keyfinder for SyncRecord {}
 
@@ -106,6 +116,96 @@ impl SyncRecord {
         new.user_id = self.user_id.clone();
         new.ty = self.ty.clone();
         new
+    }
+
+    /// Given a DB and some params, grab all matching sync records
+    pub fn find(db: &mut Storage, ty: Option<SyncType>) -> TResult<Vec<SyncRecord>> {
+        let mut args = vec![];
+        if let Some(x) = ty {
+            args.push(jedi::parse(&jedi::stringify(&x)?)?);
+        }
+        db.find("sync", "sync", &args)
+    }
+
+    /// Given a DB, find all sync records matching `frozen` but NOT matching
+    /// `not_ty`.
+    pub fn allbut(db: &mut Storage, not_ty: &Vec<SyncType>) -> TResult<Vec<SyncRecord>> {
+        let syncs = SyncRecord::find(db, None)?
+            .into_iter()
+            .filter(|x| !not_ty.contains(&x.ty))
+            .collect::<Vec<SyncRecord>>();
+        Ok(syncs)
+    }
+
+    /// Static method for grabbing pending sync items. Mainly for the UI's
+    /// own personal amusement (but allows enumerating an interface for
+    /// unfreezing or deleting bad sync records).
+    pub fn get_all_pending(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::get_all_pending() -- `turtl.db` is empty"))),
+        };
+        SyncRecord::find(db, None)
+    }
+
+    /// Increment this SyncRecord's errcount. If it's above a magic number, we
+    /// mark the sync as failed, which excludes it from further outgoing syncs
+    /// until it gets manually shaken/removed.
+    pub fn handle_failed_sync(db: &mut Storage, failure: &SyncRecord) -> TResult<()> {
+        debug!("SyncRecord::handle_failed_sync() -- handle failure: {:?}", failure);
+        let sync_id = match failure.id().as_ref() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingField(format!("SyncRecord::handle_failed_sync() -- missing `failure.id` field"))),
+        };
+        let sync_record: Option<SyncRecord> = db.get("sync", &sync_id)?;
+        match sync_record {
+            Some(mut rec) => {
+                if rec.errcount > MAX_ALLOWED_FAILURES {
+                    rec.frozen = true;
+                } else {
+                    rec.errcount += 1;
+                }
+                // save our heroic sync record with our mods (errcount/frozen)
+                db.save(&rec)?;
+            }
+            // already deleted? who knows
+            None => {}
+        }
+        Ok(())
+    }
+
+    /// Static method that tells the sync system to unfreeze a sync item so it
+    /// gets queued to be included in the next outgoing sync.
+    pub fn kick_frozen_sync(turtl: &Turtl, sync_id: &String) -> TResult<()> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
+        };
+        let sync: Option<SyncRecord> = db.get("sync", sync_id)?;
+        match sync {
+            Some(mut rec) => {
+                rec.frozen = false;
+                db.save(&rec)?;
+            }
+            None => {}
+        }
+        Ok(())
+    }
+
+    /// Public/static method for deleting a sync record (probably initiated from
+    /// the UI).
+    pub fn delete_sync_item(turtl: &Turtl, sync_id: &String) -> TResult<()> {
+        let mut db_guard = turtl.db.write().unwrap();
+        let db = match db_guard.as_mut() {
+            Some(x) => x,
+            None => return Err(TError::MissingField(String::from("SyncOutgoing::delete_sync_item() -- `turtl.db` is empty"))),
+        };
+        let mut sync_record: SyncRecord = Default::default();
+        sync_record.id = Some(sync_id.clone());
+        db.delete(&sync_record)?;
+        Ok(())
     }
 }
 

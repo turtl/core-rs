@@ -2,24 +2,24 @@ use ::std::sync::{Arc, RwLock};
 
 use ::jedi;
 
-use ::error::{TResult, TError};
+use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
-use ::models::model::Model;
-use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
-use ::models::file_sync::{FileSyncType, FileSync};
-use ::turtl::Turtl;
-use ::sync::sync_model::SyncModel;
-
-static MAX_ALLOWED_FAILURES: u32 = 3;
+use ::models::sync_record::{SyncType, SyncRecord};
 
 #[derive(Deserialize, Debug)]
 struct SyncResponse {
+    /// successful sync records
+    #[serde(default)]
     success: Vec<SyncRecord>,
+    /// records that failed to sync properly
     #[serde(default)]
     failures: Vec<SyncRecord>,
+    /// records that weren't run because they were blocked by a failure
+    #[serde(default)]
+    blocked: Vec<SyncRecord>,
 }
 
 /// Holds the state for data going from turtl -> API (outgoing sync data).
@@ -47,68 +47,24 @@ impl SyncOutgoing {
         }
     }
 
-    /// Tells the sync system to unfreeze a sync item so it gets queued to be
-    /// included in the next outgoing sync.
-    pub fn kick_frozen_sync(turtl: &Turtl, sync_id: &String) -> TResult<()> {
-        let mut db_guard = turtl.db.write().unwrap();
-        let db = match db_guard.as_mut() {
-            Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
-        };
-        let sync: Option<SyncRecord> = db.get("sync_outgoing", sync_id)?;
-        match sync {
-            Some(mut rec) => {
-                rec.frozen = false;
-                db.save(&rec)?;
-            }
-            None => {}
-        }
-        Ok(())
-    }
-
-    /// Public/static method for deleting a sync record (probably initiated from
-    /// the UI).
-    pub fn delete_sync_item(turtl: &Turtl, sync_id: &String) -> TResult<()> {
-        let mut db_guard = turtl.db.write().unwrap();
-        let db = match db_guard.as_mut() {
-            Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
-        };
-        let mut sync_record: SyncRecord = Default::default();
-        sync_record.id = Some(sync_id.clone());
-        db.delete(&sync_record)?;
-        Ok(())
-    }
-
-    /// Grab all frozen sync records
-    pub fn get_all_frozen(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
-        let mut db_guard = turtl.db.write().unwrap();
-        let db = match db_guard.as_mut() {
-            Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
-        };
-        db.find("sync_outgoing", "frozen", &vec![String::from("true")])
-    }
-
-    /// Public version of get_outgoing_syncs(). Guess what it does.
-    pub fn get_all_pending(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
-        let mut db_guard = turtl.db.write().unwrap();
-        let db = match db_guard.as_mut() {
-            Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
-        };
-        db.find("sync_outgoing", "frozen", &vec![String::from("false")])
-    }
-
-    /// Grab all outgoing sync items, in order
+    /// Grab all non-file outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
-            db.find("sync_outgoing", "frozen", &vec![String::from("false")])
+        let syncs = with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
+            SyncRecord::allbut(db, &vec![SyncType::File, SyncType::FileIncoming])
+        }?;
+
+        // stop at our first frozen record! this creates a "block" that must be
+        // cleared before syncing can continue.
+        let mut final_syncs = Vec::with_capacity(syncs.len());
+        for sync in syncs {
+            if sync.frozen { break; }
+            final_syncs.push(sync);
         }
+        Ok(final_syncs)
     }
 
-    /// Delete a sync record from sync_outgoing (like, when we send it to the
-    /// API and it runs successfully...we don't need it sitting around).
+    /// Delete a sync record from sync (like, when we send it to the API and it
+    /// runs successfully...we don't need it sitting around).
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
         let noid = String::from("<no id>");
         debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {:?})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
@@ -116,41 +72,13 @@ impl SyncOutgoing {
         Ok(())
     }
 
-    /// Increment this SyncRecord's errcount. If it's above a magic number, we
-    /// mark the sync as failed, which excludes it from further outgoing syncs
-    /// until it gets manually shaken/removed.
-    fn handle_failed_sync(&self, failure: &SyncRecord) -> TResult<()> {
-        debug!("SyncOutgoing.handle_failed_record() -- handle failure: {:?}", failure);
-        let sync_id = match failure.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return Err(TError::MissingField(format!("SyncOutgoing.handle_failed_record() -- missing `failure.id` field"))),
-        };
-        let sync_record: Option<SyncRecord> = with_db!{ db, self.db, "SyncOutgoing.handle_failed_record()",
-            db.get("sync_outgoing", &sync_id)?
-        };
-        match sync_record {
-            Some(mut rec) => {
-                if rec.errcount > MAX_ALLOWED_FAILURES {
-                    rec.frozen = true;
-                } else {
-                    rec.errcount += 1;
-                }
-                // save our heroic sync record with our mods (errcount/frozen)
-                with_db!{ db, self.db, "SyncOutgoing.handle_failed_record()",
-                    db.save(&rec)?;
-                }
-            }
-            // already deleted? who knows
-            None => {}
-        }
-        Ok(())
-    }
-
     /// Handle each failed sync record, and notify the UI that we have failed
     /// sync items that might need inspection/alerting.
     fn handle_sync_failures(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
         for failure in fail {
-            self.handle_failed_sync(failure)?;
+            with_db!{ db, self.db, "SyncOutgoing.handle_sync_failures()",
+                SyncRecord::handle_failed_sync(db, failure)?;
+            }
         }
         messaging::ui_event("sync:outgoing:failure", fail)
     }
@@ -170,68 +98,38 @@ impl Syncer for SyncOutgoing {
     }
 
     fn run_sync(&mut self) -> TResult<()> {
-        let sync = self.get_outgoing_syncs()?;
-        if sync.len() == 0 { return Ok(()); }
+        // get all our sync records queued to be sent out
+        let syncs = self.get_outgoing_syncs()?;
+        if syncs.len() == 0 { return Ok(()); }
 
-        // create two collections: one for normal data syncs, and one for files
-        let mut syncs: Vec<SyncRecord> = Vec::with_capacity(sync.len());
-        let mut file_syncs: Vec<SyncRecord> = Vec::with_capacity(2);
-        // split our sync records into our normal/file collections
-        for rec in sync {
-            if rec.ty == SyncType::File && rec.action == SyncAction::Add {
-                file_syncs.push(rec);
-            } else {
-                syncs.push(rec);
+        // send our syncs out to the api, and remove and successful records from
+        // our local db
+        info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
+        let syncs_json = jedi::to_val(&syncs)?;
+        let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(syncs_json))?;
+        info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
+
+        // clear out the successful syncs
+        let mut err: TResult<()> = Ok(());
+        for sync in &sync_result.success {
+            let res = self.delete_sync_record(sync);
+            // track a failure (if it occurs), but then just keep deleting.
+            // we don't want to return and have all these sync items re-run
+            // just because one of them failed to delete.
+            match res {
+                Ok(_) => (),
+                Err(_) => if err.is_ok() { err = res },
             }
         }
 
-        // send our "normal" syncs out to the api, and remove and successful
-        // records from our local db
-        if syncs.len() > 0 {
-            info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
-            let syncs_json = jedi::to_val(&syncs)?;
-            let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(syncs_json))?;
-            info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
-
-            // clear out the successful syncs
-            let mut err: TResult<()> = Ok(());
-            for sync in &sync_result.success {
-                let res = self.delete_sync_record(sync);
-                // track a failure (if it occurs), but then just keep deleting.
-                // we don't want to return and have all these sync items re-run
-                // just because one of them failed to delete.
-                match res {
-                    Ok(_) => (),
-                    Err(_) => if err.is_ok() { err = res },
-                }
-            }
-
-            if sync_result.failures.len() > 0 {
-                self.handle_sync_failures(&sync_result.failures)?;
-            }
-
-            // if we did indeed get an error while deleting our sync records,
-            // send the first error we got back. obviously there may be more
-            // than one, but we can only do so much here to maintain resilience.
-            err?;
+        if sync_result.failures.len() > 0 {
+            self.handle_sync_failures(&sync_result.failures)?;
         }
 
-        if file_syncs.len() > 0 {
-            for file_sync in file_syncs {
-                let mut fsync: FileSync = Default::default();
-                let note_id = &file_sync.item_id;
-                fsync.id = Some(note_id.clone());
-                fsync.ty = FileSyncType::Outgoing;
-                with_db!{ db, self.db, "SyncOutgoing.run_sync()",
-                    info!("SyncOutgoing.run_sync() -- processing outgoing file sync for note {}", file_sync.item_id);
-                    // move the record from sync_outgoing to file_sync
-                    fsync.db_save(db)?;
-                    file_sync.db_delete(db)?;
-                }
-            }
-        }
-
-        Ok(())
+        // if we did indeed get an error while deleting our sync records,
+        // send the first error we got back. obviously there may be more
+        // than one, but we can only do so much here to maintain resilience.
+        err
     }
 }
 
