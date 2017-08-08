@@ -1,6 +1,5 @@
 use ::std::collections::HashMap;
 use ::jedi::{self, Value, Serialize};
-
 use ::error::{TResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
@@ -8,13 +7,14 @@ use ::models::model::Model;
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncAction, SyncRecord};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util;
 use ::util::event::Emitter;
 use ::sync::sync_model::{self, MemorySaver};
 use ::sync::incoming::SyncIncoming;
+use ::messaging;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
 
@@ -52,7 +52,17 @@ protected! {
 }
 
 make_storable!(User, "users");
-make_basic_sync_model!(User);
+make_basic_sync_model!{ User,
+    // handle change-password syncs
+    fn skip_incoming_sync(&self, sync_item: &SyncRecord) -> TResult<bool> {
+        if sync_item.action == SyncAction::ChangePassword {
+            messaging::app_event("user:change-password:logout", &jedi::obj())?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
 
 impl Keyfinder for User {}
 

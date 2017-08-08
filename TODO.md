@@ -1,6 +1,5 @@
 v0.7:
 - user
-  - NOTE: change password requires connection
   - handle change-password sync record (log out!)
   - notify UI when logged in/logged out
 - invites
@@ -20,6 +19,9 @@ v0.7:
 - premium
 
 later:
+- document API
+  - dispatch endpoints: expected responses, possible errors
+  - ui events that can fire (and associated data)
 - MsgPack for core <--> client comm
   - https://github.com/3Hren/msgpack-rust
   - https://github.com/kawanet/msgpack-lite
@@ -30,7 +32,5 @@ later:
   - encrypting and decrypting BOTH consume a model and return the new type
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
-- implement enum for sync types (instead of "note", "board", etc)
-- update dumpy/storage to use <T: DeserializeOwned> instead of passing Value
 - investigate more stateless way of syncing files?
 

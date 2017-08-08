@@ -11,8 +11,8 @@
 use ::jedi::{self, Value};
 
 use ::error::{TResult, TError};
-use ::util;
 use ::config;
+use ::util;
 use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
@@ -26,7 +26,7 @@ use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
 use ::sync::sync_model;
-use ::messaging::Event;
+use ::messaging::{self, Event};
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -265,6 +265,11 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
             let yesno: bool = jedi::from_val(data)?;
             let mut connguard = turtl.connected.write().unwrap();
             *connguard = yesno;
+        }
+        "user:change-password:logout" => {
+            messaging::ui_event("user:change-password:logout", &jedi::obj())?;
+            util::sleep(3000);
+            turtl.logout()?;
         }
         _ => {
             warn!("dispatch_event() -- encountered unknown event: {}", cmd);

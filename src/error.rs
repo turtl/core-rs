@@ -41,6 +41,10 @@ quick_error! {
             description(str)
             display("not found: {}", str)
         }
+        ConnectionRequired {
+            description("connection required")
+            display("connection required")
+        }
         Crypto(err: CryptoError) {
             cause(err)
             description("crypto error")

@@ -16,6 +16,9 @@ use ::models::sync_record::{SyncAction, SyncRecord};
 macro_rules! make_sync_fns {
     ($n:ty) => {
         fn incoming(&self, db: &mut ::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
+            if self.skip_incoming_sync(&sync_item)? {
+                return Ok(());
+            }
             match sync_item.action {
                 ::models::sync_record::SyncAction::Delete => {
                     let mut model: $n = Default::default();
@@ -97,6 +100,13 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Allows a model to save itself to the outgoing sync database (or perform
     /// any custom needed actual in addition/instead).
     fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
+
+    /// Gives us the option to skip an incoming sync. Some sync records are just
+    /// indicators for something happening as opposed to data changes (for
+    /// instance the "change-password" sync action).
+    fn skip_incoming_sync(&self, _sync_item: &SyncRecord) -> TResult<bool> {
+        Ok(false)
+    }
 
     /// A default save function that takes a db/model and saves it.
     fn db_save(&self, db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {

@@ -223,6 +223,7 @@ impl Turtl {
 
     /// Change the current user's username/password
     pub fn change_user_password(&self, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
+        self.assert_connected()?;
         let mut user_guard = self.user.write().unwrap();
         user_guard.change_password(self, current_username, current_password, new_username, new_password)?;
         drop(user_guard);
@@ -232,9 +233,19 @@ impl Turtl {
 
     /// Delete the current user's account (if they are logged in derr)
     pub fn delete_account(&self) -> TResult<()> {
+        self.assert_connected()?;
         User::delete_account(self)?;
         self.wipe_user_data()?;
         Ok(())
+    }
+
+    /// Returns an Err value if we aren't connected.
+    pub fn assert_connected(&self) -> TResult<()> {
+        if !(*self.connected.read().unwrap()) {
+            Err(TError::ConnectionRequired)
+        } else {
+            Ok(())
+        }
     }
 
     /// Start our sync system. This should happen after a user is logged in, and
@@ -275,6 +286,10 @@ impl Turtl {
             }
         }
         *guard = None;
+
+        // set connected to false on sync shutdown
+        let mut connguard = self.connected.write().unwrap();
+        *connguard = false;
         Ok(())
     }
 
