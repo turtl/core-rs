@@ -105,9 +105,23 @@ impl Turtl {
         // make sure we have a client id
         storage::setup_client_id(kv.clone())?;
 
+        let user = User::new();
+        user.bind("login", |obj| {
+            match messaging::ui_event("user:login", obj) {
+                Ok(_) => {},
+                Err(e) => error!("Turtl::new() -- user.login -- error sending UI login event: {}", e),
+            }
+        }, "turtl:user:login");
+        user.bind("logout", |obj| {
+            match messaging::ui_event("user:logout", obj) {
+                Ok(_) => {},
+                Err(e) => error!("Turtl::new() -- user.logout -- error sending UI logout event: {}", e),
+            }
+        }, "turtl:user:logout");
+
         let turtl = Turtl {
             events: event::EventEmitter::new(),
-            user: RwLock::new(User::new()),
+            user: RwLock::new(user),
             user_id: RwLock::new(None),
             profile: RwLock::new(Profile::new()),
             api: api,

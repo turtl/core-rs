@@ -1,7 +1,4 @@
 v0.7:
-- user
-  - handle change-password sync record (log out!)
-  - notify UI when logged in/logged out
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
