@@ -264,6 +264,8 @@ mod tests {
         assert_eq!(storage.kv_get("get a job").unwrap(), None);
         storage.kv_set("get a job", &String::from("no way")).unwrap();
         assert_eq!(storage.kv_get("get a job").unwrap().unwrap(), "no way");
+        storage.kv_delete("get a job").unwrap();
+        assert_eq!(storage.kv_get("get a job").unwrap(), None);
     }
 }
 
