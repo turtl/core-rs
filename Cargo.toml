@@ -5,6 +5,7 @@ members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi", "migrate"
 name = "turtl_core"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+license = "GPL-3.0"
 
 [lib]
 name = "turtl_core"
