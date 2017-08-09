@@ -1,8 +1,13 @@
 v0.7:
+- permissions
+  - implement shared module from server
+  - build permissions interface ala js (maybe in user object)
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
+- files
+  - detach file (delete)
 - bookmarker
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate

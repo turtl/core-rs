@@ -3,3 +3,4 @@ target
 config.yaml
 sess.vim
 /_tests
+node_modules
