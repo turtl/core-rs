@@ -11,6 +11,7 @@ extern crate hyper;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
+extern crate lib_permissions;
 #[macro_use]
 extern crate log;
 //extern crate migrate;
