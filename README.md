@@ -9,6 +9,7 @@ standard across all platforms. The idea is, if it *can* go in the core, it
 - Talking to the server/syncing data
 - Encryption/Decryption of data
 - In-memory storage of profile data
+- Permissions checking
 - Searching of notes
 - Sharing/Collaboration handling
 - Local storage
@@ -23,4 +24,10 @@ is not yet public (yes, a fond farewell to Lisp). Stay tuned!
 
 This project is unfinished and *alpha* status. I won't be responding to issues
 or bug reports on it yet. Use at your own risk.
+
+## Building
+
+```bash
+npm install     # only needed the first time you build
+make
 
