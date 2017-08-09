@@ -28,6 +28,6 @@ or bug reports on it yet. Use at your own risk.
 ## Building
 
 ```bash
-npm install     # only needed the first time you build
 make
+```
 
