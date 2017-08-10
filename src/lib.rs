@@ -1,3 +1,5 @@
+#![recursion_limit="128"]
+
 extern crate carrier;
 extern crate clouseau;
 extern crate config;

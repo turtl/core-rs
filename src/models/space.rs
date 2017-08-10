@@ -1,4 +1,4 @@
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::board::Board;
 use ::models::note::Note;
@@ -14,7 +14,8 @@ pub struct SpaceMember {
     /// Member id
     pub id: u64,
     /// Member's user_id
-    pub user_id: u64,
+    #[serde(with = "::util::ser::int_converter")]
+    pub user_id: String,
     /// The space_id this member belongs to
     pub space_id: String,
     /// The email of this member
@@ -119,6 +120,53 @@ impl MemorySaver for Space {
         });
 
         Ok(())
+    }
+}
+
+impl Space {
+    /// Given a Turtl, a space_id, and a Permission, check if the current user
+    /// has the rights to that permission.
+    pub fn permission_check(turtl: &Turtl, space_id: &String, permission: &Permission) -> TResult<()> {
+        let user_id = {
+            let isengard = turtl.user_id.read().unwrap();
+            match *isengard {
+                Some(ref id) => id.clone(),
+                None => return Err(TError::MissingField(String::from("Space.permissions_check() -- turtl.user_id is None (not logged in??)"))),
+            }
+        };
+
+        let err = Err(TError::PermissionDenied(format!("Space::permission_check() -- user {} cannot {:?} on space {}", user_id, permission, space_id)));
+        let profile_guard = turtl.profile.read().unwrap();
+        let matched = profile_guard.spaces.iter()
+            .filter(|space| space.id() == Some(space_id))
+            .collect::<Vec<_>>();
+
+        // if no spaces in our profile match the given id, we definitely do not
+        // have access
+        if matched.len() == 0 { return err; }
+
+        let space = matched[0];
+        match space.can_i(&user_id, permission)? {
+            true => Ok(()),
+            false => err,
+        }
+    }
+
+    /// Checks if a user has the given permission on the current space
+    pub fn can_i(&self, user_id: &String, permission: &Permission) -> TResult<bool> {
+        // if we're the owner, we can do anything
+        if user_id == &self.user_id { return Ok(true); }
+
+        let members = &self.members;
+        let me_matches = members.iter()
+            .filter(|member| &member.user_id == user_id)
+            .collect::<Vec<_>>();
+
+        // i'm NOT a member, bob. DON'T look at my face.
+        if me_matches.len() == 0 { return Ok(false); }
+
+        let me = me_matches[0];
+        Ok(me.role.can(&permission))
     }
 }
 

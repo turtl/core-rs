@@ -10,6 +10,7 @@ use ::dumpy::DError;
 use ::crypto::CryptoError;
 
 quick_error! {
+
     #[derive(Debug)]
     /// Turtl's main error object.
     pub enum TError {
@@ -17,29 +18,33 @@ quick_error! {
             description(err.description())
             display("error: {}", err)
         }
-        Msg(str: String) {
-            description(str)
-            display("error: {}", str)
+        Msg(msg: String) {
+            description(msg)
+            display("error: {}", msg)
         }
-        BadValue(str: String) {
-            description(str)
-            display("bad value: {}", str)
+        BadValue(msg: String) {
+            description(msg)
+            display("bad value: {}", msg)
         }
-        MissingField(str: String) {
-            description(str)
-            display("missing field: {}", str)
+        MissingField(msg: String) {
+            description(msg)
+            display("missing field: {}", msg)
         }
-        MissingData(str: String) {
-            description(str)
-            display("missing data: {}", str)
+        MissingData(msg: String) {
+            description(msg)
+            display("missing data: {}", msg)
         }
-        MissingCommand(str: String) {
-            description(str)
-            display("unknown command: {}", str)
+        MissingCommand(msg: String) {
+            description(msg)
+            display("unknown command: {}", msg)
         }
-        NotFound(str: String) {
-            description(str)
-            display("not found: {}", str)
+        NotFound(msg: String) {
+            description(msg)
+            display("not found: {}", msg)
+        }
+        PermissionDenied(msg: String) {
+            description(msg)
+            display("permission denied: {}", msg)
         }
         ConnectionRequired {
             description("connection required")

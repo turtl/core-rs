@@ -27,6 +27,8 @@ use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
 use ::sync::sync_model;
 use ::messaging::{self, Event};
+use ::lib_permissions::Permission;
+use ::models::storable::Storable;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -135,19 +137,42 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 SyncAction::Add | SyncAction::Edit => {
                     let val = match ty {
                         SyncType::User => {
+                            if action != SyncAction::Edit {
+                                return Err(TError::BadValue(format!("dispatch: {} -- cannot `add` item of type {:?}", cmd, ty)));
+                            }
                             let mut model: User = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
                         }
                         SyncType::Space => {
                             let mut model: Space = jedi::get(&["4"], &data)?;
+                            match &action {
+                                &SyncAction::Edit => {
+                                    let fake_id = String::from("<no id>");
+                                    let space_id = model.id().unwrap_or(&fake_id);
+                                    Space::permission_check(turtl, space_id, &Permission::EditSpace)?;
+                                }
+                                _ => {}
+                            };
                             sync_model::save_model(action, turtl, &mut model, false)?
                         }
                         SyncType::Board => {
                             let mut model: Board = jedi::get(&["4"], &data)?;
+                            let permission = match &action {
+                                &SyncAction::Add => Permission::AddBoard,
+                                &SyncAction::Edit => Permission::EditBoard,
+                                _ => return Err(TError::BadValue(format!("dispatch: {} -- couldn't find permission for {:?}/{:?}", cmd, ty, action))),
+                            };
+                            Space::permission_check(turtl, &model.space_id, &permission)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
                         }
                         SyncType::Note => {
                             let mut note: Note = jedi::get(&["4"], &data)?;
+                            let permission = match &action {
+                                &SyncAction::Add => Permission::AddNote,
+                                &SyncAction::Edit => Permission::EditNote,
+                                _ => return Err(TError::BadValue(format!("dispatch: {} -- couldn't find permission for {:?}/{:?}", cmd, ty, action))),
+                            };
+                            Space::permission_check(turtl, &note.space_id, &permission)?;
                             // always set to false. this is a public field that
                             // we let the server manage for us
                             note.has_file = false;
@@ -161,14 +186,6 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             }
                             note_data
                         }
-                        SyncType::Invite => {
-                            let model: Invite = jedi::get(&["4"], &data)?;
-                            // invites require a connection and don't go through
-                            // the sync system at all, so we go through the
-                            // model directly instead of sync_model.
-                            drop(model);
-                            Value::Null
-                        }
                         _ => {
                             return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
                         }
@@ -177,23 +194,40 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 },
                 SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
-                    match ty {
-                        SyncType::User => {
-                            sync_model::delete_model::<User>(turtl, &id, false)?;
+                    macro_rules! get_model {
+                        ($ty:ty, $table:expr, $id:expr) => {
+                            {
+                                let mut db_guard = turtl.db.write().unwrap();
+                                let db = match db_guard.as_mut() {
+                                    Some(x) => x,
+                                    None => return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `db` object", cmd))),
+                                };
+                                match db.get::<$ty>($table, $id)? {
+                                    Some(x) => x,
+                                    None => return Err(TError::NotFound(format!("dispatch: {} -- that {:?} model wasn't found", cmd, ty))),
+                                }
+                            }
                         }
+                    }
+                    match ty {
                         SyncType::Space => {
+                            Space::permission_check(turtl, &id, &Permission::DeleteSpace)?;
                             sync_model::delete_model::<Space>(turtl, &id, false)?;
                         }
                         SyncType::Board => {
+                            let model = get_model!(Board, Board::tablename(), &id);
+                            Space::permission_check(turtl, &model.space_id, &Permission::DeleteBoard)?;
                             sync_model::delete_model::<Board>(turtl, &id, false)?;
                         }
                         SyncType::Note => {
+                            let model = get_model!(Note, Note::tablename(), &id);
+                            Space::permission_check(turtl, &model.space_id, &Permission::DeleteNote)?;
                             sync_model::delete_model::<Note>(turtl, &id, false)?;
                         }
-                        SyncType::Invite => {
-                            sync_model::delete_model::<Invite>(turtl, &id, false)?;
-                        }
                         SyncType::File => {
+                            // TODO
+                            let model = get_model!(Note, Note::tablename(), &id);
+                            Space::permission_check(turtl, &model.space_id, &Permission::EditNote)?;
                         }
                         _ => {
                             return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
