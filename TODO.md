@@ -2,12 +2,23 @@ v0.7:
 - permissions
   - build permissions interface ala js (maybe in user object)
 - move spaces:
+  - permissions for delete/add item
   - board
   - note
 - invites
+  - you must do the permission! drew!
+    - add invite
+    - edit invite
+    - delete invite
+  - dispatch: load roles/permissions
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
+- space
+  - dont forget perms
+  - set owner
+  - edit member
+  - delete member
 - files
   - detach file (delete)
 - bookmarker
