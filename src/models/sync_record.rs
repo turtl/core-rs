@@ -17,6 +17,8 @@ pub enum SyncAction {
     Edit,
     #[serde(rename = "delete")]
     Delete,
+    #[serde(rename = "move-space")]
+    MoveSpace,
     #[serde(rename = "change-password")]
     ChangePassword,
 }

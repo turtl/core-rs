@@ -235,6 +235,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     }
                     Ok(jedi::obj())
                 },
+                SyncAction::MoveSpace => {
+                    Ok(jedi::obj())
+                },
                 _ => {
                     warn!("dispatch: {} -- got an unexpected sync action: {:?} (doing nothing, i guess)", cmd, action);
                     Ok(jedi::obj())

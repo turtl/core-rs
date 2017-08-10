@@ -1,6 +1,9 @@
 v0.7:
 - permissions
   - build permissions interface ala js (maybe in user object)
+- move spaces:
+  - board
+  - note
 - invites
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
