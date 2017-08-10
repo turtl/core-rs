@@ -1,6 +1,5 @@
 v0.7:
 - permissions
-  - implement shared module from server
   - build permissions interface ala js (maybe in user object)
 - invites
   - copy invite system from js

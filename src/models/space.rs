@@ -2,10 +2,37 @@ use ::error::TResult;
 use ::models::model::Model;
 use ::models::board::Board;
 use ::models::note::Note;
+use ::models::invite::Invite;
 use ::models::protected::{Keyfinder, Protected};
 use ::sync::sync_model::{self, MemorySaver};
 use ::turtl::Turtl;
+use ::lib_permissions::{Role, Permission};
 
+/// Holds information about a member of a space.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SpaceMember {
+    /// Member id
+    pub id: u64,
+    /// Member's user_id
+    pub user_id: u64,
+    /// The space_id this member belongs to
+    pub space_id: String,
+    /// The email of this member
+    pub username: String,
+    /// The role of this member
+    role: Role,
+    /// The permissions this member has
+    #[serde(default)]
+    permissions: Vec<Permission>,
+    /// When the membership was created
+    created: String,
+    /// When the membership was last updated
+    updated: String,
+}
+
+/// Defines a Space, which is a container for notes and boards. It also acts as
+/// an organization of sorts, allowing multiple members to access the space,
+/// each with different permission levels.
 protected! {
     #[derive(Serialize, Deserialize)]
     pub struct Space {
@@ -13,8 +40,15 @@ protected! {
         #[protected_field(public)]
         pub user_id: String,
 
-        // members?
-        // invites?
+        // NOTE: with members/spaces, we don't actually have them listed as
+        // public/private because we don't want them gumming up the local DB
+        // with their nonsense (the API ignores them anyway), but they are not
+        // skipped because we do want to be able to send them to the UI as part
+        // of the space.
+        #[serde(default)]
+        pub members: Vec<SpaceMember>,
+        #[serde(default)]
+        pub invites: Vec<Invite>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]

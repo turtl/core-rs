@@ -108,7 +108,7 @@ impl Syncer for SyncOutgoing {
         info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
         let syncs_json = jedi::to_val(&syncs)?;
         let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(syncs_json))?;
-        info!("SyncOutgoing.run_sync() -- got {} successes, {} failed syncs", sync_result.success.len(), sync_result.failures.len());
+        info!("SyncOutgoing.run_sync() -- got {} successes, {} failed, {} blocked syncs", sync_result.success.len(), sync_result.failures.len(), sync_result.blocked.len());
 
         // clear out the successful syncs
         let mut err: TResult<()> = Ok(());
@@ -353,6 +353,190 @@ mod tests {
         }"#);
         let res: SyncResponse = jedi::parse(&typical_mac_user).unwrap();
         assert_eq!(res.success.len(), 10);
+        assert_eq!(res.failures.len(), 0);
+        assert_eq!(res.blocked.len(), 0);
+        let typical_mac_user = String::from(r#"{
+            "success": [],
+            "failures": [{
+                "action": "add",
+                "body": null,
+                "data": {
+                    "body": "AAYBAAwtd8kVjFeP5+9mCNSsLVvprYrjA6EUbcNJxzdJO9SksE80N3NcUQOGiDX+isQo2NM=",
+                    "id": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000",
+                    "user_id": 363
+                },
+                "errcount": 1,
+                "frozen": false,
+                "id": "015dc9bc9adc342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180003",
+                "item_id": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000",
+                "type": "space",
+                "user_id": 363,
+                "_id": 1,
+                "error": {
+                    "code": 500,
+                    "msg": "duplicate key value violates unique constraint \"spaces_pkey\""
+                }
+            }],
+            "blocked": [{
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAwkH+SD3EWVhKq7fT8wpI8puWSdV26KppU43havHXqCsHIsTdqBO0iZsgKMBTx9NctkuHG+mDv7zsmTvoiuGnMelyhD7t+FG+V/5sQzso/Qcg==",
+                        "id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180005",
+                        "item_id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180004",
+                        "keys": [],
+                        "type": "space",
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180006",
+                    "item_id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180005",
+                    "type": "keychain",
+                    "user_id": 363,
+                    "_id": 2
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAw+U8j8awrJGG4pXK6WJk3Xymojk5XEtYG/aAavoRHoUkobFbrvAB+1p00dxg==",
+                        "id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180004",
+                        "keys": [],
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180007",
+                    "item_id": "015dc9bc9add342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180004",
+                    "type": "space",
+                    "user_id": 363,
+                    "_id": 3
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAzTDoznCixb4xQzhXmht5N7oFdqXkibz1hN62dvGC2uLjf4hqEVYmrj0OIrqvmqfHgzTjKV5M2ZvpiyukYdQgJuS5J53ikNluTDU6eVqkBJ3Q==",
+                        "id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180009",
+                        "item_id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180008",
+                        "keys": [],
+                        "type": "space",
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000a",
+                    "item_id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180009",
+                    "type": "keychain",
+                    "user_id": 363,
+                    "_id": 4
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAzqPb5iKDAo+nDFfWsj+enQCsnV+iJJJTsCl48ykqZhspfkeKkwzFqfEm++eA==",
+                        "id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180008",
+                        "keys": [],
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9adf342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000b",
+                    "item_id": "015dc9bc9ade342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180008",
+                    "type": "space",
+                    "user_id": 363,
+                    "_id": 5
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAwwavtDqqw/NKIAqE+YP1jyAJGRniVLJm3yfl5eaq7rnkPm/pX7DpfEYI5RcNub+hBQ",
+                        "id": "015dc9bc9ae0342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000c",
+                        "keys": [{
+                            "k": "AAYBAAyy0lx0AWjYJZ61DoLUTSTM7QURhOv7G1oH3z+96uI5l0ydV25Uu+IPs8gdzRnISyKrkJsHUyDh5coUzPg=",
+                            "s": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000"
+                        }],
+                        "space_id": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000",
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ae0342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000d",
+                    "item_id": "015dc9bc9ae0342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000c",
+                    "type": "board",
+                    "user_id": 363,
+                    "_id": 6
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAyVYC/kqjOEQYiMrt4lxtyc6ysra2LpMz8uR/OukNnhgt6AZuCxxTrGxVKbj0sh",
+                        "id": "015dc9bc9ae1342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000e",
+                        "keys": [{
+                            "k": "AAYBAAy1oUTVoq/uZBfI/nl5DrR1lD/koekp8kNJUpAPb13kKx8nBFUyHx0eQMx1nx3payGHTl6uLwl06vshqaU=",
+                            "s": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000"
+                        }],
+                        "space_id": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000",
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ae1342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000f",
+                    "item_id": "015dc9bc9ae1342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a18000e",
+                    "type": "board",
+                    "user_id": 363,
+                    "_id": 7
+                },
+                {
+                    "action": "add",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAxMnHpeu7CPTPXUi6kd8Sjha3+LqXfl3W1Ya5PZrDHmfTtk21mY+RFB1SQKRitT+iiJ",
+                        "id": "015dc9bc9ae2342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180010",
+                        "keys": [{
+                            "k": "AAYBAAyEmWq61v/oivmzrVo+IWVod6fJOfYkazjeTvgUz+L9VlfD0c8Lj6wDb6mw9zacAxclzMNxtHwaVdtAl9o=",
+                            "s": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000"
+                        }],
+                        "space_id": "015dc9bc9ada342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180000",
+                        "user_id": 363
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ae2342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180011",
+                    "item_id": "015dc9bc9ae2342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180010",
+                    "type": "board",
+                    "user_id": 363,
+                    "_id": 8
+                },
+                {
+                    "action": "edit",
+                    "body": null,
+                    "data": {
+                        "body": "AAYBAAzdp+SSxPttlwfVuNLCR+KHpFJ85k1mzsr7LrZLVejOOuf20I8GnQrXIerIh4JnnXybZ4uYHePIP3NtZl36Q41MJs8jkvcd7ItriWPEcjRWY8Gr8QB2svT7ATDizzKQzSqLrh47Yng2IUjNDXKcUHqGt1R7bIJVtbt19DCjBjNcj0Q6b+DUxY5xbcHG+EY=",
+                        "id": "363",
+                        "keys": [],
+                        "pubkey": "NO/1u3IcXViFSOz4EF94uuLfVd8MoFlIZFBX5tkdqmg=",
+                        "storage_mb": 100,
+                        "username": "slippyslappy@turtlapp.com"
+                    },
+                    "errcount": 0,
+                    "frozen": false,
+                    "id": "015dc9bc9ae3342450f5263739fb6eeb1b93fa049946e0ab1a231cd8c81dd5193de3695b2a180012",
+                    "item_id": "363",
+                    "type": "user",
+                    "user_id": 363,
+                    "_id": 9
+                }
+            ]
+        }"#);
+        let res: SyncResponse = jedi::parse(&typical_mac_user).unwrap();
+        assert_eq!(res.success.len(), 0);
+        assert_eq!(res.failures.len(), 1);
+        assert_eq!(res.blocked.len(), 8);
     }
 }
 
