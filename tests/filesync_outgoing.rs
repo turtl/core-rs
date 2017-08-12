@@ -75,11 +75,23 @@ mod tests {
         send(msg.as_str());
         let msg = recv("8");
         let parsed: Value = jedi::parse(&msg).unwrap();
+        let note_id: String = jedi::get(&["d", "id"], &parsed).unwrap();
         if jedi::get::<i64>(&["e"], &parsed).unwrap() != 0 {
             panic!("bad response from profile:sync:model -- {}", msg);
         }
 
         wait_on("sync:file:uploaded");
+
+        let msg = jedi::stringify(&json!([
+            "9",
+            "profile:sync:model",
+            "delete",
+            "file",
+            {"id": note_id},
+        ])).unwrap();
+        send(msg.as_str());
+        let msg = recv("9");
+        assert_eq!(msg, r#"{"e":0,"d":{}}"#);
 
         sleep(1000);
         let msg = format!(r#"["3","user:delete-account"]"#);

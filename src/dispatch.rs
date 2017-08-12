@@ -17,6 +17,7 @@ use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
 use ::models::model::Model;
+use ::models::protected::Protected;
 use ::models::user::User;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -194,19 +195,17 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 },
                 SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
-                    macro_rules! get_model {
-                        ($ty:ty, $table:expr, $id:expr) => {
-                            {
-                                let mut db_guard = turtl.db.write().unwrap();
-                                let db = match db_guard.as_mut() {
-                                    Some(x) => x,
-                                    None => return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `db` object", cmd))),
-                                };
-                                match db.get::<$ty>($table, $id)? {
-                                    Some(x) => x,
-                                    None => return Err(TError::NotFound(format!("dispatch: {} -- that {:?} model wasn't found", cmd, ty))),
-                                }
-                            }
+                    fn get_model<T>(turtl: &Turtl, id: &String, cmd: &str) -> TResult<T>
+                        where T: Protected + Storable
+                    {
+                        let mut db_guard = turtl.db.write().unwrap();
+                        let db = match db_guard.as_mut() {
+                            Some(x) => x,
+                            None => return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `db` object", cmd))),
+                        };
+                        match db.get::<T>(T::tablename(), id)? {
+                            Some(x) => Ok(x),
+                            None => return Err(TError::NotFound(format!("dispatch: {} -- that {} model wasn't found", cmd, T::tablename()))),
                         }
                     }
                     match ty {
@@ -215,19 +214,19 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             sync_model::delete_model::<Space>(turtl, &id, false)?;
                         }
                         SyncType::Board => {
-                            let model = get_model!(Board, Board::tablename(), &id);
+                            let model = get_model::<Board>(turtl, &id, cmd)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::DeleteBoard)?;
                             sync_model::delete_model::<Board>(turtl, &id, false)?;
                         }
                         SyncType::Note => {
-                            let model = get_model!(Note, Note::tablename(), &id);
+                            let model = get_model::<Note>(turtl, &id, cmd)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::DeleteNote)?;
                             sync_model::delete_model::<Note>(turtl, &id, false)?;
                         }
                         SyncType::File => {
-                            // TODO
-                            let model = get_model!(Note, Note::tablename(), &id);
+                            let model = get_model::<Note>(turtl, &id, cmd)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::EditNote)?;
+                            sync_model::delete_model::<FileData>(turtl, &id, false)?;
                         }
                         _ => {
                             return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));

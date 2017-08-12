@@ -1,10 +1,15 @@
 v0.7:
-- permissions
-  - build permissions interface ala js (maybe in user object)
-- move spaces:
-  - permissions for delete/add item
-  - board
-  - note
+- space
+  - dont forget perms
+  - set owner
+  - edit member
+  - delete member
+  - move spaces:
+    - permissions for delete/add item
+    - board
+    - note
+- files
+  - detach file (delete)
 - invites
   - you must do the permission! drew!
     - add invite
@@ -14,13 +19,6 @@ v0.7:
   - copy invite system from js
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
-- space
-  - dont forget perms
-  - set owner
-  - edit member
-  - delete member
-- files
-  - detach file (delete)
 - bookmarker
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate

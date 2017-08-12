@@ -5,7 +5,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
-use ::sync::sync_model::SyncModel;
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::std::mem;
 use ::crypto;
@@ -112,11 +112,24 @@ make_basic_sync_model!{ FileData,
 }
 
 impl Keyfinder for FileData {}
+impl MemorySaver for FileData {
+    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
+        // unwrap is ok. we will always have an id. hopefully. no, but we will.
+        let note_id = self.id().unwrap().clone();
+        let mut notes = turtl.load_notes(&vec![note_id.clone()])?;
+        if notes.len() == 0 { return Ok(()); }
+        let note = &mut notes[0];
+        note.has_file = false;
+        note.file = None;
+        sync_model::save_model(SyncAction::Edit, turtl, note, true)?;
+        Ok(())
+    }
+}
 
 impl FileData {
     /// Builds a standard filename
     fn filebuilder(user_id: Option<&String>, note_id: Option<&String>) -> String {
-        // wildcard, btiches. YEEEEEEEEHAWW!!!
+        // wildcard, bitches. YEEEEEEEEHAWW!!!
         let wildcard = String::from("*");
         format!(
             "u_{}.n_{}.enc",

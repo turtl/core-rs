@@ -81,6 +81,21 @@ make_basic_sync_model!{ Note,
     }
 }
 
+impl Note {
+    fn clear_files(&self) -> TResult<()> {
+        // delete all local file(s) associated with this note
+        let note_id = match self.id() {
+            Some(x) => x.clone(),
+            None => return Err(TError::MissingField(String::from("Note.clear_files() -- missing `self.id`, cannot remove local files"))),
+        };
+        let files = FileData::file_finder_all(Some(&self.user_id), Some(&note_id))?;
+        for file in files {
+            fs::remove_file(&file)?;
+        }
+        Ok(())
+    }
+}
+
 impl Keyfinder for Note {
     fn get_key_search(&self, turtl: &Turtl) -> TResult<Keychain> {
         let mut keychain = Keychain::new();
@@ -178,15 +193,7 @@ impl MemorySaver for Note {
             None => {},
         };
 
-        // delete all local file(s) associated with this note
-        let note_id = match self.id() {
-            Some(x) => x.clone(),
-            None => return Err(TError::MissingField(String::from("Note.delete_from_mem() -- missing `self.id`, cannot remove local files"))),
-        };
-        let files = FileData::file_finder_all(Some(&self.user_id), Some(&note_id))?;
-        for file in files {
-            fs::remove_file(&file)?;
-        }
+        self.clear_files()?;
         Ok(())
     }
 }
