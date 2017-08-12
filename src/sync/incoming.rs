@@ -169,7 +169,10 @@ impl SyncIncoming {
                 // are we ignoring this sync?
                 match rec.id() {
                     Some(id) => {
-                        if ignored.contains(id) { continue; }
+                        if ignored.contains(id) {
+                            debug!("SyncIncoming.update_local_db_from_api_sync() -- ignoring {}", id);
+                            continue;
+                        }
                     }
                     None => {}
                 }

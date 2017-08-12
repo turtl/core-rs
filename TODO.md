@@ -11,8 +11,6 @@ v0.7:
     - permissions for delete/add item
     - board
     - note
-- files
-  - detach file (delete)
 - invites
   - you must do the permission! drew!
     - add invite
