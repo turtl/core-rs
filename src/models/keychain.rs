@@ -5,7 +5,7 @@ use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::SyncAction;
-use ::sync::sync_model::{self, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 
 /// Used as an easy object to reference other keys
@@ -81,8 +81,7 @@ protected! {
 }
 
 make_storable!(KeychainEntry, "keychain");
-make_basic_sync_model!(KeychainEntry);
-
+impl SyncModel for KeychainEntry {}
 impl Keyfinder for KeychainEntry {}
 impl MemorySaver for KeychainEntry {}
 

@@ -160,12 +160,12 @@ impl SyncIncoming {
         let ignored = self.get_ignored()?;
 
         // destructure our response
-        let SyncResponse { sync_id, records } = syncdata;
+        let SyncResponse { sync_id, mut records } = syncdata;
 
         with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
             // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
-            for rec in records {
+            for rec in &mut records {
                 // are we ignoring this sync?
                 match rec.id() {
                     Some(id) => {
@@ -183,6 +183,27 @@ impl SyncIncoming {
             db.conn.execute("COMMIT TRANSACTION", &[])?;
         }
 
+        for sync_record in records {
+            // let the app know we have an incoming sync. the purpose of this is
+            // mainly to run MemorySaver::save_to_mem/delete_from_mem on the
+            // model that gots synced. since those require access to the Turtl
+            // object, and we don't have access here, we need to pass a message
+            // to the dispatch to tell it to run the mem saver on this item.
+            //
+            // NOTE: we don't want to run this inside of run_sync_item for two
+            // reasons:
+            //  - if ANY of the above items fails to sync, the entire
+            //    transaction is rolled back. this means it's possible that we
+            //    would have called memsaver on an item that didn't actually end
+            //    up changing (SO embarassing...)
+            //  - the DB is locked during the entire loop above, and if the
+            //    memsaver uses the DB at all it will just block until the loop
+            //    is over.
+            messaging::app_event("sync:incoming", &sync_record)?;
+            // let the ui know we got a sync!
+            messaging::ui_event("sync:incoming", &sync_record)?;
+        }
+
         // clear out the sync ignore list
         match self.clear_ignored() {
             Ok(_) => {},
@@ -193,7 +214,7 @@ impl SyncIncoming {
     }
 
     /// Sync an individual incoming sync item to our DB.
-    fn run_sync_item(&self, db: &mut Storage, sync_item: SyncRecord) -> TResult<()> {
+    fn run_sync_item(&self, db: &mut Storage, sync_item: &mut SyncRecord) -> TResult<()> {
         // check if we have missing data, and if so, if it's on purpose
         if sync_item.data.is_none() {
             let missing = match sync_item.missing {
@@ -210,7 +231,6 @@ impl SyncIncoming {
 
         // send our sync item off to each type's respective handler. these are
         // defined by the SyncModel (sync/sync_model.rs).
-        let sync_clone = sync_item.clone_shallow();
         match sync_item.ty {
             SyncType::User => self.handlers.user.incoming(db, sync_item),
             SyncType::Keychain => self.handlers.keychain.incoming(db, sync_item),
@@ -221,8 +241,6 @@ impl SyncIncoming {
             SyncType::Invite => self.handlers.invite.incoming(db, sync_item),
         }?;
 
-        // let the ui know we got a sync!
-        messaging::ui_event("sync:incoming", &sync_clone)?;
         Ok(())
     }
 }

@@ -67,7 +67,7 @@ protected! {
 }
 
 make_storable!(FileData, "files");
-make_basic_sync_model!{ FileData,
+impl SyncModel for FileData {
     // this one is weird. we detect if this is saving from an incoming sync
     // (API -> turtl), and if so, save a SyncRecord to the `sync` table w/ sync
     // type FileIncoming (lets the incoming file sync system know we have a

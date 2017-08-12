@@ -12,7 +12,7 @@ use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util;
 use ::util::event::Emitter;
-use ::sync::sync_model::{self, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming::SyncIncoming;
 use ::messaging;
 
@@ -52,7 +52,7 @@ protected! {
 }
 
 make_storable!(User, "users");
-make_basic_sync_model!{ User,
+impl SyncModel for User {
     // handle change-password syncs
     fn skip_incoming_sync(&self, sync_item: &SyncRecord) -> TResult<bool> {
         if sync_item.action == SyncAction::ChangePassword {

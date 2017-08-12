@@ -6,7 +6,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
 use ::turtl::Turtl;
-use ::sync::sync_model::MemorySaver;
+use ::sync::sync_model::{SyncModel, MemorySaver};
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -27,7 +27,7 @@ protected! {
 }
 
 make_storable!(Board, "boards");
-make_basic_sync_model!(Board);
+impl SyncModel for Board {}
 
 impl Keyfinder for Board {
     fn get_key_search(&self, turtl: &Turtl) -> TResult<Keychain> {

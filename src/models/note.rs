@@ -7,7 +7,7 @@ use ::models::keychain::{Keychain, KeyRef};
 use ::models::file::{File, FileData};
 use ::models::sync_record::SyncRecord;
 use ::crypto::Key;
-use ::sync::sync_model::MemorySaver;
+use ::sync::sync_model::{SyncModel, MemorySaver};
 use ::std::fs;
 
 protected! {
@@ -63,8 +63,8 @@ protected! {
 }
 
 make_storable!(Note, "notes");
-make_basic_sync_model!{ Note,
-    fn transform(&self, mut sync_item: SyncRecord) -> TResult<SyncRecord> {
+impl SyncModel for Note {
+    fn transform(&self, sync_item: &mut SyncRecord) -> TResult<()> {
         let data = sync_item.data.as_ref().unwrap().clone();
         match jedi::get::<String>(&["board_id"], &data) {
             Ok(board_id) => {
@@ -77,7 +77,7 @@ make_basic_sync_model!{ Note,
             jedi::set(&["file", "id"], sync_item.data.as_mut().unwrap(), &jedi::get::<String>(&["file", "hash"], &data)?)?;
         }
 
-        Ok(sync_item)
+        Ok(())
     }
 }
 

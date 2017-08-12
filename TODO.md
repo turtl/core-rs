@@ -1,4 +1,7 @@
 v0.7:
+- profile/sync:
+  - notes should index through sync system via memsaver
+  - turtl.index_notes still relevant, needs to be called on profile load
 - space
   - dont forget perms
   - set owner

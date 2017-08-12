@@ -4,7 +4,7 @@ use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
 use ::models::protected::{Keyfinder, Protected};
-use ::sync::sync_model::{self, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::lib_permissions::{Role, Permission};
 
@@ -62,7 +62,7 @@ protected! {
 }
 
 make_storable!(Space, "spaces");
-make_basic_sync_model!(Space);
+impl SyncModel for Space {}
 
 impl Keyfinder for Space {
     // We definitely want to save space keys to the keychain

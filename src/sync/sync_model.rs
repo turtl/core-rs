@@ -7,99 +7,77 @@
 
 use ::error::{TError, TResult};
 use ::storage::Storage;
+use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
+use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::storable::Storable;
-use ::jedi::Value;
+use ::jedi::{self, Value};
 use ::turtl::Turtl;
-use ::models::sync_record::{SyncAction, SyncRecord};
-
-macro_rules! make_sync_fns {
-    ($n:ty) => {
-        fn incoming(&self, db: &mut ::storage::Storage, sync_item: ::models::sync_record::SyncRecord) -> ::error::TResult<()> {
-            if self.skip_incoming_sync(&sync_item)? {
-                return Ok(());
-            }
-            match sync_item.action {
-                ::models::sync_record::SyncAction::Delete => {
-                    let mut model: $n = Default::default();
-                    model.id = Some(sync_item.item_id.clone());
-                    model.db_delete(db, Some(&sync_item))
-                }
-                _ => {
-                    if sync_item.data.is_none() {
-                        return Err(::error::TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_item.id.unwrap_or(String::from("<no id>")), self.model_type())));
-                    }
-                    let mut sync_item = self.transform(sync_item)?;
-                    let mut data = ::jedi::Value::Null;
-                    // swap the `data` out from under the SyncRecord so we don't
-                    // have to clone it
-                    ::std::mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
-                    debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), ::jedi::stringify(&data)?);
-                    let model: $n = ::jedi::from_val(data)?;
-                    model.db_save(db, Some(&sync_item))
-                }
-            }
-        }
-
-        fn outgoing(&self, action: ::models::sync_record::SyncAction, user_id: &String, db: &mut ::storage::Storage, skip_remote_sync: bool) -> ::error::TResult<()> {
-            match action {
-                ::models::sync_record::SyncAction::Delete => {
-                    self.db_delete(db, None)?;
-                }
-                _ => {
-                    self.db_save(db, None)?;
-                }
-            }
-            if skip_remote_sync { return Ok(()); }
-
-            let mut sync_record = ::models::sync_record::SyncRecord::default();
-            sync_record.generate_id()?;
-            sync_record.action = action;
-            sync_record.user_id = user_id.clone();
-            sync_record.ty = ::models::sync_record::SyncType::from_string(self.model_type())?;
-            sync_record.item_id = match self.id() {
-                Some(id) => id.clone(),
-                None => return Err(::error::TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
-            };
-            match sync_record.action {
-                ::models::sync_record::SyncAction::Delete => {
-                    sync_record.data = Some(json!({
-                        "id": self.id().unwrap().clone(),
-                    }));
-                }
-                _ => {
-                    sync_record.data = Some(self.data_for_storage()?);
-                }
-            }
-            sync_record.db_save(db, None)
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! make_basic_sync_model {
-    ($n:ty) => {
-        impl ::sync::sync_model::SyncModel for $n {
-            make_sync_fns!{ $n }
-        }
-    };
-
-    ($n:ty, $( $extra:tt )*) => {
-        impl ::sync::sync_model::SyncModel for $n {
-            make_sync_fns!{ $n }
-
-            $( $extra )*
-        }
-    };
-}
+use ::std::mem;
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Allows a model to handle an incoming sync item for its type.
-    fn incoming(&self, db: &mut Storage, sync_item: SyncRecord) -> TResult<()>;
+    fn incoming(&self, db: &mut Storage, sync_item: &mut SyncRecord) -> TResult<()> {
+        if self.skip_incoming_sync(&sync_item)? {
+            return Ok(());
+        }
+        match sync_item.action {
+            SyncAction::Delete => {
+                let mut model: Self = Default::default();
+                model.set_id(sync_item.item_id.clone());
+                model.db_delete(db, Some(sync_item as &SyncRecord))
+            }
+            _ => {
+                if sync_item.data.is_none() {
+                    let sync_id = sync_item.id().map(|x| x.as_str()).unwrap_or("<no id>");
+                    return Err(TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_id, self.model_type())));
+                }
+                self.transform(sync_item)?;
+                let mut data = Value::Null;
+                // swap the `data` out from under the SyncRecord so we don't
+                // have to clone it
+                mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
+                debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), jedi::stringify(&data)?);
+                let model: Self = jedi::from_val(data)?;
+                model.db_save(db, Some(sync_item as &SyncRecord))
+            }
+        }
+    }
 
     /// Allows a model to save itself to the outgoing sync database (or perform
     /// any custom needed actual in addition/instead).
-    fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> ::error::TResult<()>;
+    fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> TResult<()> {
+        match action {
+            SyncAction::Delete => {
+                self.db_delete(db, None)?;
+            }
+            _ => {
+                self.db_save(db, None)?;
+            }
+        }
+        if skip_remote_sync { return Ok(()); }
+
+        let mut sync_record = SyncRecord::default();
+        sync_record.generate_id()?;
+        sync_record.action = action;
+        sync_record.user_id = user_id.clone();
+        sync_record.ty = SyncType::from_string(self.model_type())?;
+        sync_record.item_id = match self.id() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
+        };
+        match sync_record.action {
+            SyncAction::Delete => {
+                sync_record.data = Some(json!({
+                    "id": self.id().unwrap().clone(),
+                }));
+            }
+            _ => {
+                sync_record.data = Some(self.data_for_storage()?);
+            }
+        }
+        sync_record.db_save(db, None)
+    }
 
     /// Gives us the option to skip an incoming sync. Some sync records are just
     /// indicators for something happening as opposed to data changes (for
@@ -119,8 +97,8 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     }
 
     /// Transform this model's data from an incoming sync (if required).
-    fn transform(&self, sync_item: SyncRecord) -> TResult<SyncRecord> {
-        Ok(sync_item)
+    fn transform(&self, sync_item: &mut SyncRecord) -> TResult<()> {
+        Ok(())
     }
 }
 

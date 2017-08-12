@@ -4,6 +4,7 @@ use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
 use ::storage::Storage;
 use ::turtl::Turtl;
+use ::sync::sync_model::SyncModel;
 
 /// How many times a sync record can fail before it's "frozen"
 static MAX_ALLOWED_FAILURES: u32 = 3;
@@ -108,7 +109,7 @@ protected! {
     }
 }
 make_storable!(SyncRecord, "sync");
-make_basic_sync_model!(SyncRecord);
+impl SyncModel for SyncRecord {}
 impl Keyfinder for SyncRecord {}
 
 impl SyncRecord {
