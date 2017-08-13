@@ -176,9 +176,16 @@ impl Keyfinder for Note {
 impl MemorySaver for Note {
     // reindex note on add/update (reindex is idempotent)
     fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
+        let note_id = match self.id() {
+            Some(x) => x.clone(),
+            None => return Ok(()),
+        };
+        let notes = turtl.load_notes(&vec![note_id])?;
+        if notes.len() == 0 { return Ok(()); }
+        let note = &notes[0];
         let mut search_guard = turtl.search.write().unwrap();
         match search_guard.as_mut() {
-            Some(ref mut search) => search.reindex_note(&self),
+            Some(ref mut search) => search.reindex_note(note),
             // i COULD throw an error here. i'm choosing not to...
             None => Ok(()),
         }
