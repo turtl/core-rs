@@ -1,15 +1,13 @@
 v0.7:
 - space
-  - dont forget perms
-  - set owner
-  - edit member
-  - delete member
   - move spaces:
     - permissions for delete/add item
     - board
     - note
-- boards
-  - implement save_from_mem/delete_from_mem
+  - set owner
+  - edit member
+  - delete member
+  - dont forget perms for above
 - invites
   - you must do the permission! drew!
     - add invite

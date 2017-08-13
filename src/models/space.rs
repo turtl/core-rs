@@ -94,12 +94,13 @@ impl MemorySaver for Space {
             }
         }
 
-        let db_guard = turtl.db.read().unwrap();
-        let notes: Vec<Note> = match *db_guard {
-            Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
-            None => vec![],
+        let notes: Vec<Note> = {
+            let db_guard = turtl.db.read().unwrap();
+            match *db_guard {
+                Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
+                None => vec![],
+            }
         };
-        drop(db_guard);
         for note in notes {
             let note_id = match note.id() {
                 Some(x) => x,
@@ -110,15 +111,8 @@ impl MemorySaver for Space {
             };
             sync_model::delete_model::<Note>(turtl, &note_id, true)?;
         }
-
         // remove the space from memory
-        profile_guard.spaces.retain(|s| {
-            match s.id() {
-                Some(id) => (space_id != id),
-                None => true,
-            }
-        });
-
+        profile_guard.spaces.retain(|s| s.id() != Some(&space_id));
         Ok(())
     }
 }

@@ -25,6 +25,7 @@ pub fn get_schema() -> Value {
         "notes": {
             "indexes": [
                 {"fields": ["space_id"]},
+                {"fields": ["board_id"]},
                 {"fields": ["has_file"]}
             ]
         },

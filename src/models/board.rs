@@ -4,9 +4,10 @@ use ::error::TResult;
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
+use ::models::note::Note;
 use ::models::keychain::{Keychain, KeyRef};
 use ::turtl::Turtl;
-use ::sync::sync_model::{SyncModel, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -73,5 +74,44 @@ impl Keyfinder for Board {
     }
 }
 
-impl MemorySaver for Board {}
+impl MemorySaver for Board {
+    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
+        let mut profile_guard = turtl.profile.write().unwrap();
+        for board in &mut profile_guard.boards {
+            if board.id() == self.id() {
+                board.merge_fields(&self.data()?)?;
+                return Ok(())
+            }
+        }
+        // if it doesn't exist, push it on
+        profile_guard.boards.push(self);
+        Ok(())
+    }
+
+    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
+        let mut profile_guard = turtl.profile.write().unwrap();
+        let board_id = self.id().unwrap();
+
+        let notes: Vec<Note> = {
+            let db_guard = turtl.db.read().unwrap();
+            match *db_guard {
+                Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
+                None => vec![],
+            }
+        };
+        for note in notes {
+            let note_id = match note.id() {
+                Some(x) => x,
+                None => {
+                    warn!("Board.delete_from_mem() -- got a note from the local DB with empty `id` field");
+                    continue;
+                }
+            };
+            sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+        }
+        // remove the board from memory
+        profile_guard.boards.retain(|b| b.id() != Some(&board_id));
+        Ok(())
+    }
+}
 
