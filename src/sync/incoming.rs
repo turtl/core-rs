@@ -156,26 +156,33 @@ impl SyncIncoming {
         // same, but with enabled
         if !self.is_enabled() && !force { return Ok(()); }
 
+        // destructure our response
+        let SyncResponse { sync_id, records } = syncdata;
+
         // grab sync ids we're ignoring
         let ignored = self.get_ignored()?;
-
-        // destructure our response
-        let SyncResponse { sync_id, mut records } = syncdata;
+        // filter out ignored records
+        let mut records = records
+            .into_iter()
+            .filter(|rec| {
+                match rec.id() {
+                    Some(id) => {
+                        if ignored.contains(id) {
+                            debug!("SyncIncoming.update_local_db_from_api_sync() -- ignoring {}", id);
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    None => { true }
+                }
+            })
+            .collect::<Vec<_>>();
 
         with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
             // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
             for rec in &mut records {
-                // are we ignoring this sync?
-                match rec.id() {
-                    Some(id) => {
-                        if ignored.contains(id) {
-                            debug!("SyncIncoming.update_local_db_from_api_sync() -- ignoring {}", id);
-                            continue;
-                        }
-                    }
-                    None => {}
-                }
                 self.run_sync_item(db, rec)?;
             }
             // make sure we save our sync_id as the LAST STEP of our transaction.

@@ -97,7 +97,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     }
 
     /// Transform this model's data from an incoming sync (if required).
-    fn transform(&self, sync_item: &mut SyncRecord) -> TResult<()> {
+    fn transform(&self, _sync_item: &mut SyncRecord) -> TResult<()> {
         Ok(())
     }
 }

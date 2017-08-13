@@ -18,6 +18,7 @@ use ::turtl::Turtl;
 use ::search::Query;
 use ::models::model::Model;
 use ::models::protected::Protected;
+use ::models::keychain::KeychainEntry;
 use ::models::user::User;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -26,10 +27,11 @@ use ::models::invite::Invite;
 use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
-use ::sync::sync_model;
+use ::sync::sync_model::{self, MemorySaver};
 use ::messaging::{self, Event};
 use ::lib_permissions::Permission;
 use ::models::storable::Storable;
+use ::std::mem;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -301,6 +303,57 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
             let yesno: bool = jedi::from_val(data)?;
             let mut connguard = turtl.connected.write().unwrap();
             *connguard = yesno;
+        }
+        "sync:incoming" => {
+            // implement MemorySaver for incoming syncs!
+            let sync_item: SyncRecord = jedi::from_val(data)?;
+            match sync_item.action.clone() {
+                SyncAction::Add | SyncAction::Edit => {
+                    fn load_save<T>(turtl: &Turtl, mut sync_item: SyncRecord) -> TResult<()>
+                        where T: Protected + MemorySaver
+                    {
+                        let mut data = Value::Null;
+                        match sync_item.data.as_mut() {
+                            Some(x) => mem::swap(&mut data, x),
+                            None => return Err(TError::MissingData(format!("dispatch_event: sync:incoming -- sync item missing `data` field."))),
+                        }
+                        let model: T = jedi::from_val(data)?;
+                        model.save_to_mem(turtl)?;
+                        Ok(())
+                    }
+                    match sync_item.ty.clone() {
+                        SyncType::User => load_save::<User>(turtl, sync_item)?,
+                        SyncType::Keychain => load_save::<KeychainEntry>(turtl, sync_item)?,
+                        SyncType::Space => load_save::<Space>(turtl, sync_item)?,
+                        SyncType::Board => load_save::<Board>(turtl, sync_item)?,
+                        SyncType::Note => load_save::<Note>(turtl, sync_item)?,
+                        SyncType::File => load_save::<FileData>(turtl, sync_item)?,
+                        SyncType::Invite => load_save::<Invite>(turtl, sync_item)?,
+                        _ => (),
+                    }
+                }
+                SyncAction::Delete => {
+                    fn load_delete<T>(turtl: &Turtl, sync_item: SyncRecord) -> TResult<()>
+                        where T: Protected + MemorySaver
+                    {
+                        let mut model: T = Default::default();
+                        model.set_id(sync_item.item_id.clone());
+                        model.delete_from_mem(turtl)?;
+                        Ok(())
+                    }
+                    match sync_item.ty.clone() {
+                        SyncType::User => load_delete::<User>(turtl, sync_item)?,
+                        SyncType::Keychain => load_delete::<KeychainEntry>(turtl, sync_item)?,
+                        SyncType::Space => load_delete::<Space>(turtl, sync_item)?,
+                        SyncType::Board => load_delete::<Board>(turtl, sync_item)?,
+                        SyncType::Note => load_delete::<Note>(turtl, sync_item)?,
+                        SyncType::File => load_delete::<FileData>(turtl, sync_item)?,
+                        SyncType::Invite => load_delete::<Invite>(turtl, sync_item)?,
+                        _ => (),
+                    }
+                }
+                _ => {}
+            }
         }
         "user:change-password:logout" => {
             messaging::ui_event("user:change-password:logout", &jedi::obj())?;
