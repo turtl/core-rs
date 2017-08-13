@@ -1,8 +1,4 @@
 v0.7:
-- profile/sync:
-  - notes should index through sync system via memsaver
-    - implement sync:incoming app_event
-  - turtl.index_notes still relevant, needs to be called on profile load
 - space
   - dont forget perms
   - set owner
@@ -12,6 +8,8 @@ v0.7:
     - permissions for delete/add item
     - board
     - note
+- boards
+  - implement save_from_mem/delete_from_mem
 - invites
   - you must do the permission! drew!
     - add invite
