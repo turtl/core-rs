@@ -541,7 +541,7 @@ impl Turtl {
             None => return Err(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
         };
 
-        let mut notes: Vec<Note> = db.by_id("notes", note_ids).unwrap();
+        let mut notes: Vec<Note> = db.by_id("notes", note_ids)?;
         self.find_models_keys(&mut notes)?;
         protected::map_deserialize(self, notes)
     }
