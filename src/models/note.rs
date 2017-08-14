@@ -1,4 +1,3 @@
-use ::jedi;
 use ::turtl::Turtl;
 use ::error::{TResult, TError};
 use ::models::model::Model;

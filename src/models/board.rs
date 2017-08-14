@@ -112,7 +112,7 @@ impl MemorySaver for Board {
         for board in &mut profile_guard.boards {
             if board.id() == self.id() {
                 board.merge_fields(&self.data()?)?;
-                return Ok(())
+                return Ok(());
             }
         }
         // if it doesn't exist, push it on

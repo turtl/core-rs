@@ -77,7 +77,7 @@ impl MemorySaver for Space {
         for space in &mut profile_guard.spaces {
             if space.id() == self.id() {
                 space.merge_fields(&self.data()?)?;
-                return Ok(())
+                return Ok(());
             }
         }
         // if it doesn't exist, push it on

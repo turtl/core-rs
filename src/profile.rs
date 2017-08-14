@@ -6,6 +6,7 @@
 //! memory to decrypt notes, but otherwise, notes can just be loaded on the fly
 //! from local storage and discarded once sent to the UI.
 
+use ::models::model::Model;
 use ::models::keychain::Keychain;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -30,6 +31,15 @@ impl Profile {
         self.keychain = Keychain::new();
         self.spaces = Vec::new();
         self.boards = Vec::new();
+    }
+
+    /// Find a model by id in a collection of items
+    pub fn finder<'a, T>(items: &'a mut Vec<T>, item_id: &String) -> Option<&'a mut T>
+        where T: Model
+    {
+        items.iter_mut()
+            .filter(|x| x.id() == Some(item_id))
+            .next()
     }
 }
 

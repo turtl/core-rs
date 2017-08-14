@@ -16,6 +16,7 @@ use ::util;
 use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
+use ::profile::Profile;
 use ::models::model::Model;
 use ::models::protected::Protected;
 use ::models::keychain::KeychainEntry;
@@ -194,7 +195,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                         }
                     };
                     Ok(val)
-                },
+                }
                 SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
                     fn get_model<T>(turtl: &Turtl, id: &String, cmd: &str) -> TResult<T>
@@ -235,13 +236,36 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                         }
                     }
                     Ok(jedi::obj())
-                },
+                }
                 SyncAction::MoveSpace => {
+                    let item_id = jedi::get(&["4", "id"], &data)?;
+                    let space_id = jedi::get(&["4", "space_id"], &data)?;
+                    match ty {
+                        SyncType::Board => {
+                            let mut profile_guard = turtl.profile.write().unwrap();
+                            let boards = &mut profile_guard.boards;
+                            let board = match Profile::finder(boards, &item_id) {
+                                Some(m) => m,
+                                None => return Err(TError::MissingData(format!("dispatch: {} -- cannot find Board {} in profile", cmd, item_id))),
+                            };
+                            board.move_spaces(turtl, space_id)?;
+                        }
+                        SyncType::Note => {
+                            let mut notes = turtl.load_notes(&vec![item_id.clone()])?;
+                            if notes.len() == 0 {
+                                return Err(TError::MissingData(format!("dispatch: {} -- trouble grabbing Note {}", cmd, item_id)));
+                            }
+                            let note = &mut notes[0];
+                            note.move_spaces(turtl, space_id)?;
+                        }
+                        _ => {
+                            return Err(TError::BadValue(format!("dispatch: {} -- cannot {:?} item of type {:?}", cmd, action, ty)));
+                        }
+                    }
                     Ok(jedi::obj())
-                },
+                }
                 _ => {
-                    warn!("dispatch: {} -- got an unexpected sync action: {:?} (doing nothing, i guess)", cmd, action);
-                    Ok(jedi::obj())
+                    Err(TError::BadValue(format!("dispatch: {} -- unimplemented sync action {:?}", cmd, action)))
                 }
             }
         },
