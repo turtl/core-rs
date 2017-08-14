@@ -242,6 +242,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     let space_id = jedi::get(&["4", "space_id"], &data)?;
                     match ty {
                         SyncType::Board => {
+                            Space::permission_check(turtl, &space_id, &Permission::DeleteBoard)?;
+                            Space::permission_check(turtl, &space_id, &Permission::AddBoard)?;
                             let mut profile_guard = turtl.profile.write().unwrap();
                             let boards = &mut profile_guard.boards;
                             let board = match Profile::finder(boards, &item_id) {
@@ -251,6 +253,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             board.move_spaces(turtl, space_id)?;
                         }
                         SyncType::Note => {
+                            Space::permission_check(turtl, &space_id, &Permission::DeleteNote)?;
+                            Space::permission_check(turtl, &space_id, &Permission::AddNote)?;
                             let mut notes = turtl.load_notes(&vec![item_id.clone()])?;
                             if notes.len() == 0 {
                                 return Err(TError::MissingData(format!("dispatch: {} -- trouble grabbing Note {}", cmd, item_id)));
