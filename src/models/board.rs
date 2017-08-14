@@ -1,11 +1,12 @@
 use ::jedi::Value;
 
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
 use ::models::keychain::{Keychain, KeyRef};
+use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 
@@ -29,6 +30,37 @@ protected! {
 
 make_storable!(Board, "boards");
 impl SyncModel for Board {}
+
+impl Board {
+    /// Move a note to a different space
+    pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String) -> TResult<()> {
+        let board_id = match self.id() {
+            Some(id) => id.clone(),
+            None => return Err(TError::MissingData(String::from("Board.move_spaces() -- missing `self.id` field. Shame."))),
+        };
+        self.space_id = new_space_id.clone();
+        sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
+
+        let note_ids = {
+            let db_guard = turtl.db.write().unwrap();
+            let notes: Vec<Note> = match *db_guard {
+                Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
+                None => vec![],
+            };
+            notes.iter()
+                .filter(|x| x.id().is_some())
+                .map(|x| x.id().unwrap().clone())
+                .collect::<Vec<String>>()
+        };
+
+        let mut notes = turtl.load_notes(&note_ids)?;
+        for note in &mut notes {
+            note.move_spaces(turtl, new_space_id.clone())?;
+        }
+
+        Ok(())
+    }
+}
 
 impl Keyfinder for Board {
     fn get_key_search(&self, turtl: &Turtl) -> TResult<Keychain> {

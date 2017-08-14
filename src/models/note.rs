@@ -5,9 +5,9 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
 use ::models::file::{File, FileData};
-use ::models::sync_record::SyncRecord;
+use ::models::sync_record::SyncAction;
 use ::crypto::Key;
-use ::sync::sync_model::{SyncModel, MemorySaver};
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::std::fs;
 
 protected! {
@@ -63,25 +63,10 @@ protected! {
 }
 
 make_storable!(Note, "notes");
-impl SyncModel for Note {
-    fn transform(&self, sync_item: &mut SyncRecord) -> TResult<()> {
-        let data = sync_item.data.as_ref().unwrap().clone();
-        match jedi::get::<String>(&["board_id"], &data) {
-            Ok(board_id) => {
-                jedi::set(&["boards"], sync_item.data.as_mut().unwrap(), &vec![board_id])?;
-            },
-            Err(_) => {},
-        }
-
-        if jedi::get_opt::<String>(&["file", "hash"], &data).is_some() {
-            jedi::set(&["file", "id"], sync_item.data.as_mut().unwrap(), &jedi::get::<String>(&["file", "hash"], &data)?)?;
-        }
-
-        Ok(())
-    }
-}
+impl SyncModel for Note {}
 
 impl Note {
+    /// Remove the files attached to this note, if any.
     fn clear_files(&self) -> TResult<()> {
         // delete all local file(s) associated with this note
         let note_id = match self.id() {
@@ -92,6 +77,13 @@ impl Note {
         for file in files {
             fs::remove_file(&file)?;
         }
+        Ok(())
+    }
+
+    /// Move a note to a different space
+    pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String) -> TResult<()> {
+        self.space_id = new_space_id;
+        sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
         Ok(())
     }
 }
