@@ -40,7 +40,7 @@ macro_rules! model_getter {
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {
                     Some(val) => val.clone(),
-                    None => return Err(::error::TError::MissingData(format!("{} -- missing field `{}`", $func, stringify!($field)))),
+                    None => return Err(::error::TError::MissingField(format!("{} -- missing field `{}`", $func, stringify!($field)))),
                 }
             };
 

@@ -1,13 +1,4 @@
 v0.7:
-- space
-  - move spaces:
-    - permissions for delete/add item
-    - board
-    - note
-  - set owner
-  - edit member
-  - delete member
-  - dont forget perms for above
 - invites
   - you must do the permission! drew!
     - add invite

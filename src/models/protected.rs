@@ -190,8 +190,7 @@ pub trait Protected: Model + fmt::Debug {
     /// Set the model's body data
     fn set_body(&mut self, body: String);
 
-    /// Given a set of data, set all public/private fields from THIS model that
-    /// exist in the data into the model.
+    /// Merge a Value object into this model.
     fn merge_fields(&mut self, data: &Value) -> TResult<()>;
 
     /// Get a set of fields and return them as a JSON Value

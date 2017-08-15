@@ -12,6 +12,7 @@ pub mod sync_record;
 pub mod user;
 pub mod keychain;
 pub mod space;
+pub mod space_member;
 pub mod board;
 pub mod note;
 pub mod file;

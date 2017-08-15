@@ -4,32 +4,12 @@ use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
 use ::models::protected::{Keyfinder, Protected};
+use ::models::space_member::SpaceMember;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
-use ::lib_permissions::{Role, Permission};
-
-/// Holds information about a member of a space.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SpaceMember {
-    /// Member id
-    pub id: u64,
-    /// Member's user_id
-    #[serde(with = "::util::ser::int_converter")]
-    pub user_id: String,
-    /// The space_id this member belongs to
-    pub space_id: String,
-    /// The email of this member
-    pub username: String,
-    /// The role of this member
-    role: Role,
-    /// The permissions this member has
-    #[serde(default)]
-    permissions: Vec<Permission>,
-    /// When the membership was created
-    created: String,
-    /// When the membership was last updated
-    updated: String,
-}
+use ::lib_permissions::Permission;
+use ::api::ApiReq;
+use ::jedi::Value;
 
 /// Defines a Space, which is a container for notes and boards. It also acts as
 /// an organization of sorts, allowing multiple members to access the space,
@@ -161,6 +141,67 @@ impl Space {
 
         let me = me_matches[0];
         Ok(me.role.can(&permission))
+    }
+
+    /// Find a member by id, if such member exists. OR ELSE.
+    fn find_member_or_else<'a>(&'a mut self, member_id: u64) -> TResult<&'a mut SpaceMember> {
+        let member = self.members.iter_mut()
+            .filter(|x| x.id == member_id)
+            .next();
+        match member {
+            Some(x) => Ok(x),
+            None => Err(TError::NotFound(format!("Space.find_member_or_else() -- member {} is not a member of this space", member_id))),
+        }
+    }
+
+    /// Find a member by user_id, if such member exists. OR ELSE.
+    fn find_member_by_user_id_or_else<'a>(&'a mut self, member_user_id: &String) -> TResult<&'a mut SpaceMember> {
+        let member = self.members.iter_mut()
+            .filter(|x| &x.user_id == member_user_id)
+            .next();
+        match member {
+            Some(x) => Ok(x),
+            None => Err(TError::NotFound(format!("Space.find_member_by_user_id_or_else() -- user {} is not a member of this space", member_user_id))),
+        }
+    }
+
+    /// The high council has spoken. This space will have a new owner.
+    pub fn set_owner(&mut self, turtl: &Turtl, member_user_id: &String) -> TResult<()> {
+        turtl.assert_connected()?;
+        // make sure SHE exists
+        self.find_member_by_user_id_or_else(member_user_id)?;
+        model_getter!(get_field, "Space.set_owner()");
+        let space_id = get_field!(self, id);
+        // kind of inefficient when we already have the space and could just do
+        // a can_i, but i don't want to go through all the work of copying the
+        // error here. clean code vs less cpu cycles.
+        Space::permission_check(turtl, &space_id, &Permission::SetSpaceOwner)?;
+        let url = format!("/spaces/{}/owner/{}", space_id, member_user_id);
+        let space_data: Value = turtl.api.put(url.as_str(), ApiReq::new())?;
+        self.merge_fields(&space_data)?;
+        Ok(())
+    }
+
+    /// Edit a space member
+    pub fn edit_member(&mut self, turtl: &Turtl, member: &mut SpaceMember) -> TResult<()> {
+        model_getter!(get_field, "Space.edit_member()");
+        let space_id = get_field!(self, id);
+        Space::permission_check(turtl, &space_id, &Permission::EditSpaceMember)?;
+
+        let mut existing_member = self.find_member_or_else(member.id)?;
+        member.edit(turtl, Some(&mut existing_member))?;
+        Ok(())
+    }
+
+    /// Delete a space member
+    pub fn delete_member(&mut self, turtl: &Turtl, member_user_id: &String) -> TResult<()> {
+        model_getter!(get_field, "Space.delete_member()");
+        let space_id = get_field!(self, id);
+        Space::permission_check(turtl, &space_id, &Permission::DeleteSpaceMember)?;
+
+        let existing_member = self.find_member_by_user_id_or_else(member_user_id)?;
+        existing_member.delete(turtl)?;
+        Ok(())
     }
 }
 

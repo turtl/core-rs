@@ -22,6 +22,7 @@ use ::models::protected::Protected;
 use ::models::keychain::KeychainEntry;
 use ::models::user::User;
 use ::models::space::Space;
+use ::models::space_member::SpaceMember;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::Invite;
@@ -272,6 +273,47 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     Err(TError::BadValue(format!("dispatch: {} -- unimplemented sync action {:?}", cmd, action)))
                 }
             }
+        },
+        "profile:space:set-owner" => {
+            let space_id = jedi::get(&["2"], &data)?;
+            let user_id = jedi::get(&["3"], &data)?;
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+                Some(s) => s,
+                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+            };
+            space.set_owner(turtl, &user_id)?;
+            Ok(space.data()?)
+        },
+        "profile:space:edit-member" => {
+            let mut member: SpaceMember = jedi::get(&["2"], &data)?;
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
+                Some(s) => s,
+                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, member.space_id))),
+            };
+            space.edit_member(turtl, &mut member)?;
+            Ok(jedi::obj())
+        },
+        "profile:space:delete-member" => {
+            let space_id: String = jedi::get(&["2"], &data)?;
+            let user_id: String = jedi::get(&["3"], &data)?;
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+                Some(s) => s,
+                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+            };
+            space.delete_member(turtl, &user_id)?;
+            Ok(jedi::obj())
+        },
+        "profile:space:send-invite" => {
+            Ok(jedi::obj())
+        },
+        "profile:space:edit-invite" => {
+            Ok(jedi::obj())
+        },
+        "profile:space:delete-invite" => {
+            Ok(jedi::obj())
         },
         "profile:get-notes" => {
             let note_ids = jedi::get(&["2"], &data)?;
