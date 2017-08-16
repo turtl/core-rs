@@ -14,7 +14,7 @@ dependencies = [
  "hyper 0.9.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "jedi 0.1.0",
  "lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "lib_permissions 0.1.1 (git+https://github.com/turtl/lib-permissions?tag=v0.1.1)",
+ "lib_permissions 0.1.2 (git+https://github.com/turtl/lib-permissions?tag=v0.1.2)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "protected_derive 0.1.0",
@@ -257,8 +257,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "lib_permissions"
-version = "0.1.1"
-source = "git+https://github.com/turtl/lib-permissions?tag=v0.1.1#ee3c530bba8524e86de4ea2f5a0be68426208930"
+version = "0.1.2"
+source = "git+https://github.com/turtl/lib-permissions?tag=v0.1.2#4853252538192732005b25ef59cbdd651bfa29a3"
 dependencies = [
  "regex 0.1.80 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -801,7 +801,7 @@ dependencies = [
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum language-tags 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a91d884b6667cd606bb5a69aa0c99ba811a115fc68915e7056ec08a46e93199a"
 "checksum lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "3b37545ab726dd833ec6420aaba8231c5b320814b9029ad585555d2a03e94fbf"
-"checksum lib_permissions 0.1.1 (git+https://github.com/turtl/lib-permissions?tag=v0.1.1)" = "<none>"
+"checksum lib_permissions 0.1.2 (git+https://github.com/turtl/lib-permissions?tag=v0.1.2)" = "<none>"
 "checksum libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)" = "38f5c2b18a287cf78b4097db62e20f43cace381dc76ae5c0a3073067f78b7ddc"
 "checksum libgcrypt-sys 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "142fb14a7287e17813693244e6fb2b27165aed3e7dad349e6c1bc3abe3eb119e"
 "checksum libgpg-error-sys 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "3bb64fba126a92f112f2c707b2721d177c40dd916ccacda4b8f62446813b5142"
