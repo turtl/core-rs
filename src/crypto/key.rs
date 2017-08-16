@@ -5,7 +5,7 @@ use ::serde::{ser, de};
 use ::crypto::error::CResult;
 
 /// A type we'll use to represent crypto keys
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Key {
     /// Holds the actual bytes for our key
     data: Vec<u8>,
@@ -45,12 +45,6 @@ impl Key {
 impl Clone for Key {
     fn clone(&self) -> Key {
         Key::new(self.data().clone())
-    }
-}
-
-impl Default for Key {
-    fn default() -> Key {
-        Key::new(Vec::new())
     }
 }
 
