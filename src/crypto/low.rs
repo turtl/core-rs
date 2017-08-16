@@ -66,6 +66,7 @@ pub fn hmac(key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
 ///
 /// This takes a bit more legwork, but is able to securely compare two values
 /// without leaking information about either.
+#[allow(dead_code)]
 pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
     let key = sodium_auth::gen_key().0.to_vec();
     let hash1 = hmac(key.as_slice(), arr1)?;
