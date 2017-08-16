@@ -5,6 +5,7 @@ v0.7:
   - ^ permissions!
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
+  - integraiton tests!
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)
 - migration crate
