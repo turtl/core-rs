@@ -1,6 +1,6 @@
 use ::std::sync::{Arc, RwLock};
 use ::std::io::ErrorKind;
-use ::jedi;
+use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
@@ -10,6 +10,7 @@ use ::messaging::{self, Messenger};
 use ::models;
 use ::models::model::Model;
 use ::models::sync_record::{SyncType, SyncRecord};
+use ::turtl::Turtl;
 
 const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
@@ -30,6 +31,22 @@ struct Handlers {
     note: models::note::Note,
     file: models::file::FileData,
     invite: models::invite::Invite,
+}
+
+/// Given a Value object with sync_ids, try to ignore the sync ids. Kids' stuff.
+pub fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &str) {
+    match jedi::get_opt::<Vec<u64>>(&["sync_ids"], val_with_sync_ids) {
+        Some(x) => {
+            let mut db_guard = turtl.db.write().unwrap();
+            if db_guard.is_some() {
+                match SyncIncoming::ignore_on_next(db_guard.as_mut().unwrap(), &x) {
+                    Ok(..) => {},
+                    Err(e) => error!("{} -- error ignoring sync items: {}", errtype, e),
+                }
+            }
+        }
+        None => {}
+    }
 }
 
 /// Holds the state for data going from API -> turtl (incoming sync data),

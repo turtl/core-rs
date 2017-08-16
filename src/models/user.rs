@@ -370,6 +370,12 @@ impl User {
         sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
         Ok(())
     }
+
+    /// Given an email address, find a matching user (pubkey and all)
+    pub fn find_by_email(turtl: &Turtl, email: &String) -> TResult<User> {
+        let url = format!("/users/email/{}", email);
+        turtl.api.get(url.as_str(), ApiReq::new())
+    }
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use ::lib_permissions::{Role, Permission};
 use ::turtl::Turtl;
 use ::jedi::{self, Value};
 use ::api::ApiReq;
-use ::sync::incoming::SyncIncoming;
+use ::sync::incoming;
 
 /// Holds information about a member of a space.
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,29 +28,13 @@ pub struct SpaceMember {
     pub updated: String,
 }
 
-/// Given a Value object with sync_ids, try to ignore the sync ids. Kids' stuff.
-fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &str) {
-    match jedi::get_opt::<Vec<u64>>(&["sync_ids"], val_with_sync_ids) {
-        Some(x) => {
-            let mut db_guard = turtl.db.write().unwrap();
-            if db_guard.is_some() {
-                match SyncIncoming::ignore_on_next(db_guard.as_mut().unwrap(), &x) {
-                    Ok(..) => {},
-                    Err(e) => error!("{} -- error ignoring sync items: {}", errtype, e),
-                }
-            }
-        }
-        None => {}
-    }
-}
-
 impl SpaceMember {
     /// Save this item
     pub fn edit(&mut self, turtl: &Turtl, existing_member: Option<&mut SpaceMember>) -> TResult<()> {
         let member_data = jedi::to_val(self)?;
         let url = format!("/spaces/{}/members/{}", self.space_id, self.user_id);
         let saved_data: Value = turtl.api.put(url.as_str(), ApiReq::new().data(member_data))?;
-        ignore_syncs_maybe(turtl, &saved_data, "SpaceMember.edit()");
+        incoming::ignore_syncs_maybe(turtl, &saved_data, "SpaceMember.edit()");
         match existing_member {
             Some(x) => { *x = jedi::from_val(saved_data)?; }
             None => {}
@@ -62,7 +46,7 @@ impl SpaceMember {
     pub fn delete(&mut self, turtl: &Turtl) -> TResult<()> {
         let url = format!("/spaces/{}/members/{}", self.space_id, self.user_id);
         let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
-        ignore_syncs_maybe(turtl, &ret, "SpaceMember.delete()");
+        incoming::ignore_syncs_maybe(turtl, &ret, "SpaceMember.delete()");
         Ok(())
     }
 }

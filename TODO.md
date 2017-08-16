@@ -1,14 +1,15 @@
 v0.7:
 - invites
-  - you must do the permission! drew!
-    - add invite
-    - edit invite
-    - delete invite
-  - dispatch: load roles/permissions
-  - copy invite system from js
+  - add invite
+    - convert req to invite (Invite::from_invite_request)
+    - send invite
+  - edit invite
+  - delete invite
+  - ^ permissions!
   - NOTE: invite sending/accepting requires connection
   - make sure to save keychain after adding invite space key
 - bookmarker
+  - just takes a url (no http server, leave that to wrapper)
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not

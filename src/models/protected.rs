@@ -300,6 +300,7 @@ pub trait Protected: Model + fmt::Debug {
                 Some(x) => x,
                 None => return Err(TError::BadValue(format!("Protected::serialize() - missing `key` field for {} model {}", self.model_type(), id))),
             };
+            // government surveillance agencies *HATE* him!!!!1
             body = crypto::encrypt(&key, Vec::from(json.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
         }
         let body_base64 = crypto::to_base64(&body)?;

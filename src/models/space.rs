@@ -2,14 +2,14 @@ use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::board::Board;
 use ::models::note::Note;
-use ::models::invite::Invite;
+use ::models::invite::{Invite, InviteRequest};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::space_member::SpaceMember;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::lib_permissions::Permission;
 use ::api::ApiReq;
-use ::jedi::Value;
+use ::jedi::{self, Value};
 
 /// Defines a Space, which is a container for notes and boards. It also acts as
 /// an organization of sorts, allowing multiple members to access the space,
@@ -165,6 +165,31 @@ impl Space {
         }
     }
 
+    /// Find an invite by id OR ELSE
+    fn find_invite_or_else<'a>(&'a mut self, invite_id: &String) -> TResult<&'a mut Invite> {
+        let invite = self.invites.iter_mut()
+            .filter(|x| x.id() == Some(invite_id))
+            .next();
+        match invite {
+            Some(x) => Ok(x),
+            None => Err(TError::NotFound(format!("Space.find_invite_or_else() -- invite {} doesn't exist in this space", invite_id))),
+        }
+    }
+
+    /// Find a space member by email
+    fn find_member_by_email<'a>(&'a mut self, email: &String) -> Option<&'a mut SpaceMember> {
+        self.members.iter_mut()
+            .filter(|x| &x.username == email)
+            .next()
+    }
+
+    /// Find an existing invite in this space
+    fn find_invite_by_email<'a>(&'a mut self, email: &String) -> Option<&'a mut Invite> {
+        self.invites.iter_mut()
+            .filter(|x| &x.to_user == email)
+            .next()
+    }
+
     /// The high council has spoken. This space will have a new owner.
     pub fn set_owner(&mut self, turtl: &Turtl, member_user_id: &String) -> TResult<()> {
         turtl.assert_connected()?;
@@ -201,6 +226,62 @@ impl Space {
 
         let existing_member = self.find_member_by_user_id_or_else(member_user_id)?;
         existing_member.delete(turtl)?;
+        Ok(())
+    }
+
+    /// Send an invite for this space to an unsuspecting
+    pub fn send_invite(&mut self, turtl: &Turtl, invite_request: InviteRequest) -> TResult<()> {
+        let (user_id, username) = {
+            let user_guard = turtl.user.read().unwrap();
+            let user_id = match user_guard.id() {
+                Some(id) => id.clone(),
+                None => return Err(TError::MissingField(String::from("Space.send_invite() -- `turtl.user.id` is missing"))),
+            };
+            (user_id, user_guard.username.clone())
+        };
+        model_getter!(get_field, "Space.send_invite()");
+        let space_id = get_field!(self, id);
+        let space_key = match self.key() {
+            Some(k) => k.clone(),
+            None => return Err(TError::MissingField(String::from("Space.send_invite() -- space is missing `key` field"))),
+        };
+        Space::permission_check(turtl, &space_id, &Permission::AddSpaceInvite)?;
+
+        // if we have an existing member, bail
+        if self.find_member_by_email(&invite_request.to_user).is_some() {
+            return Err(TError::BadValue(format!("Space.send_invite() -- {} is already a member of this space", invite_request.to_user)));
+        }
+        // if we have an existing invite, bail
+        if self.find_invite_by_email(&invite_request.to_user).is_some() {
+            return Err(TError::BadValue(format!("Space.send_invite() -- {} is already invited to this space", invite_request.to_user)));
+        }
+
+        let mut invite = Invite::from_invite_request(&user_id, &username, &space_key, invite_request)?;
+        invite.send(turtl)?;
+        self.invites.push(invite);
+        Ok(())
+    }
+
+    /// Accept an invite
+    pub fn accept_invite(&mut self, turtl: &Turtl, invite_id: &String, passphrase: Option<String>) -> TResult<()> {
+        let spacedata = {
+            let invite = self.find_invite_or_else(invite_id)?;
+            {
+                let user_guard = turtl.user.read().unwrap();
+                let pubkey = match user_guard.pubkey.as_ref() {
+                    Some(k) => k,
+                    None => return Err(TError::MissingField(String::from("Invite.accept_invite() -- `user.pubkey` is None (can't open invite)"))),
+                };
+                let privkey = match user_guard.privkey.as_ref() {
+                    Some(k) => k,
+                    None => return Err(TError::MissingField(String::from("Invite.accept_invite() -- `user.privkey` is None (can't open invite)"))),
+                };
+                invite.open(pubkey, privkey, passphrase)?;
+            }
+            invite.accept(turtl)?
+        };
+        self.members = jedi::get(&["members"], &spacedata)?;
+        self.invites = jedi::get(&["invites"], &spacedata)?;
         Ok(())
     }
 }
