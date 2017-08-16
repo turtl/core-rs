@@ -3,7 +3,7 @@ v0.7:
   - edit invite
   - delete invite
   - ^ permissions!
-  - NOTE: invite sending/accepting requires connection
+  - NOTE: invite sending/accepting/edit/delete requires connection
   - make sure to save keychain after adding invite space key
   - integraiton tests!
 - bookmarker

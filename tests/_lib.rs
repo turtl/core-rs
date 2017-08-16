@@ -2,12 +2,30 @@ extern crate config;
 extern crate carrier;
 extern crate turtl_core;
 extern crate jedi;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 use ::std::env;
 use ::std::thread;
 use ::std::time::Duration;
 use turtl_core::error::TResult;
 use ::jedi::Value;
+use ::std::sync::RwLock;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Response {
+    e: u32,
+    d: Value,
+}
+
+lazy_static! {
+    /// create a static/global CONFIG var, and load it with our config data
+    static ref MID: RwLock<u64> = RwLock::new(0);
+}
 
 #[allow(dead_code)]
 pub fn sleep(millis: u64) {
@@ -33,7 +51,7 @@ pub fn init() -> thread::JoinHandle<()> {
 }
 
 pub fn end(handle: thread::JoinHandle<()>) {
-    send(r#"["4269","app:shutdown"]"#);
+    dispatch(json!(["app:shutdown"]));
     handle.join().unwrap();
     carrier::wipe();
 }
@@ -54,6 +72,28 @@ pub fn recv(mid: &str) -> String {
     String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid)).unwrap()).unwrap()
 }
 
+pub fn dispatch(args: Value) -> Response {
+    let msg_id = {
+        let mut mid_guard = MID.write().unwrap();
+        let mid = *mid_guard;
+        *mid_guard += 1;
+        mid.to_string()
+    };
+    let mut msg_args = vec![jedi::to_val(&msg_id).unwrap()];
+    let mut vals = jedi::from_val::<Vec<Value>>(args).unwrap();
+    msg_args.append(&mut vals);
+    let msg = jedi::stringify(&msg_args).unwrap();
+    send(msg.as_str());
+    let recv = recv(msg_id.as_str());
+    jedi::parse(&recv).unwrap()
+}
+
+pub fn dispatch_ass(args: Value) -> Response {
+    let res = dispatch(args);
+    assert_eq!(res.e, 0);
+    res
+}
+
 pub fn recv_msg(mid: &str) -> TResult<String> {
     let channel: String = config::get(&["messaging", "reqres"])?;
     Ok(String::from_utf8(carrier::recv(&format!("{}-core-out:{}", channel, mid))?)?)
@@ -64,12 +104,14 @@ pub fn recv_event() -> String {
     String::from_utf8(carrier::recv(channel.as_str()).unwrap()).unwrap()
 }
 
-pub fn wait_on(evname: &str) {
+pub fn wait_on(evname: &str) -> Value {
     loop {
         let ev = recv_event();
         let parsed: Value = jedi::parse(&ev).unwrap();
         let parsed_evname: String = jedi::get(&["e"], &parsed).unwrap();
-        if parsed_evname == evname { break; }
+        if parsed_evname == evname {
+            return jedi::get(&["d"], &parsed).unwrap();
+        }
     }
 }
 
