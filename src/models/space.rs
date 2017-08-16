@@ -231,6 +231,7 @@ impl Space {
 
     /// Send an invite for this space to an unsuspecting
     pub fn send_invite(&mut self, turtl: &Turtl, invite_request: InviteRequest) -> TResult<()> {
+        turtl.assert_connected()?;
         let (user_id, username) = {
             let user_guard = turtl.user.read().unwrap();
             let user_id = match user_guard.id() {
@@ -264,6 +265,7 @@ impl Space {
 
     /// Accept an invite
     pub fn accept_invite(&mut self, turtl: &Turtl, invite_id: &String, passphrase: Option<String>) -> TResult<()> {
+        turtl.assert_connected()?;
         let spacedata = {
             let invite = self.find_invite_or_else(invite_id)?;
             {

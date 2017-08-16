@@ -1,8 +1,5 @@
 v0.7:
 - invites
-  - add invite
-    - convert req to invite (Invite::from_invite_request)
-    - send invite
   - edit invite
   - delete invite
   - ^ permissions!
