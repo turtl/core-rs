@@ -157,13 +157,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
     model.merge_fields(&serialized)?;
 
     {
-        let user_id = {
-            let isengard = turtl.user_id.read().unwrap();
-            match *isengard {
-                Some(ref id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("sync_model::save_model() -- turtl.user_id has failed us..."))),
-            }
-        };
+        let user_id = turtl.user_id()?;
         let mut db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
@@ -193,15 +187,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     }
 
     {
-        let user_id = {
-            // no, mr frodo
-            let isengard = turtl.user_id.read().unwrap();
-            // go home, sam
-            match *isengard {
-                Some(ref id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("sync_model::delete_model() -- turtl.user_id has failed us..."))),
-            }
-        };
+        let user_id = turtl.user_id()?;
         let mut db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_mut() {
             Some(x) => x,

@@ -203,13 +203,7 @@ impl FileData {
     pub fn save(&mut self, turtl: &Turtl, note: &mut Note) -> TResult<()> {
         // grab some items we'll need to do our work (user_id/note_id for the
         // filename, note_key for encrypting the file).
-        let user_id = {
-            let isengard = turtl.user_id.read().unwrap();
-            match isengard.as_ref() {
-                Some(id) => id.clone(),
-                None => return Err(TError::MissingField(format!("FileData.save() -- `turtl.user_id` is None when saving file... =["))),
-            }
-        };
+        let user_id = turtl.user_id()?;
         let note_id = match note.id().as_ref() {
             Some(id) => id.clone(),
             None => return Err(TError::MissingField(format!("FileData.save() -- `note.id` is None when saving file...tsk tsk"))),

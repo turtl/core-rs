@@ -101,14 +101,7 @@ impl Space {
     /// Given a Turtl, a space_id, and a Permission, check if the current user
     /// has the rights to that permission.
     pub fn permission_check(turtl: &Turtl, space_id: &String, permission: &Permission) -> TResult<()> {
-        let user_id = {
-            let isengard = turtl.user_id.read().unwrap();
-            match *isengard {
-                Some(ref id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("Space.permissions_check() -- turtl.user_id is None (not logged in??)"))),
-            }
-        };
-
+        let user_id = turtl.user_id()?;
         let err = Err(TError::PermissionDenied(format!("Space::permission_check() -- user {} cannot {:?} on space {}", user_id, permission, space_id)));
         let profile_guard = turtl.profile.read().unwrap();
         let matched = profile_guard.spaces.iter()

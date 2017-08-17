@@ -623,13 +623,7 @@ impl Turtl {
 
     /// Wipe any local database(s) for the current user (and log them out)
     pub fn wipe_user_data(&self) -> TResult<()> {
-        let user_id = {
-            let isengard = self.user_id.read().unwrap();
-            match isengard.as_ref() {
-                Some(x) => x.clone(),
-                None => return Err(TError::MissingField(String::from("turtl.wipe_user_data() -- missing `turtl.user_id`...shucks"))),
-            }
-        };
+        let user_id = self.user_id()?;
         self.sync_shutdown(true)?;
 
         let db_loc = self.get_user_db_location()?;
