@@ -41,7 +41,7 @@ pub fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &st
             if db_guard.is_some() {
                 match SyncIncoming::ignore_on_next(db_guard.as_mut().unwrap(), &x) {
                     Ok(..) => {},
-                    Err(e) => error!("{} -- error ignoring sync items: {}", errtype, e),
+                    Err(e) => warn!("{} -- error ignoring sync items: {}", errtype, e),
                 }
             }
         }

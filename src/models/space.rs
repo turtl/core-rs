@@ -222,6 +222,16 @@ impl Space {
         Ok(())
     }
 
+    /// Leave the space (as the current user). Like delete, but without a
+    /// permission check.
+    pub fn leave(&mut self, turtl: &Turtl) -> TResult<()> {
+        turtl.assert_connected()?;
+        let user_id = turtl.user_id()?;
+        let existing_member = self.find_member_by_user_id_or_else(&user_id)?;
+        existing_member.delete(turtl)?;
+        Ok(())
+    }
+
     /// Send an invite for this space to an unsuspecting
     pub fn send_invite(&mut self, turtl: &Turtl, invite_request: InviteRequest) -> TResult<()> {
         turtl.assert_connected()?;
@@ -280,12 +290,15 @@ impl Space {
         Ok(())
     }
 
-    /// Leave the space (as the current user)
-    pub fn leave(&mut self, turtl: &Turtl) -> TResult<()> {
-        turtl.assert_connected()?;
-        let user_id = turtl.user_id()?;
-        let existing_member = self.find_member_by_user_id_or_else(&user_id)?;
-        existing_member.delete(turtl)?;
+    /// Edit a space invite
+    pub fn edit_invite(&mut self, turtl: &Turtl, invite: &mut Invite) -> TResult<()> {
+        model_getter!(get_field, "Space.edit_invite()");
+        let space_id = get_field!(self, id);
+        let invite_id = get_field!(invite, id);
+        Space::permission_check(turtl, &space_id, &Permission::EditSpaceInvite)?;
+
+        let mut existing_invite = self.find_invite_or_else(&invite_id)?;
+        invite.edit(turtl, Some(&mut existing_invite))?;
         Ok(())
     }
 }

@@ -344,7 +344,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(space.data()?)
         },
         "profile:space:edit-invite" => {
-            Ok(jedi::obj())
+            let mut invite: Invite = jedi::get(&["2"], &data)?;
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
+                Some(s) => s,
+                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, invite.space_id))),
+            };
+            space.edit_invite(turtl, &mut invite)?;
+            Ok(space.data()?)
         },
         "profile:space:delete-invite" => {
             Ok(jedi::obj())

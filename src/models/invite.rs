@@ -141,5 +141,20 @@ impl Invite {
         incoming::ignore_syncs_maybe(turtl, &space, "Invite.accept()");
         Ok(space)
     }
+
+    /// Edit this invite
+    pub fn edit(&mut self, turtl: &Turtl, existing_invite: Option<&mut Invite>) -> TResult<()> {
+        let invite_data = self.data_for_storage()?;
+        model_getter!(get_field, "Invite.edit()");
+        let invite_id = get_field!(self, id);
+        let url = format!("/spaces/{}/invites/{}", self.space_id, invite_id);
+        let saved_data: Value = turtl.api.put(url.as_str(), ApiReq::new().data(invite_data))?;
+        incoming::ignore_syncs_maybe(turtl, &saved_data, "Invite.edit()");
+        match existing_invite {
+            Some(x) => { *x = jedi::from_val(saved_data)?; }
+            None => {}
+        }
+        Ok(())
+    }
 }
 
