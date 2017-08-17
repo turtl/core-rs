@@ -88,10 +88,13 @@ pub fn dispatch(args: Value) -> Response {
     jedi::parse(&recv).unwrap()
 }
 
-pub fn dispatch_ass(args: Value) -> Response {
+pub fn dispatch_ass(args: Value) -> Value {
     let res = dispatch(args);
-    assert_eq!(res.e, 0);
-    res
+    if res.e != 0 {
+        panic!("dispatch: {}", res.d);
+    }
+    let Response {e: _e, d} = res;
+    d
 }
 
 pub fn recv_msg(mid: &str) -> TResult<String> {

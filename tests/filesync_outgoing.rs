@@ -18,10 +18,10 @@ mod tests {
         wait_on("profile:loaded");
         wait_on("profile:indexed");
 
-        let profile_res = dispatch(json!(["profile:load"]));
+        let profile_data = dispatch_ass(json!(["profile:load"]));
 
-        let user_id: String = jedi::get(&["user", "id"], &profile_res.d).unwrap();
-        let space_id: String = jedi::get(&["spaces", "0", "id"], &profile_res.d).unwrap();
+        let user_id: String = jedi::get(&["user", "id"], &profile_data).unwrap();
+        let space_id: String = jedi::get(&["spaces", "0", "id"], &profile_data).unwrap();
         let notejson = &json!({
             "title": "mai file LOL",
             "space_id": space_id,
