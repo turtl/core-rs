@@ -197,6 +197,15 @@ impl Turtl {
         drop(sync_config_guard);
     }
 
+    /// Grab the current user id OR ELSE
+    pub fn user_id(&self) -> TResult<String> {
+        let isengard = self.user_id.read().unwrap();
+        match isengard.as_ref() {
+            Some(x) => Ok(x.clone()),
+            None => return Err(TError::MissingField(String::from("turtl.user_id() -- missing user id (or not logged in)"))),
+        }
+    }
+
     /// Log a user in
     pub fn login(&self, username: String, password: String) -> TResult<()> {
         let version = user::CURRENT_AUTH_VERSION;

@@ -286,5 +286,14 @@ impl Space {
         self.invites = jedi::get(&["invites"], &spacedata)?;
         Ok(())
     }
+
+    /// Leave the space (as the current user)
+    pub fn leave(&mut self, turtl: &Turtl) -> TResult<()> {
+        turtl.assert_connected()?;
+        let user_id = turtl.user_id()?;
+        let existing_member = self.find_member_by_user_id_or_else(&user_id)?;
+        existing_member.delete(turtl)?;
+        Ok(())
+    }
 }
 

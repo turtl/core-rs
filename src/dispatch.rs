@@ -311,6 +311,16 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             space.delete_member(turtl, &user_id)?;
             Ok(space.data()?)
         },
+        "profile:space:leave" => {
+            let space_id: String = jedi::get(&["2"], &data)?;
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+                Some(s) => s,
+                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+            };
+            space.leave(turtl)?;
+            Ok(space.data()?)
+        },
         "profile:space:send-invite" => {
             let req: InviteRequest = jedi::get(&["2"], &data)?;
             let mut profile_guard = turtl.profile.write().unwrap();
