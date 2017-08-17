@@ -1,10 +1,5 @@
 v0.7:
 - invites
-  - edit invite
-  - delete invite
-  - ^ permissions!
-  - NOTE: invite sending/accepting/edit/delete requires connection
-  - make sure to save keychain after adding invite space key
   - integraiton tests!
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)

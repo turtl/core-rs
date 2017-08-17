@@ -10,6 +10,7 @@ use ::turtl::Turtl;
 use ::lib_permissions::Permission;
 use ::api::ApiReq;
 use ::jedi::{self, Value};
+use ::crypto::Key;
 
 /// Defines a Space, which is a container for notes and boards. It also acts as
 /// an organization of sorts, allowing multiple members to access the space,
@@ -202,6 +203,7 @@ impl Space {
 
     /// Edit a space member
     pub fn edit_member(&mut self, turtl: &Turtl, member: &mut SpaceMember) -> TResult<()> {
+        turtl.assert_connected()?;
         model_getter!(get_field, "Space.edit_member()");
         let space_id = get_field!(self, id);
         Space::permission_check(turtl, &space_id, &Permission::EditSpaceMember)?;
@@ -213,12 +215,16 @@ impl Space {
 
     /// Delete a space member
     pub fn delete_member(&mut self, turtl: &Turtl, member_user_id: &String) -> TResult<()> {
+        turtl.assert_connected()?;
         model_getter!(get_field, "Space.delete_member()");
         let space_id = get_field!(self, id);
         Space::permission_check(turtl, &space_id, &Permission::DeleteSpaceMember)?;
 
-        let existing_member = self.find_member_by_user_id_or_else(member_user_id)?;
-        existing_member.delete(turtl)?;
+        {
+            let existing_member = self.find_member_by_user_id_or_else(member_user_id)?;
+            existing_member.delete(turtl)?;
+        }
+        self.members.retain(|x| &x.user_id != member_user_id);
         Ok(())
     }
 
@@ -260,7 +266,7 @@ impl Space {
             return Err(TError::BadValue(format!("Space.send_invite() -- {} is already invited to this space", invite_request.to_user)));
         }
 
-        let mut invite = Invite::from_invite_request(&user_id, &username, &space_key, invite_request)?;
+        let invite = Invite::from_invite_request(&user_id, &username, &space_key, invite_request)?;
         invite.send(turtl)?;
         self.invites.push(invite);
         Ok(())
@@ -269,6 +275,8 @@ impl Space {
     /// Accept an invite
     pub fn accept_invite(&mut self, turtl: &Turtl, invite_id: &String, passphrase: Option<String>) -> TResult<()> {
         turtl.assert_connected()?;
+        model_getter!(get_field, "Space.accept_invite()");
+        let space_id = get_field!(self, id);
         let spacedata = {
             let invite = self.find_invite_or_else(invite_id)?;
             {
@@ -283,7 +291,17 @@ impl Space {
                 };
                 invite.open(pubkey, privkey, passphrase)?;
             }
-            invite.accept(turtl)?
+            let keyjson = match invite.message.as_ref() {
+                Some(data) => jedi::parse(&String::from_utf8(data.clone())?)?,
+                None => return Err(TError::MissingField(String::from("Space.accept_invite() -- `invite.message` is None after open"))),
+            };
+            let key: Key = jedi::get(&["space_key"], &keyjson)?;
+            let spacedata = invite.accept(turtl)?;
+            {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                profile_guard.keychain.upsert_key_save(turtl, &space_id, &key, &String::from("space"), false)?;
+            }
+            spacedata
         };
         self.members = jedi::get(&["members"], &spacedata)?;
         self.invites = jedi::get(&["invites"], &spacedata)?;
@@ -292,6 +310,7 @@ impl Space {
 
     /// Edit a space invite
     pub fn edit_invite(&mut self, turtl: &Turtl, invite: &mut Invite) -> TResult<()> {
+        turtl.assert_connected()?;
         model_getter!(get_field, "Space.edit_invite()");
         let space_id = get_field!(self, id);
         let invite_id = get_field!(invite, id);
@@ -299,6 +318,27 @@ impl Space {
 
         let mut existing_invite = self.find_invite_or_else(&invite_id)?;
         invite.edit(turtl, Some(&mut existing_invite))?;
+        Ok(())
+    }
+
+    /// Delete a space invite
+    pub fn delete_invite(&mut self, turtl: &Turtl, invite_id: &String) -> TResult<()> {
+        turtl.assert_connected()?;
+        model_getter!(get_field, "Space.delete_invite()");
+        let space_id = get_field!(self, id);
+        let username = {
+            let user_guard = turtl.user.read().unwrap();
+            user_guard.username.clone()
+        };
+        {
+            let existing_invite = self.find_invite_or_else(invite_id)?;
+            // only check permissions if the invite isn't to the current user
+            if existing_invite.to_user != username {
+                Space::permission_check(turtl, &space_id, &Permission::DeleteSpaceInvite)?;
+            }
+            existing_invite.delete(turtl)?;
+        }
+        self.invites.retain(|x| x.id() != Some(invite_id));
         Ok(())
     }
 }

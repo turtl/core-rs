@@ -124,7 +124,7 @@ impl Invite {
     }
 
     /// Ship it!
-    pub fn send(&mut self, turtl: &Turtl) -> TResult<()> {
+    pub fn send(&self, turtl: &Turtl) -> TResult<()> {
         let url = format!("/spaces/{}/invites", self.space_id);
         let data = self.data_for_storage()?;
         let invite: Value = turtl.api.post(url.as_str(), ApiReq::new().data(data))?;
@@ -133,13 +133,13 @@ impl Invite {
     }
 
     /// Accept this invite
-    pub fn accept(&mut self, turtl: &Turtl) -> TResult<Value> {
+    pub fn accept(&self, turtl: &Turtl) -> TResult<Value> {
         model_getter!(get_field, "Invite.accept()");
         let invite_id = get_field!(self, id);
         let url = format!("/spaces/{}/invites/accepted/{}", self.space_id, invite_id);
-        let space: Value = turtl.api.post(url.as_str(), ApiReq::new())?;
-        incoming::ignore_syncs_maybe(turtl, &space, "Invite.accept()");
-        Ok(space)
+        let spacedata: Value = turtl.api.post(url.as_str(), ApiReq::new())?;
+        incoming::ignore_syncs_maybe(turtl, &spacedata, "Invite.accept()");
+        Ok(spacedata)
     }
 
     /// Edit this invite
@@ -154,6 +154,16 @@ impl Invite {
             Some(x) => { *x = jedi::from_val(saved_data)?; }
             None => {}
         }
+        Ok(())
+    }
+
+    /// Delete this invite from the space
+    pub fn delete(&self, turtl: &Turtl) -> TResult<()> {
+        model_getter!(get_field, "Invite.delete()");
+        let invite_id = get_field!(self, id);
+        let url = format!("/spaces/{}/invites/{}", self.space_id, invite_id);
+        let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
+        incoming::ignore_syncs_maybe(turtl, &ret, "Invite.delete()");
         Ok(())
     }
 }

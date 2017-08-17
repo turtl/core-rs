@@ -43,7 +43,7 @@ impl SpaceMember {
     }
 
     /// Delete this member from the space
-    pub fn delete(&mut self, turtl: &Turtl) -> TResult<()> {
+    pub fn delete(&self, turtl: &Turtl) -> TResult<()> {
         let url = format!("/spaces/{}/members/{}", self.space_id, self.user_id);
         let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
         incoming::ignore_syncs_maybe(turtl, &ret, "SpaceMember.delete()");
