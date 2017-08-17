@@ -9,6 +9,7 @@ use ::sodiumoxide::crypto::pwhash;
 use ::crypto::error::{CResult, CryptoError};
 
 /// Abstract the size of hmac keys
+#[allow(dead_code)]
 pub const HMAC_KEYLEN: usize = sodium_auth::KEYBYTES;
 /// Abstract the size of salts in our KDF
 pub const KEYGEN_SALT_LEN: usize = 32;
@@ -18,6 +19,7 @@ pub const KEYGEN_OPS_DEFAULT: usize = pwhash::OPSLIMIT_INTERACTIVE.0;
 pub const KEYGEN_MEM_DEFAULT: usize = pwhash::MEMLIMIT_INTERACTIVE.0;
 
 /// Run a sha256 hash on some data
+#[allow(dead_code)]
 pub fn sha256(data: &[u8]) -> CResult<Vec<u8>> {
     Ok(hash::sha256::hash(data).0.to_vec())
 }
@@ -27,11 +29,13 @@ pub fn sha512(data: &[u8]) -> CResult<Vec<u8>> {
     Ok(hash::sha512::hash(data).0.to_vec())
 }
 
+/// Convert a byte array into a hex string
 pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
     Ok(data[..].to_hex())
 }
 
 /// Convert a hex string to a u8 vector.
+#[allow(dead_code)]
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
     Ok(data.from_hex()?)
 }
@@ -49,6 +53,7 @@ pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
 
 /// Given a key (password/secret) and a set of data, run an HMAC-SHA512256 and
 /// return the binary result as a u8 vec.
+#[allow(dead_code)]
 pub fn hmac(key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     let key = match sodium_auth::Key::from_slice(key) {
         Some(x) => x,
@@ -277,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn can_convert_hext_to_bytes() {
+    fn can_convert_hex_to_bytes() {
         let res = from_hex(&String::from("b00b55")).unwrap();
         assert_eq!(res, vec![176u8, 11u8, 85u8]);
     }

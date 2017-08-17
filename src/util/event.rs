@@ -14,6 +14,7 @@ use ::jedi::Value;
 /// Defines what type of binding we have
 enum BindType {
     Every,
+    #[allow(dead_code)]
     Once,
 }
 
