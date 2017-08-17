@@ -7,9 +7,9 @@ mod tests {
     #[test]
     fn ping_pong() {
         let handle = init();
-        send(r#"["0","ping"]"#);
-        let msg = recv("0");
-        assert_eq!(msg, r#"{"e":0,"d":"pong"}"#);
+        let pongval = dispatch_ass(json!(["ping"]));
+        let msg: String = jedi::from_val(pongval).unwrap();
+        assert_eq!(msg, "pong");
         end(handle);
     }
 }
