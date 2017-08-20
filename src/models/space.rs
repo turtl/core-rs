@@ -103,7 +103,7 @@ impl Space {
     /// has the rights to that permission.
     pub fn permission_check(turtl: &Turtl, space_id: &String, permission: &Permission) -> TResult<()> {
         let user_id = turtl.user_id()?;
-        let err = Err(TError::PermissionDenied(format!("Space::permission_check() -- user {} cannot {:?} on space {}", user_id, permission, space_id)));
+        let err = TErr!(TError::PermissionDenied(format!("user {} cannot {:?} on space {}", user_id, permission, space_id)));
         let profile_guard = turtl.profile.read().unwrap();
         let matched = profile_guard.spaces.iter()
             .filter(|space| space.id() == Some(space_id))
@@ -144,7 +144,7 @@ impl Space {
             .next();
         match member {
             Some(x) => Ok(x),
-            None => Err(TError::NotFound(format!("Space.find_member_or_else() -- member {} is not a member of this space", member_id))),
+            None => TErr!(TError::NotFound(format!("member {} is not a member of this space", member_id))),
         }
     }
 
@@ -155,7 +155,7 @@ impl Space {
             .next();
         match member {
             Some(x) => Ok(x),
-            None => Err(TError::NotFound(format!("Space.find_member_by_user_id_or_else() -- user {} is not a member of this space", member_user_id))),
+            None => TErr!(TError::NotFound(format!("user {} is not a member of this space", member_user_id))),
         }
     }
 
@@ -166,7 +166,7 @@ impl Space {
             .next();
         match invite {
             Some(x) => Ok(x),
-            None => Err(TError::NotFound(format!("Space.find_invite_or_else() -- invite {} doesn't exist in this space", invite_id))),
+            None => TErr!(TError::NotFound(format!("invite {} doesn't exist in this space", invite_id))),
         }
     }
 
@@ -245,7 +245,7 @@ impl Space {
             let user_guard = turtl.user.read().unwrap();
             let user_id = match user_guard.id() {
                 Some(id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("Space.send_invite() -- `turtl.user.id` is missing"))),
+                None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
             };
             (user_id, user_guard.username.clone())
         };
@@ -253,17 +253,17 @@ impl Space {
         let space_id = get_field!(self, id);
         let space_key = match self.key() {
             Some(k) => k.clone(),
-            None => return Err(TError::MissingField(String::from("Space.send_invite() -- space is missing `key` field"))),
+            None => return TErr!(TError::MissingField(String::from("Space.key"))),
         };
         Space::permission_check(turtl, &space_id, &Permission::AddSpaceInvite)?;
 
         // if we have an existing member, bail
         if self.find_member_by_email(&invite_request.to_user).is_some() {
-            return Err(TError::BadValue(format!("Space.send_invite() -- {} is already a member of this space", invite_request.to_user)));
+            return TErr!(TError::BadValue(format!("{} is already a member of this space", invite_request.to_user)));
         }
         // if we have an existing invite, bail
         if self.find_invite_by_email(&invite_request.to_user).is_some() {
-            return Err(TError::BadValue(format!("Space.send_invite() -- {} is already invited to this space", invite_request.to_user)));
+            return TErr!(TError::BadValue(format!("{} is already invited to this space", invite_request.to_user)));
         }
 
         let invite = Invite::from_invite_request(&user_id, &username, &space_key, invite_request)?;
@@ -283,17 +283,17 @@ impl Space {
                 let user_guard = turtl.user.read().unwrap();
                 let pubkey = match user_guard.pubkey.as_ref() {
                     Some(k) => k,
-                    None => return Err(TError::MissingField(String::from("Invite.accept_invite() -- `user.pubkey` is None (can't open invite)"))),
+                    None => return TErr!(TError::MissingField(String::from("User.pubkey"))),
                 };
                 let privkey = match user_guard.privkey.as_ref() {
                     Some(k) => k,
-                    None => return Err(TError::MissingField(String::from("Invite.accept_invite() -- `user.privkey` is None (can't open invite)"))),
+                    None => return TErr!(TError::MissingField(String::from("User.privkey"))),
                 };
                 invite.open(pubkey, privkey, passphrase)?;
             }
             let keyjson = match invite.message.as_ref() {
                 Some(data) => jedi::parse(&String::from_utf8(data.clone())?)?,
-                None => return Err(TError::MissingField(String::from("Space.accept_invite() -- `invite.message` is None after open"))),
+                None => return TErr!(TError::MissingField(String::from("Invite.message"))),
             };
             let key: Key = jedi::get(&["space_key"], &keyjson)?;
             let spacedata = invite.accept(turtl)?;

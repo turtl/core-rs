@@ -283,7 +283,7 @@ pub trait Protected: Model + fmt::Debug {
     /// populated with the encrypted data.
     fn serialize(&mut self) -> TResult<Value> {
         if self.key().is_none() {
-            return Err(TError::MissingData(format!("protected.serialize() -- model {:?} missing key", self.id())));
+            return TErr!(TError::MissingField(format!("model {:?} missing `key`", self.id())));
         }
         self.serialize_submodels()?;
         let body;
@@ -298,7 +298,7 @@ pub trait Protected: Model + fmt::Debug {
 
             let key = match self.key() {
                 Some(x) => x,
-                None => return Err(TError::BadValue(format!("Protected::serialize() - missing `key` field for {} model {}", self.model_type(), id))),
+                None => return TErr!(TError::MissingField(format!("model {} ({}) missing `key`", id, self.model_type()))),
             };
             // government surveillance agencies *HATE* him!!!!1
             body = crypto::encrypt(&key, Vec::from(json.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
@@ -312,7 +312,7 @@ pub trait Protected: Model + fmt::Debug {
     /// returns a JSON Value of the public/private fields.
     fn deserialize(&mut self) -> TResult<Value> {
         if self.key().is_none() {
-            return Err(TError::MissingData(format!("protected.deserialize() -- missing key for {} model {:?} missing key", self.model_type(), self.id())));
+            return TErr!(TError::MissingField(format!("model {:?} ({}) missing `key`", self.id(), self.model_type())));
         }
         self.deserialize_submodels()?;
         let fakeid = String::from("<no id>");
@@ -323,23 +323,24 @@ pub trait Protected: Model + fmt::Debug {
             };
             let body: Vec<u8> = match self.get_body() {
                 Some(x) => crypto::from_base64(x)?,
-                None => return Err(TError::MissingField(format!("Protected::deserialize() - missing `body` field for {} model {}", self.model_type(), id))),
+                None => return TErr!(TError::MissingField(format!("model {} ({}) missing `body`", id, self.model_type()))),
             };
             let key: &Key = match self.key() {
                 Some(x) => x,
-                None => return Err(TError::BadValue(format!("Protected::deserialize() - missing `key` field for {} model {}", self.model_type(), id))),
+                None => return TErr!(TError::MissingField(format!("model {} ({}) missing `key`", id, self.model_type()))),
             };
             crypto::decrypt(key, body)?
         };
         let json_str: String = match String::from_utf8(json_bytes) {
             Ok(x) => x,
-            Err(e) => return Err(TError::BadValue(format!("Protected::deserialize() -- error decoding UTF8 string: {}", e))),
+            Err(e) => return TErr!(TError::BadValue(format!("error decoding UTF8 string: {}", e))),
         };
         let parsed: Value = match jedi::parse(&json_str) {
             Ok(x) => x,
             Err(e) => {
                 error!("protected.deserialize() -- error parsing JSON for {} model {:?}: {}", self.model_type(), self.id(), e);
-                return Err(From::from(e));
+                let err: TError = From::from(e);
+                return TErr!(err);
             },
         };
         self.merge_fields(&parsed)?;

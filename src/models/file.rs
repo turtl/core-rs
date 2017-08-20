@@ -91,7 +91,7 @@ impl SyncModel for FileData {
     fn db_delete(&self, _db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {
         let id = match self.id().as_ref() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(String::from("FileData.db_delete() -- `self.id` is None, cannot delete file =["))),
+            None => return TErr!(TError::MissingField(String::from("FileData.id"))),
         };
 
         // we could use FileData::file_finder here, but we actually do want to
@@ -101,7 +101,7 @@ impl SyncModel for FileData {
         filepath.push(FileData::filebuilder(None, Some(&id)));
         let pathstr = match filepath.to_str() {
             Some(x) => x,
-            None => return Err(TError::BadValue(format!("FileData.db_delete() -- invalid path: {:?}", filepath))),
+            None => return TErr!(TError::BadValue(format!("invalid path: {:?}", filepath))),
         };
         let files = glob::glob(&pathstr)?;
         for file in files {
@@ -144,7 +144,7 @@ impl FileData {
         filepath.push(FileData::filebuilder(user_id, note_id));
         let pathstr = match filepath.to_str() {
             Some(x) => x,
-            None => return Err(TError::BadValue(format!("FileData::file_finder() -- invalid path: {:?}", filepath))),
+            None => return TErr!(TError::BadValue(format!("invalid path: {:?}", filepath))),
         };
         let files = glob::glob(pathstr)?;
         let mut res = Vec::new();
@@ -158,7 +158,7 @@ impl FileData {
     pub fn file_finder(user_id: Option<&String>, note_id: Option<&String>) -> TResult<PathBuf> {
         let mut files = FileData::file_finder_all(user_id, note_id)?;
         if files.len() < 1 {
-            return Err(TError::NotFound(format!("FileData::file_finder() -- file not found")));
+            return TErr!(TError::NotFound(format!("file not found")));
         }
         Ok(files.swap_remove(0))
     }
@@ -175,11 +175,11 @@ impl FileData {
     pub fn load_file(turtl: &Turtl, note: &Note) -> TResult<Vec<u8>> {
         let note_id = match note.id().as_ref() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(format!("FileData::load_file() -- `note.id` is None when saving file...tsk tsk"))),
+            None => return TErr!(TError::MissingField(format!("Note.id"))),
         };
         let note_key = match note.key() {
             Some(key) => key.clone(),
-            None => return Err(TError::MissingField(format!("FileData::load_file() -- `note.key` is None when saving file...shame, shame"))),
+            None => return TErr!(TError::MissingField(format!("Note.key"))),
         };
 
         let filename = FileData::file_finder(None, Some(&note_id))?;
@@ -206,11 +206,11 @@ impl FileData {
         let user_id = turtl.user_id()?;
         let note_id = match note.id().as_ref() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(format!("FileData.save() -- `note.id` is None when saving file...tsk tsk"))),
+            None => return TErr!(TError::MissingField(format!("Note.id"))),
         };
         let note_key = match note.key() {
             Some(key) => key.clone(),
-            None => return Err(TError::MissingField(format!("FileData.save() -- `note.key` is None when saving file...shame, shame"))),
+            None => return TErr!(TError::MissingField(format!("Note.key"))),
         };
 
         // the file id should ref the note
@@ -223,7 +223,7 @@ impl FileData {
         // unwrap our data
         let data = match data {
             Some(x) => x,
-            None => return Err(TError::MissingField(format!("FileData.save() -- `file.data` is None when saving file...HOW CAN YOU HAVE A FILE IF YOU DON'T GIVE IT DATA?!"))),
+            None => return TErr!(TError::MissingField(format!("FileData.data"))),
         };
 
         // encrypt the file using the turtl standard serialization format
@@ -245,7 +245,7 @@ impl FileData {
             let mut db_guard = turtl.db.write().unwrap();
             let db = match db_guard.as_mut() {
                 Some(x) => x,
-                None => return Err(TError::MissingField(format!("FileData.save() -- `turtl.db` is None when saving file...can't save sync record (deleting file)"))),
+                None => return TErr!(TError::MissingField(format!("Turtl.db"))),
             };
 
             // run the sync. this would normally write an object to the "files"
@@ -331,8 +331,9 @@ mod tests {
         match FileData::load_file(&turtl, &note) {
             Ok(_) => panic!("Found file for note {}, should be deleted", note.id().as_ref().unwrap()),
             Err(e) => {
+                let e = e.unwrap();
                 match e {
-                    // great.
+                    // amazing, heh heh.
                     TError::NotFound(_) => {},
                     _ => panic!("{}", e),
                 }

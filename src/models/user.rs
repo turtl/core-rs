@@ -76,7 +76,7 @@ fn generate_key(username: &String, password: &String, version: u16) -> TResult<K
             let salt = crypto::sha512(hashme.as_bytes())?;
             crypto::gen_key(password.as_bytes(), &salt[0..crypto::KEYGEN_SALT_LEN], crypto::KEYGEN_OPS_DEFAULT, crypto::KEYGEN_MEM_DEFAULT)?
         },
-        _ => return Err(TError::NotImplemented),
+        _ => return TErr!(TError::NotImplemented),
     };
     Ok(key)
 }
@@ -96,7 +96,7 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
             let auth = crypto::to_hex(&auth_bin)?;
             (key, auth)
         }
-        _ => return Err(TError::NotImplemented),
+        _ => return TErr!(TError::NotImplemented),
     };
     Ok(key_auth)
 }
@@ -110,7 +110,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
 
     let mut user_guard_w = turtl.user.write().unwrap();
-    let id_err = Err(TError::BadValue(format!("user::do_login() -- auth was successful, but API returned strange id object: {:?}", user_id)));
+    let id_err = TErr!(TError::BadValue(format!("auth was successful, but API returned strange id object: {:?}", user_id)));
     user_guard_w.id = match user_id {
         Value::Number(x) => {
             match x.as_i64() {
@@ -144,12 +144,12 @@ impl User {
                             // different (lesser) auth version
                             Status::Unauthorized => {
                                 if version <= 0 {
-                                    Err(TError::Api(Status::Unauthorized, y))
+                                    TErr!(TError::Api(Status::Unauthorized, y))
                                 } else {
                                     User::login(turtl, username, password, version - 1)
                                 }
                             },
-                            _ => Err(TError::Api(x, y)),
+                            _ => TErr!(TError::Api(x, y)),
                         }
                     },
                     _ => Err(e)
@@ -207,12 +207,12 @@ impl User {
     pub fn change_password(&mut self, turtl: &Turtl, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
         let user_id = match self.id() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(String::from("User.change_password() -- `turtl.user.id` is None"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
         };
 
         let (_, auth) = generate_auth(&current_username, &current_password, CURRENT_AUTH_VERSION)?;
         if Some(auth) != self.auth {
-            return Err(TError::BadValue(String::from("User.change_password() -- invalid current username/password given.")));
+            return TErr!(TError::BadValue(String::from("invalid current username/password given")));
         }
 
         let mut new_user = self.clone()?;
@@ -247,7 +247,7 @@ impl User {
         let mut db_guard = turtl.db.write().unwrap();
         match db_guard.as_mut() {
             Some(db) => SyncIncoming::ignore_on_next(db, &res.sync_ids)?,
-            None => return Err(TError::MissingField(String::from("User.change_password() -- `turtl.db` is None!!!1"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         }
         drop(db_guard);
 
@@ -272,7 +272,7 @@ impl User {
         let user_guard = turtl.user.read().unwrap();
         let user_id = match user_guard.id() {
             Some(x) => x.clone(),
-            None => return Err(TError::MissingData(String::from("user.post_join() -- user has no id"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
         };
         drop(user_guard);
 
@@ -331,7 +331,7 @@ impl User {
             let user_guard = turtl.user.read().unwrap();
             match user_guard.id() {
                 Some(x) => x.clone(),
-                None => return Err(TError::MissingData(String::from("user.delete_account() -- user has no id, cannot delete"))),
+                None => return TErr!(TError::MissingData(String::from("Turtl.user.id"))),
             }
         };
         turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
@@ -364,7 +364,7 @@ impl User {
                 settings.insert(String::from(key), jedi::to_val(val)?);
             },
             None => {
-                return Err(TError::MissingField(String::from("user.set_setting() -- missing user.settings (None)")));
+                return TErr!(TError::MissingField(String::from("User.settings")));
             }
         }
         sync_model::save_model(SyncAction::Edit, turtl, self, false)?;

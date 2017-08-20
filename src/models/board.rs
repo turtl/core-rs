@@ -36,7 +36,7 @@ impl Board {
     pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String) -> TResult<()> {
         let board_id = match self.id() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingData(String::from("Board.move_spaces() -- missing `self.id` field. Shame."))),
+            None => return TErr!(TError::MissingField(String::from("Board.id"))),
         };
         self.space_id = new_space_id.clone();
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;

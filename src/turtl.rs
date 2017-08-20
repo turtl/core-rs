@@ -202,7 +202,7 @@ impl Turtl {
         let isengard = self.user_id.read().unwrap();
         match isengard.as_ref() {
             Some(x) => Ok(x.clone()),
-            None => return Err(TError::MissingField(String::from("turtl.user_id() -- missing user id (or not logged in)"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.user_id"))),
         }
     }
 
@@ -265,7 +265,7 @@ impl Turtl {
     /// Returns an Err value if we aren't connected.
     pub fn assert_connected(&self) -> TResult<()> {
         if !(*self.connected.read().unwrap()) {
-            Err(TError::ConnectionRequired)
+            TErr!(TError::ConnectionRequired)
         } else {
             Ok(())
         }
@@ -341,7 +341,7 @@ impl Turtl {
         let user_guard = self.user.read().unwrap();
         let user_id = match user_guard.id() {
             Some(x) => x,
-            None => return Err(TError::MissingData(String::from("turtl.get_user_db_location() -- user.id() is None (can't open db without an ID)"))),
+            None => return TErr!(TError::MissingData(String::from("Turtl.user.id"))),
         };
 
         lazy_static! {
@@ -362,7 +362,7 @@ impl Turtl {
         // make sure you model.set_key(None) before calling...
         if model.key().is_some() { return Ok(()); }
 
-        let notfound = Err(TError::NotFound(format!("key for {:?} not found", model.id())));
+        let notfound = TErr!(TError::MissingField(format!("{}.key ({:?})", model.model_type(), model.id())));
 
         /// A standard "found a key" function
         fn found_key<T>(model: &mut T, key: Key) -> TResult<()>
@@ -501,12 +501,12 @@ impl Turtl {
             let user_guard = self.user.read().unwrap();
             match user_guard.key() {
                 Some(x) => x.clone(),
-                None => return Err(TError::MissingData(String::from("turtl.load_profile() -- missing user key"))),
+                None => return TErr!(TError::MissingField(String::from("Turtl.user.key"))),
             }
         };
         let db_guard = self.db.write().unwrap();
         if db_guard.is_none() {
-            return Err(TError::MissingData(String::from("turtl.load_profile() -- turtl.db is not initialized")));
+            return TErr!(TError::MissingField(String::from("Turtl.db")));
         }
         let db = db_guard.as_ref().unwrap();
         let mut keychain: Vec<KeychainEntry> = db.all("keychain").unwrap();
@@ -547,7 +547,7 @@ impl Turtl {
         let db_guard = self.db.read().unwrap();
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("turtl.load_notes() -- turtl is missing `db` object"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
 
         let mut notes: Vec<Note> = db.by_id("notes", note_ids)?;
@@ -561,7 +561,7 @@ impl Turtl {
     pub fn index_notes(&self) -> TResult<()> {
         let db_guard = self.db.write().unwrap();
         if db_guard.is_none() {
-            return Err(TError::MissingData(String::from("turtl.index_notes() -- turtl.db is not initialized")));
+            return TErr!(TError::MissingData(String::from("Turtl.db")));
         }
         let db = db_guard.as_ref().unwrap();
         let mut notes: Vec<Note> = db.all("notes")?;
@@ -603,7 +603,7 @@ impl Turtl {
             let filename = entry.file_name();
             let filename_str = match filename.to_str() {
                 Some(x) => x,
-                None => return Err(TError::Msg(format!("turtl.wipe_app_data() -- error converting OsString into &str"))),
+                None => return TErr!(TError::Msg(format!("error converting OsString into &str"))),
             };
             if &filename_str[0..6] != "turtl-" { continue; }
             fs::remove_file(&path)?;

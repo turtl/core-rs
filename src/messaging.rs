@@ -256,7 +256,7 @@ mod tests {
                     messenger.send(String::from("pong")).unwrap();
                     Ok(())
                 },
-                _ => Err(TError::Msg(format!("bad command: {}", message))),
+                _ => TErr!(TError::Msg(format!("bad command: {}", message))),
             };
 
             match res {

@@ -50,7 +50,7 @@ impl SyncOutgoing {
 
     /// Grab all non-file outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let syncs = with_db!{ db, self.db, "SyncOutgoing.get_outgoing_syncs()",
+        let syncs = with_db!{ db, self.db,
             SyncRecord::allbut(db, &vec![SyncType::File, SyncType::FileIncoming])
         }?;
 
@@ -69,7 +69,7 @@ impl SyncOutgoing {
     fn delete_sync_record(&self, sync: &SyncRecord) -> TResult<()> {
         let noid = String::from("<no id>");
         debug!("SyncOutgoing.delete_sync_record() -- delete {} ({:?} / {:?})", sync.id.as_ref().unwrap_or(&noid), sync.action, sync.ty);
-        with_db!{ db, self.db, "SyncOutgoing.delete_sync_record()", db.delete(sync)?; }
+        with_db!{ db, self.db, db.delete(sync)?; }
         Ok(())
     }
 
@@ -77,7 +77,7 @@ impl SyncOutgoing {
     /// sync items that might need inspection/alerting.
     fn handle_sync_failures(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
         for failure in fail {
-            with_db!{ db, self.db, "SyncOutgoing.handle_sync_failures()",
+            with_db!{ db, self.db,
                 SyncRecord::handle_failed_sync(db, failure)?;
             }
         }
@@ -118,7 +118,7 @@ impl Syncer for SyncOutgoing {
             // grab any extra sync_ids created from this sync item (the api
             // keeps close track of them) and ignore them on the next incoming
             // sync. this keeps us from double-syncing some items.
-            let res2 = with_db!{ db, self.db, "SyncOutgoing.run_sync()",
+            let res2 = with_db!{ db, self.db,
                 match sync.sync_ids.as_ref() {
                     Some(x) => SyncIncoming::ignore_on_next(db, x),
                     None => Ok(()),

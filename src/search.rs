@@ -73,7 +73,7 @@ impl Search {
         };
         let space_id = note.space_id.clone();
         if space_id == "" {
-            return Err(TError::MissingField(format!("Search::index_note() -- note {} missing `space_id` field", id)));
+            return TErr!(TError::MissingField(format!("Note {} missing `space_id`", id)));
         }
         let board_id = get_field!(note, board_id, String::from(""));
         let board_id = if board_id == "" { None } else { Some(board_id) };

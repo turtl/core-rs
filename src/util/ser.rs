@@ -83,7 +83,7 @@ pub mod int_converter {
             Value::String(s) => {
                 Ok(Some(s))
             },
-            _ => Err(TError::BadValue(String::from("int_converter::from_value() -- expecting int or string. got another type."))),
+            _ => TErr!(TError::BadValue(String::from("expecting int or string (got another type)"))),
         }
     }
 }

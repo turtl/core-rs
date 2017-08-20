@@ -191,7 +191,7 @@ impl Api {
         response
             .map_err(|e| {
                 match e {
-                    hyper::Error::Io(err) => TError::Io(err),
+                    hyper::Error::Io(err) => twrap!(TError::Io(err)),
                     _ => toterr!(e),
                 }
             })
@@ -208,7 +208,7 @@ impl Api {
                             String::from("<unknown>")
                         }
                     };
-                    return Err(TError::Api(res.status, errstr));
+                    return TErr!(TError::Api(res.status, errstr));
                 }
                 str_res.map(move |x| (x, res))
             })

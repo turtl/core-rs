@@ -15,7 +15,7 @@ impl Feedback {
         let user_guard = turtl.user.read().unwrap();
         if !user_guard.logged_in {
             // nice try
-            return Err(TError::Msg(String::from("Feedback.send() -- can't send feedback, not logged in. SHAME! SHAME, SHAME.")));
+            return TErr!(TError::Msg(String::from("can't send feedback, not logged in")));
         }
         let mut req = ApiReq::new();
         req = req.data(jedi::to_val(self)?);

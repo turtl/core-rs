@@ -70,7 +70,7 @@ impl Note {
         // delete all local file(s) associated with this note
         let note_id = match self.id() {
             Some(x) => x.clone(),
-            None => return Err(TError::MissingField(String::from("Note.clear_files() -- missing `self.id`, cannot remove local files"))),
+            None => return TErr!(TError::MissingField(String::from("Note.id"))),
         };
         let files = FileData::file_finder_all(Some(&self.user_id), Some(&note_id))?;
         for file in files {

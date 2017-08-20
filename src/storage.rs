@@ -115,7 +115,7 @@ impl Storage {
     {
         let id = match model.id() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("storage::destroy() -- missing `id` field"))),
+            None => return TErr!(TError::MissingField(format!("{}.id", model.model_type()))),
         };
         let table = model.table();
         Ok(self.dumpy.delete(&self.conn, &String::from(table), &id)?)

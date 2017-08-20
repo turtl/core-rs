@@ -39,7 +39,7 @@ impl FileSyncIncoming {
     /// Returns a list of note_ids for notes that have pending file downloads.
     /// This uses the `sync` table.
     fn get_incoming_file_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let syncs = with_db!{ db, self.db, "FileSyncIncoming.get_incoming_file_syncs()",
+        let syncs = with_db!{ db, self.db,
             SyncRecord::find(db, Some(SyncType::FileIncoming))
         }?;
         let mut final_syncs = Vec::with_capacity(syncs.len());
@@ -62,7 +62,7 @@ impl FileSyncIncoming {
             let guard = local_config.read().unwrap();
             match guard.user_id.as_ref() {
                 Some(x) => x.clone(),
-                None => return Err(TError::MissingField(String::from("FileSyncIncoming.download_file() -- sync config `user_id` is None"))),
+                None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),
             }
         };
         info!("FileSyncIncoming.download_file() -- syncing file for {}", note_id);
@@ -97,7 +97,7 @@ impl FileSyncIncoming {
                 let (read_bytes, _) = buf.split_at(read);
                 let written = file.write(read_bytes)?;
                 if read != written {
-                    return Err(TError::Msg(format!("FileSyncIncoming.download_file() -- problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
+                    return TErr!(TError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
                 }
             }
             Ok(())
@@ -107,7 +107,7 @@ impl FileSyncIncoming {
             Ok(_) => {}
             Err(e) => {
                 // our download failed? send to our sync failure handler
-                with_db!{ db, self.db, "FileSyncIncoming.download_file()",
+                with_db!{ db, self.db,
                     SyncRecord::handle_failed_sync(db, sync)?;
                 };
                 return Err(e);
@@ -116,7 +116,7 @@ impl FileSyncIncoming {
 
         // if we're still here, the download succeeded. remove the sync record so
         // we know to stop trying to download this file.
-        with_db!{ db, self.db, "FileSyncIncoming.download_file()", sync.db_delete(db, None)? };
+        with_db!{ db, self.db, sync.db_delete(db, None)? };
 
         // let the UI know how great we are. you will love this app. tremendous
         // app. everyone says so.

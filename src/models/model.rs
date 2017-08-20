@@ -40,7 +40,7 @@ macro_rules! model_getter {
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {
                     Some(val) => val.clone(),
-                    None => return Err(::error::TError::MissingField(format!("{} -- missing field `{}`", $func, stringify!($field)))),
+                    None => return TErr!(::error::TError::MissingField(format!("{}", stringify!($field)))),
                 }
             };
 
@@ -73,7 +73,7 @@ pub fn set_client_id(id: String) -> TResult<()> {
 pub fn cid() -> TResult<String> {
     let client_id = match get_client_id() {
         Some(ref x) => x.clone(),
-        None => return Err(TError::MissingData(format!("model: CLIENT_ID missing"))),
+        None => return TErr!(TError::MissingData(format!("CLIENT_ID missing"))),
     };
     let mut counter_guard = (*CID_COUNTER).write().unwrap();
     let counter: u32 = counter_guard.clone();
@@ -94,7 +94,7 @@ pub fn id_timestamp(id: &String) -> TResult<i64> {
     } else if id.len() == 80 {
         i64::from_str_radix(&id[0..12], 16)?
     } else {
-        return Err(TError::BadValue(format!("model::id_timestamp() -- bad id given ({})", id)));
+        return TErr!(TError::BadValue(format!("bad id given ({})", id)));
     };
     Ok(ts)
 }

@@ -42,7 +42,7 @@ impl FileSyncOutgoing {
     /// finished syncing, it only makes sense to check the front of the table
     /// for the sync record.
     fn get_next_outgoing_file_sync(&self) -> TResult<Option<SyncRecord>> {
-        let next = with_db!{ db, self.db, "FileSyncOutgoing.get_next_outgoing_file_sync()",
+        let next = with_db!{ db, self.db,
             SyncRecord::next(db)
         }?;
         match next {
@@ -65,7 +65,7 @@ impl FileSyncOutgoing {
             let guard = local_config.read().unwrap();
             match guard.user_id.as_ref() {
                 Some(x) => x.clone(),
-                None => return Err(TError::MissingField(String::from("FileSyncOutgoing.upload_file() -- sync config `user_id` is None"))),
+                None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),
             }
         };
         let file = FileData::file_finder(Some(&user_id), Some(note_id))?;
@@ -91,7 +91,7 @@ impl FileSyncOutgoing {
                 let (read_bytes, _) = buf.split_at(read);
                 let written = stream.write(read_bytes)?;
                 if read != written {
-                    return Err(TError::Msg(format!("FileSyncOutgoing.upload_file() -- problem uploading file: grabbed {} bytes, only sent {} wtf wtf lol", read, written)));
+                    return TErr!(TError::Msg(format!("problem uploading file: grabbed {} bytes, only sent {} wtf wtf lol", read, written)));
                 }
             }
             // write all our output and finalize the API call
@@ -102,7 +102,7 @@ impl FileSyncOutgoing {
         match upload(&note_id, file) {
             Ok(res) => {
                 let sync_ids: Vec<u64> = jedi::from_val(jedi::get(&["sync_ids"], &res)?)?;
-                with_db!{ db, self.db, "FileSyncOutgoing.upload_file()",
+                with_db!{ db, self.db,
                     // note that if we do have an error here, the worst that
                     // happens is we download the file right after uploading.
                     // so basically ignore errors.
@@ -114,7 +114,7 @@ impl FileSyncOutgoing {
             }
             Err(e) => {
                 // our upload failed? send to our sync failure handler
-                with_db!{ db, self.db, "FileSyncOutgoing.upload_file()",
+                with_db!{ db, self.db,
                     SyncRecord::handle_failed_sync(db, sync)?;
                 };
                 return Err(e);
@@ -123,7 +123,7 @@ impl FileSyncOutgoing {
 
         // if we're still here, the upload succeeded. remove the sync record so
         // we know to stop trying to upload this file.
-        with_db!{ db, self.db, "FileSyncOutgoing.upload_file()", sync.db_delete(db, None)? };
+        with_db!{ db, self.db, sync.db_delete(db, None)? };
 
         // let the UI know how great we are. you will love this app. tremendous
         // app. everyone says so.

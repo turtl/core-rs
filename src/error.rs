@@ -1,6 +1,7 @@
 use ::std::error::Error;
 use ::std::io::Error as IoError;
 use ::std::convert::From;
+use ::std::sync::Arc;
 
 use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
@@ -10,10 +11,13 @@ use ::dumpy::DError;
 use ::crypto::CryptoError;
 
 quick_error! {
-
     #[derive(Debug)]
     /// Turtl's main error object.
     pub enum TError {
+        Wrapped(function: &'static str, file: &'static str, line: u32, err: Arc<TError>) {
+            description("Turtl wrap error")
+            display("{{\"fn\":\"{}\",\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", function, file, line, err)
+        }
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err)
@@ -85,6 +89,54 @@ quick_error! {
     }
 }
 
+impl TError {
+    #[allow(dead_code)]
+    pub fn unwrap(self) -> TError {
+        match self {
+            TError::Wrapped(function, file, line, wrappederr) => {
+                match Arc::try_unwrap(wrappederr) {
+                    Ok(x) => x.unwrap(),
+                    Err(y) => TError::Wrapped(function, file, line, y),
+                }
+            }
+            _ => self,
+        }
+    }
+}
+
+/*
+macro_rules! function {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            extern crate core;
+            unsafe { core::intrinsics::type_name::<T>() }
+        }
+        let name = type_name_of(f);
+        &name[6..name.len() - 4]
+    }}
+}
+*/
+macro_rules! function {
+    () => {{
+        "wrong"
+    }}
+}
+
+/// A macro that wraps creation of errors so we get file/line info for debugging
+#[macro_export]
+macro_rules! twrap {
+    ($terror:expr) => {
+        ::error::TError::Wrapped(function!(), file!(), line!(), ::std::sync::Arc::new($terror))
+    }
+}
+
+/// Invokes twrap! while also wrapping in Err
+#[macro_export]
+macro_rules! TErr {
+    ($terror:expr) => { Err(twrap!($terror)) }
+}
+
 /// converts non-TError errors to TError, via the From trait. This means that
 /// we can't do blanket conversions of errors anymore (like the good ol' days)
 /// but instead must provide a Err -> TError From implementation. This is made
@@ -95,7 +147,7 @@ macro_rules! toterr {
     ($e:expr) => (
         {
             let err: ::error::TError = From::from($e);
-            err
+            twrap!(err)
         }
     )
 }
@@ -105,7 +157,7 @@ macro_rules! from_err {
     ($t:ty) => (
         impl From<$t> for ::error::TError {
             fn from(err: $t) -> ::error::TError {
-                TError::Boxed(Box::new(err))
+                twrap!(TError::Boxed(Box::new(err)))
             }
         }
     )

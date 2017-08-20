@@ -139,7 +139,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:sync:model" => {
             let action: SyncAction = match jedi::get(&["2"], &data) {
                 Ok(action) => action,
-                Err(e) => return Err(TError::BadValue(format!("dispatch: {} -- bad sync action: {}", cmd, e))),
+                Err(e) => return TErr!(TError::BadValue(format!("bad sync action: {}", e))),
             };
             let ty: SyncType = jedi::get(&["3"], &data)?;
 
@@ -148,7 +148,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     let val = match ty {
                         SyncType::User => {
                             if action != SyncAction::Edit {
-                                return Err(TError::BadValue(format!("dispatch: {} -- cannot `add` item of type {:?}", cmd, ty)));
+                                return TErr!(TError::BadValue(format!("cannot `add` item of type {:?}", ty)));
                             }
                             let mut model: User = jedi::get(&["4"], &data)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
@@ -170,7 +170,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             let permission = match &action {
                                 &SyncAction::Add => Permission::AddBoard,
                                 &SyncAction::Edit => Permission::EditBoard,
-                                _ => return Err(TError::BadValue(format!("dispatch: {} -- couldn't find permission for {:?}/{:?}", cmd, ty, action))),
+                                _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
                             };
                             Space::permission_check(turtl, &model.space_id, &permission)?;
                             sync_model::save_model(action, turtl, &mut model, false)?
@@ -180,7 +180,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             let permission = match &action {
                                 &SyncAction::Add => Permission::AddNote,
                                 &SyncAction::Edit => Permission::EditNote,
-                                _ => return Err(TError::BadValue(format!("dispatch: {} -- couldn't find permission for {:?}/{:?}", cmd, ty, action))),
+                                _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
                             };
                             Space::permission_check(turtl, &note.space_id, &permission)?;
                             // always set to false. this is a public field that
@@ -197,24 +197,24 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             note_data
                         }
                         _ => {
-                            return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
+                            return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
                         }
                     };
                     Ok(val)
                 }
                 SyncAction::Delete => {
                     let id: String = jedi::get(&["4", "id"], &data)?;
-                    fn get_model<T>(turtl: &Turtl, id: &String, cmd: &str) -> TResult<T>
+                    fn get_model<T>(turtl: &Turtl, id: &String) -> TResult<T>
                         where T: Protected + Storable
                     {
                         let mut db_guard = turtl.db.write().unwrap();
                         let db = match db_guard.as_mut() {
                             Some(x) => x,
-                            None => return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `db` object", cmd))),
+                            None => return TErr!(TError::MissingField(format!("turtl is missing `db` object"))),
                         };
                         match db.get::<T>(T::tablename(), id)? {
                             Some(x) => Ok(x),
-                            None => return Err(TError::NotFound(format!("dispatch: {} -- that {} model wasn't found", cmd, T::tablename()))),
+                            None => return TErr!(TError::NotFound(format!("that {} model wasn't found", T::tablename()))),
                         }
                     }
                     match ty {
@@ -223,22 +223,22 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             sync_model::delete_model::<Space>(turtl, &id, false)?;
                         }
                         SyncType::Board => {
-                            let model = get_model::<Board>(turtl, &id, cmd)?;
+                            let model = get_model::<Board>(turtl, &id)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::DeleteBoard)?;
                             sync_model::delete_model::<Board>(turtl, &id, false)?;
                         }
                         SyncType::Note => {
-                            let model = get_model::<Note>(turtl, &id, cmd)?;
+                            let model = get_model::<Note>(turtl, &id)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::DeleteNote)?;
                             sync_model::delete_model::<Note>(turtl, &id, false)?;
                         }
                         SyncType::File => {
-                            let model = get_model::<Note>(turtl, &id, cmd)?;
+                            let model = get_model::<Note>(turtl, &id)?;
                             Space::permission_check(turtl, &model.space_id, &Permission::EditNote)?;
                             sync_model::delete_model::<FileData>(turtl, &id, false)?;
                         }
                         _ => {
-                            return Err(TError::BadValue(format!("dispatch: {} -- cannot direct sync an item of type {:?}", cmd, ty)));
+                            return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
                         }
                     }
                     Ok(jedi::obj())
@@ -254,7 +254,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             let boards = &mut profile_guard.boards;
                             let board = match Profile::finder(boards, &item_id) {
                                 Some(m) => m,
-                                None => return Err(TError::MissingData(format!("dispatch: {} -- cannot find Board {} in profile", cmd, item_id))),
+                                None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
                             };
                             board.move_spaces(turtl, space_id)?;
                         }
@@ -263,19 +263,19 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                             Space::permission_check(turtl, &space_id, &Permission::AddNote)?;
                             let mut notes = turtl.load_notes(&vec![item_id.clone()])?;
                             if notes.len() == 0 {
-                                return Err(TError::MissingData(format!("dispatch: {} -- trouble grabbing Note {}", cmd, item_id)));
+                                return TErr!(TError::MissingData(format!("trouble grabbing Note {}", item_id)));
                             }
                             let note = &mut notes[0];
                             note.move_spaces(turtl, space_id)?;
                         }
                         _ => {
-                            return Err(TError::BadValue(format!("dispatch: {} -- cannot {:?} item of type {:?}", cmd, action, ty)));
+                            return TErr!(TError::BadValue(format!("cannot {:?} item of type {:?}", action, ty)));
                         }
                     }
                     Ok(jedi::obj())
                 }
                 _ => {
-                    Err(TError::BadValue(format!("dispatch: {} -- unimplemented sync action {:?}", cmd, action)))
+                    TErr!(TError::BadValue(format!("unimplemented sync action {:?}", action)))
                 }
             }
         },
@@ -285,7 +285,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.set_owner(turtl, &user_id)?;
             Ok(space.data()?)
@@ -295,7 +295,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, member.space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", member.space_id))),
             };
             space.edit_member(turtl, &mut member)?;
             Ok(space.data()?)
@@ -306,7 +306,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.delete_member(turtl, &user_id)?;
             Ok(space.data()?)
@@ -316,7 +316,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.leave(turtl)?;
             Ok(space.data()?)
@@ -326,7 +326,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &req.space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, req.space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", req.space_id))),
             };
             space.send_invite(turtl, req)?;
             Ok(space.data()?)
@@ -338,7 +338,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.accept_invite(turtl, &invite_id, passphrase)?;
             Ok(space.data()?)
@@ -348,7 +348,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, invite.space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", invite.space_id))),
             };
             space.edit_invite(turtl, &mut invite)?;
             Ok(space.data()?)
@@ -359,7 +359,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let mut profile_guard = turtl.profile.write().unwrap();
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
-                None => return Err(TError::MissingData(format!("dispatch: {} -- couldn't find space {}", cmd, space_id))),
+                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.delete_invite(turtl, &invite_id)?;
             Ok(space.data()?)
@@ -373,7 +373,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let qry: Query = jedi::get(&["2"], &data)?;
             let search_guard = turtl.search.read().unwrap();
             if search_guard.is_none() {
-                return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `search` object", cmd)));
+                return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
             let search = search_guard.as_ref().unwrap();
             let note_ids = search.find(&qry)?;
@@ -392,7 +392,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let limit: i32 = jedi::get(&["4"], &data)?;
             let search_guard = turtl.search.read().unwrap();
             if search_guard.is_none() {
-                return Err(TError::MissingField(format!("dispatch: {} -- turtl is missing `search` object", cmd)));
+                return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
@@ -408,7 +408,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(Value::String(String::from("pong")))
         },
         _ => {
-            Err(TError::MissingCommand(cmd.clone()))
+            TErr!(TError::MissingCommand(cmd.clone()))
         }
     }
 }
@@ -434,7 +434,7 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
                         let mut data = Value::Null;
                         match sync_item.data.as_mut() {
                             Some(x) => mem::swap(&mut data, x),
-                            None => return Err(TError::MissingData(format!("dispatch_event: sync:incoming -- sync item missing `data` field."))),
+                            None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
                         }
                         let model: T = jedi::from_val(data)?;
                         model.save_to_mem(turtl)?;
@@ -500,12 +500,12 @@ pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
     // grab the request id from the data
     let mid: String = match jedi::get(&["0"], &data) {
         Ok(x) => x,
-        Err(_) => return Err(TError::MissingField(String::from("missing mid (0)"))),
+        Err(_) => return TErr!(TError::MissingField(String::from("missing mid (0)"))),
     };
     // grab the command from the data
     let cmd: String = match jedi::get(&["1"], &data) {
         Ok(x) => x,
-        Err(_) => return Err(TError::MissingField(String::from("missing cmd (1)"))),
+        Err(_) => return TErr!(TError::MissingField(String::from("missing cmd (1)"))),
     };
 
     info!("dispatch({}): {}", mid, cmd);

@@ -120,12 +120,12 @@ impl SyncIncoming {
 
     /// Get all sync ids that should be ignored on the next sync run
     fn get_ignored(&self) -> TResult<Vec<String>> {
-        with_db!{ db, self.db, "SyncIncoming.get_ignored()", SyncIncoming::get_ignored_impl(db) }
+        with_db!{ db, self.db, SyncIncoming::get_ignored_impl(db) }
     }
 
     /// Clear out ignored sync ids
     fn clear_ignored(&self) -> TResult<()> {
-        with_db!{ db, self.db, "SyncIncoming.clear_ignored()", db.kv_delete(SYNC_IGNORE_KEY) }
+        with_db!{ db, self.db, db.kv_delete(SYNC_IGNORE_KEY) }
     }
 
     /// Grab the latest changes from the API (anything after the given sync ID).
@@ -144,7 +144,7 @@ impl SyncIncoming {
                     self.connected(false);
                     match io.kind() {
                         ErrorKind::TimedOut => return Ok(()),
-                        _ => return Err(TError::Io(io)),
+                        _ => return TErr!(TError::Io(io)),
                     }
                 }
                 _ => return Err(e),
@@ -196,7 +196,7 @@ impl SyncIncoming {
             })
             .collect::<Vec<_>>();
 
-        with_db!{ db, self.db, "SyncIncoming.update_local_db_from_api_sync()",
+        with_db!{ db, self.db,
             // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
             for rec in &mut records {
@@ -249,10 +249,10 @@ impl SyncIncoming {
                 None => false,
             };
             if missing {
-                info!("sync::incoming::run_sync_item() -- got missing item, probably an add/delete: {:?}", sync_item);
+                info!("SyncIncoming::run_sync_item() -- got missing item, probably an add/delete: {:?}", sync_item);
                 return Ok(());
             } else {
-                return Err(TError::BadValue(format!("sync::incoming::run_sync_item() -- bad item: {:?}", sync_item)));
+                return TErr!(TError::BadValue(format!("bad item: {:?}", sync_item)));
             }
         }
 
@@ -282,7 +282,7 @@ impl Syncer for SyncIncoming {
     }
 
     fn init(&self) -> TResult<()> {
-        let sync_id = with_db!{ db, self.db, "SyncIncoming.init()",
+        let sync_id = with_db!{ db, self.db,
             db.kv_get("sync_id")?
         };
         Messenger::event("sync:incoming:init:start", jedi::obj())?;
@@ -304,12 +304,12 @@ impl Syncer for SyncIncoming {
     }
 
     fn run_sync(&mut self) -> TResult<()> {
-        let sync_id = with_db!{ db, self.db, "SyncIncoming.run_sync()",
+        let sync_id = with_db!{ db, self.db,
             db.kv_get("sync_id")?
         };
         let res = match sync_id {
             Some(ref x) => self.sync_from_api(x, true),
-            None => return Err(TError::MissingData(String::from("SyncIncoming.run_sync() -- no sync_id present"))),
+            None => return TErr!(TError::MissingData(String::from("no sync_id present"))),
         };
         res
     }

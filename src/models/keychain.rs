@@ -104,11 +104,11 @@ impl Keychain {
             let user_guard = turtl.user.read().unwrap();
             let id = match user_guard.id() {
                 Some(id) => id.clone(),
-                None => return Err(TError::MissingField(String::from("Keychain.upsert_key_save() -- `turtl.user` is missing an id. harrr."))),
+                None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
             };
             let key = match user_guard.key() {
                 Some(k) => k.clone(),
-                None => return Err(TError::MissingField(String::from("Keychain.upsert_key_save() -- `turtl.user` is missing a key. gfft."))),
+                None => return Err(TError::MissingField(String::from("Turtl.user.key"))),
             };
             (id, key)
         };

@@ -115,7 +115,7 @@ impl Invite {
         Protected::deserialize(self)?;
         let message = match self.message.as_ref() {
             Some(x) => x.clone(),
-            None => return Err(TError::MissingField(String::from("Invite.open() -- `message` field is missing"))),
+            None => return TErr!(TError::MissingField(String::from("Invite.message"))),
         };
         if self.is_pubkey_protected {
             self.message = Some(crypto::asym::decrypt(our_pubkey, our_privkey, message)?);

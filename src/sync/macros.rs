@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! with_db {
-    ($dbvar:ident, $dbobj:expr, $errprefix:expr, $( $rest:tt )*) => {
+    ($dbvar:ident, $dbobj:expr, $( $rest:tt )*) => {
         {
             // TODO: gensym anyone?
             let mut db_guard__ = $dbobj.write().unwrap();
@@ -9,7 +9,7 @@ macro_rules! with_db {
                     $( $rest )*
                 }
                 None => {
-                    return Err(::error::TError::MissingField(format!("{} -- `{}` is None", $errprefix, stringify!($dbobj))));
+                    return TErr!(::error::TError::MissingField(format!("{}", stringify!($dbobj))));
                 }
             }
         }

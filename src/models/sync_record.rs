@@ -160,7 +160,7 @@ impl SyncRecord {
         let mut db_guard = turtl.db.write().unwrap();
         let db = match db_guard.as_mut() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::get_all_pending() -- `turtl.db` is empty"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
         SyncRecord::find(db, None)
     }
@@ -172,7 +172,7 @@ impl SyncRecord {
         debug!("SyncRecord::handle_failed_sync() -- handle failure: {:?}", failure);
         let sync_id = match failure.id().as_ref() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(format!("SyncRecord::handle_failed_sync() -- missing `failure.id` field"))),
+            None => return TErr!(TError::MissingField(format!("SyncRecord.id"))),
         };
         let sync_record: Option<SyncRecord> = db.get("sync", &sync_id)?;
         match sync_record {
@@ -197,7 +197,7 @@ impl SyncRecord {
         let mut db_guard = turtl.db.write().unwrap();
         let db = match db_guard.as_mut() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::kick_frozen_sync() -- `turtl.db` is empty"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
         let sync: Option<SyncRecord> = db.get("sync", sync_id)?;
         match sync {
@@ -216,7 +216,7 @@ impl SyncRecord {
         let mut db_guard = turtl.db.write().unwrap();
         let db = match db_guard.as_mut() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("SyncOutgoing::delete_sync_item() -- `turtl.db` is empty"))),
+            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
         let mut sync_record: SyncRecord = Default::default();
         sync_record.id = Some(sync_id.clone());

@@ -30,7 +30,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
             _ => {
                 if sync_item.data.is_none() {
                     let sync_id = sync_item.id().map(|x| x.as_str()).unwrap_or("<no id>");
-                    return Err(TError::MissingData(format!("missing `data` field in sync_item {} ({})", sync_id, self.model_type())));
+                    return TErr!(TError::MissingField(format!("SyncItem.data ({} / {})", sync_id, self.model_type())));
                 }
                 self.transform(sync_item)?;
                 let mut data = Value::Null;
@@ -66,7 +66,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
         sync_record.ty = SyncType::from_string(self.model_type())?;
         sync_record.item_id = match self.id() {
             Some(id) => id.clone(),
-            None => return Err(TError::MissingField(format!("SyncModel::outgoing() -- model ({}) is missing its id", self.model_type()))),
+            None => return TErr!(TError::MissingField(format!("{}.id", self.model_type()))),
         };
         match sync_record.action {
             SyncAction::Delete => {
@@ -125,7 +125,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
         let db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
-            None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
+            None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
 
         if model.is_new() {
@@ -163,7 +163,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
         let mut db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
-            None => return Err(TError::MissingField(format!("sync_model::save_model() -- {}: turtl is missing `db` object", model.model_type()))),
+            None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
         model.outgoing(action, &user_id, db, skip_remote_sync)?;
     }
@@ -193,7 +193,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
         let mut db_guard = turtl.db.write().unwrap();
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
-            None => return Err(TError::MissingField(format!("sync_model::delete_model() -- {}: turtl is missing `db` object", model.model_type()))),
+            None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
         model.outgoing(SyncAction::Delete, &user_id, db, skip_remote_sync)?;
     }

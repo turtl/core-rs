@@ -134,7 +134,7 @@ pub trait Syncer {
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         let user_id = match guard.user_id.as_ref() {
             Some(x) => x,
-            None => return Err(TError::MissingField(String::from("Syncer.sync_key() -- sync config `user_id` is None"))),
+            None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),
         };
         Ok(format!("{}:{}", user_id, api_endpoint))
     }
