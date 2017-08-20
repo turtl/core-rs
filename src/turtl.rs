@@ -481,13 +481,13 @@ impl Turtl {
             match self.find_model_key(model) {
                 Ok(_) => {},
                 Err(_) => {
-                    error!("turtl.find_models_keys() -- skipping model {:?}/{}: problem finding key", model.id(), model.model_type());
+                    warn!("turtl.find_models_keys() -- skipping model {:?}/{}: problem finding key", model.id(), model.model_type());
                     errcount += 1;
                 },
             }
         }
         if errcount > 0 {
-            error!("turtl.find_models_keys() -- load summary: couldn't load keys for {} models", errcount);
+            warn!("turtl.find_models_keys() -- load summary: couldn't load keys for {} models", errcount);
         }
         Ok(())
     }
