@@ -1,4 +1,10 @@
 v0.7:
+- files
+  - started on file integration test for incoming, but it seems to
+    a) erase files for other users?
+    b) getting errors in sync data (see log), something about a missing note or
+       some such nonsense
+- commit server
 - invites
   - integraiton tests!
 - bookmarker

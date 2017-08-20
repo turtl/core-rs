@@ -3,11 +3,10 @@ include!("./_lib.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use ::config;
 
     #[test]
-    fn filesync_outgoing() {
+    fn file_sync() {
         let handle = init();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
@@ -48,9 +47,18 @@ mod tests {
         }
 
         wait_on("sync:file:uploaded");
+        dispatch_ass(json!(["app:wipe-user-data"]));
+        wait_on("user:logout");
+
+        dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
+        dispatch_ass(json!(["sync:start"]));
+        let evdata = wait_on("sync:file:downloaded");
+        let note_id2: String = jedi::get(&["note_id"], &evdata).unwrap();
 
         dispatch_ass(json!(["profile:sync:model", "delete", "file", {"id": note_id}]));
         dispatch_ass(json!(["user:delete-account"]));
+
+        assert_eq!(note_id, note_id2);
         end(handle);
     }
 }
