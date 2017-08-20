@@ -481,7 +481,7 @@ impl Turtl {
             match self.find_model_key(model) {
                 Ok(_) => {},
                 Err(_) => {
-                    error!("turtl.find_models_keys() -- skipping model {:?}: problem finding key", model.id());
+                    error!("turtl.find_models_keys() -- skipping model {:?}/{}: problem finding key", model.id(), model.model_type());
                     errcount += 1;
                 },
             }
