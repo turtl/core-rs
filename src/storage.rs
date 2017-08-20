@@ -121,11 +121,18 @@ impl Storage {
         Ok(self.dumpy.delete(&self.conn, &String::from(table), &id)?)
     }
 
-    /// Grab all values from a "table"
+    /// Grab all values from a "table" ordered by id ASC, w/ a result limit
+    pub fn all_limit<T>(&self, table: &str, limit: Option<i32>) -> TResult<Vec<T>>
+        where T: Protected + Storable
+    {
+        Ok(jedi::from_val(Value::Array(self.dumpy.all_limit(&self.conn, &String::from(table), limit)?))?)
+    }
+
+    /// Grab all values from a "table" ordered by id ASC
     pub fn all<T>(&self, table: &str) -> TResult<Vec<T>>
         where T: Protected + Storable
     {
-        Ok(jedi::from_val(Value::Array(self.dumpy.all(&self.conn, &String::from(table))?))?)
+        self.all_limit(table, None)
     }
 
     /// Find values by index/value in a "table"

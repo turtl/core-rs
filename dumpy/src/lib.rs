@@ -270,18 +270,37 @@ impl Dumpy {
         Ok(objects)
     }
 
-    /// Get ALL objects in a table
-    pub fn all(&self, conn: &Connection, table: &String) -> DResult<Vec<Value>> {
-        let query = "SELECT data FROM dumpy_objects WHERE table_name = ? ORDER BY id ASC";
-        let mut query = conn.prepare(query)?;
-        let rows = query.query_map(&[table], |row| {
-            row.get("data")
-        })?;
+    /// Get ALL objects in a table, ordered by id ASC, with a limit
+    pub fn all_limit(&self, conn: &Connection, table: &String, limit: Option<i32>) -> DResult<Vec<Value>> {
+        let mut qry_parts = Vec::with_capacity(2);
+        let mut qry_vals: Vec<SearchVal> = Vec::with_capacity(2);
+        qry_parts.push("SELECT data FROM dumpy_objects WHERE table_name = ? ORDER BY id ASC");
+        qry_vals.push(SearchVal::String(table.clone()));
+        if let Some(lim) = limit {
+            qry_parts.push(" LIMIT ?");
+            qry_vals.push(SearchVal::Int(lim));
+        }
+        let merged_qry = qry_parts.as_slice().join("");
+        let mut query = conn.prepare(merged_qry.as_str())?;
+
+        let values: Vec<&ToSql> = qry_vals.iter()
+            .map(|x| {
+                let ts: &ToSql = x;
+                ts
+            })
+            .collect::<Vec<_>>();
+
+        let rows = query.query_map(values.as_slice(), |row| row.get("data"))?;
         let mut objects: Vec<Value> = Vec::new();
         for data in rows {
             objects.push(jedi::parse(&data?)?);
         }
         Ok(objects)
+    }
+
+    /// Get ALL objects in a table, ordered by id ASC
+    pub fn all(&self, conn: &Connection, table: &String) -> DResult<Vec<Value>> {
+        self.all_limit(conn, table, None)
     }
 
     /// Get ALL objects in a table with the given IDs
@@ -471,6 +490,9 @@ mod tests {
 
         let all_records = dumpy.all(&conn, &String::from("notes")).unwrap();
         assert_eq!(all_records.len(), 7);
+
+        let all_limit = dumpy.all_limit(&conn, &String::from("notes"), Some(4)).unwrap();
+        assert_eq!(all_limit.len(), 4);
 
         let by_ids = dumpy.by_id(&conn, &String::from("notes"), &vec![String::from("n0mnm"), String::from("6tuns"), String::from("gr1my"), String::from("L00000000L")]).unwrap();
         assert_eq!(by_ids.len(), 3);

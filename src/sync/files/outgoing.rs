@@ -36,21 +36,24 @@ impl FileSyncOutgoing {
         }
     }
 
-    /// Returns a list of note_ids for notes that have pending file uploads.
-    /// This uses the `sync` table.
-    fn get_outgoing_file_syncs(&self) -> TResult<Vec<SyncRecord>> {
-        let syncs = with_db!{ db, self.db, "FileSyncOutgoing.get_outgoing_file_syncs()",
-            SyncRecord::find(db, Some(SyncType::File))
+    /// Looks at the first entry in the sync table for an outgoing file sync
+    /// record. We could scan the whole table, but since syncs are in order and
+    /// we really don't want to start uploading a file for a note that hasn't
+    /// finished syncing, it only makes sense to check the front of the table
+    /// for the sync record.
+    fn get_next_outgoing_file_sync(&self) -> TResult<Option<SyncRecord>> {
+        let next = with_db!{ db, self.db, "FileSyncOutgoing.get_next_outgoing_file_sync()",
+            SyncRecord::next(db)
         }?;
-        let mut final_syncs = Vec::with_capacity(syncs.len());
-        for sync in syncs {
-            // NOTE: in the normal sync process, we break on frozen. here, we
-            // continue. the reason being that file syncs don't necessarily
-            // benefit from being run in order like normal outgoing syncs do.
-            if sync.frozen { continue; }
-            final_syncs.push(sync);
+        match next {
+            Some(x) => {
+                match x.ty {
+                    SyncType::File => Ok(Some(x)),
+                    _ => Ok(None),
+                }
+            }
+            None => { Ok(None) }
         }
-        Ok(final_syncs)
     }
 
     /// Given a sync record for an outgoing file, find the corresponding file
@@ -143,9 +146,9 @@ impl Syncer for FileSyncOutgoing {
     }
 
     fn run_sync(&mut self) -> TResult<()> {
-        let syncs = self.get_outgoing_file_syncs()?;
-        for sync in &syncs {
-            self.upload_file(sync)?;
+        let sync_maybe = self.get_next_outgoing_file_sync()?;
+        if let Some(sync) = sync_maybe {
+            self.upload_file(&sync)?;
         }
         Ok(())
     }

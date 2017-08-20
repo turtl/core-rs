@@ -133,6 +133,16 @@ impl SyncRecord {
         db.find("sync", "sync", &args)
     }
 
+    /// Grab the next sync item that's ready to go out.
+    pub fn next(db: &mut Storage) -> TResult<Option<SyncRecord>> {
+        let mut rec = db.all_limit("sync", Some(1))?;
+        if rec.len() >= 1 {
+            Ok(Some(rec.swap_remove(0)))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Given a DB, find all sync records matching `frozen` but NOT matching
     /// `not_ty`.
     pub fn allbut(db: &mut Storage, not_ty: &Vec<SyncType>) -> TResult<Vec<SyncRecord>> {
