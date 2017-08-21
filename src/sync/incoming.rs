@@ -140,6 +140,7 @@ impl SyncIncoming {
         let syncdata = match syncres {
             Ok(x) => x,
             Err(e) => match e {
+                let e = e.unwrap();
                 TError::Io(io) => {
                     self.connected(false);
                     match io.kind() {
