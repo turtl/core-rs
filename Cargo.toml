@@ -41,3 +41,6 @@ serde_json = "1.0.2"
 sodiumoxide = { path = "sodiumoxide-aead" }
 time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
 
+[features]
+panic-on-error = []
+

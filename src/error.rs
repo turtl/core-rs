@@ -150,7 +150,11 @@ macro_rules! from_err {
     ($t:ty) => (
         impl From<$t> for ::error::TError {
             fn from(err: $t) -> ::error::TError {
-                TError::Boxed(Box::new(err))
+                if cfg!(feature = "panic-on-error") {
+                    panic!("{:?}", err);
+                } else {
+                    TError::Boxed(Box::new(err))
+                }
             }
         }
     )
@@ -158,33 +162,53 @@ macro_rules! from_err {
 
 impl From<CryptoError> for TError {
     fn from(err: CryptoError) -> TError {
-        TError::Crypto(err)
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Crypto(err)
+        }
     }
 }
 impl From<IoError> for TError {
     fn from(err: IoError) -> TError {
-        TError::Io(err)
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Io(err)
+        }
     }
 }
 impl From<JSONError> for TError {
     fn from(err: JSONError) -> TError {
-        match err {
-            JSONError::Boxed(x) => TError::Boxed(x),
-            _ => TError::JSON(err),
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            match err {
+                JSONError::Boxed(x) => TError::Boxed(x),
+                _ => TError::JSON(err),
+            }
         }
     }
 }
 impl From<DError> for TError {
     fn from(err: DError) -> TError {
-        match err {
-            DError::Boxed(x) => TError::Boxed(x),
-            _ => TError::Dumpy(err),
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            match err {
+                DError::Boxed(x) => TError::Boxed(x),
+                _ => TError::Dumpy(err),
+            }
         }
     }
 }
 impl From<Box<::std::any::Any + Send>> for TError {
     fn from(err: Box<::std::any::Any + Send>) -> TError {
-        TError::Msg(format!("{:?}", err))
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Msg(format!("{:?}", err))
+        }
     }
 }
 from_err!(::fern::InitError);
