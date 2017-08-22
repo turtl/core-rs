@@ -331,7 +331,7 @@ mod tests {
         match FileData::load_file(&turtl, &note) {
             Ok(_) => panic!("Found file for note {}, should be deleted", note.id().as_ref().unwrap()),
             Err(e) => {
-                let e = e.unwrap();
+                let e = e.shed();
                 match e {
                     // amazing, heh heh.
                     TError::NotFound(_) => {},

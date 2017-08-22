@@ -139,16 +139,18 @@ impl SyncIncoming {
         // timeout if no response is received)
         let syncdata = match syncres {
             Ok(x) => x,
-            Err(e) => match e {
-                let e = e.unwrap();
-                TError::Io(io) => {
-                    self.connected(false);
-                    match io.kind() {
-                        ErrorKind::TimedOut => return Ok(()),
-                        _ => return TErr!(TError::Io(io)),
+            Err(e) => {
+                let e = e.shed();
+                match e {
+                    TError::Io(io) => {
+                        self.connected(false);
+                        match io.kind() {
+                            ErrorKind::TimedOut => return Ok(()),
+                            _ => return TErr!(TError::Io(io)),
+                        }
                     }
+                    _ => return Err(e),
                 }
-                _ => return Err(e),
             },
         };
 

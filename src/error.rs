@@ -90,12 +90,16 @@ quick_error! {
 }
 
 impl TError {
-    #[allow(dead_code)]
-    pub fn unwrap(self) -> TError {
+    /// Shed this TError object's tough, icy outer shell to reveal it's true
+    /// sensitive inner-self.
+    ///
+    /// It's best to call this function when you are in a *safe place* and
+    /// surrounded by people you love.
+    pub fn shed(self) -> TError {
         match self {
             TError::Wrapped(function, file, line, wrappederr) => {
                 match Arc::try_unwrap(wrappederr) {
-                    Ok(x) => x.unwrap(),
+                    Ok(x) => x.shed(),
                     Err(y) => TError::Wrapped(function, file, line, y),
                 }
             }
@@ -104,6 +108,8 @@ impl TError {
     }
 }
 
+/// Define a macro that, if and when the time is right, returns a static string
+/// of the current function.
 macro_rules! function {
     () => {{
         "<unimplemented>"

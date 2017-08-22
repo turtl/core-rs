@@ -137,7 +137,7 @@ impl User {
         do_login(turtl, &username, &password, version)
             .or_else(|e| {
                 turtl.api.clear_auth();
-                let e = e.unwrap();
+                let e = e.shed();
                 match e {
                     TError::Api(x, y) => {
                         match x {
