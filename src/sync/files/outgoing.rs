@@ -10,7 +10,6 @@ use ::models::file::FileData;
 use ::models::sync_record::{SyncType, SyncRecord};
 use ::std::fs;
 use ::std::io::{Read, Write};
-use ::jedi::{self, Value};
 
 /// Holds the state for outgoing files (uploads)
 pub struct FileSyncOutgoing {
@@ -71,9 +70,16 @@ impl FileSyncOutgoing {
         let file = FileData::file_finder(Some(&user_id), Some(note_id))?;
         info!("FileSyncOutgoing.upload_file() -- syncing file {:?}", file);
 
+        #[derive(Deserialize, Debug)]
+        struct UploadRes {
+            #[serde(default)]
+            #[serde(deserialize_with = "::util::ser::opt_vec_str_i64_converter::deserialize")]
+            sync_ids: Option<Vec<i64>>,
+        }
+
         // define a container function that grabs our file and runs the upload.
         // if anything in here fails, we mark 
-        let upload = |note_id, file| -> TResult<Value> {
+        let upload = |note_id, file| -> TResult<UploadRes> {
             // open our local file. we should test if it's readable/exists
             // before making API calls
             let mut file = fs::File::open(&file)?;
@@ -101,16 +107,20 @@ impl FileSyncOutgoing {
 
         match upload(&note_id, file) {
             Ok(res) => {
-                let sync_ids: Vec<u64> = jedi::from_val(jedi::get(&["sync_ids"], &res)?)?;
-                with_db!{ db, self.db,
-                    // note that if we do have an error here, the worst that
-                    // happens is we download the file right after uploading.
-                    // so basically ignore errors.
-                    match SyncIncoming::ignore_on_next(db, &sync_ids) {
-                        Ok(_) => {},
-                        Err(e) => error!("FileSyncOutgoing.upload() -- error ignoring sync items (but continuing regardless): {}", e),
+                match res.sync_ids.as_ref() {
+                    Some(ids) => {
+                        with_db!{ db, self.db,
+                            // note that if we do have an error here, the worst that
+                            // happens is we download the file right after uploading.
+                            // so basically ignore errors.
+                            match SyncIncoming::ignore_on_next(db, ids) {
+                                Ok(_) => {},
+                                Err(e) => error!("FileSyncOutgoing.upload() -- error ignoring sync items (but continuing regardless): {}", e),
+                            }
+                        };
                     }
-                };
+                    None => {}
+                }
             }
             Err(e) => {
                 // our upload failed? send to our sync failure handler

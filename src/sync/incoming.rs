@@ -20,7 +20,8 @@ struct SyncResponse {
     #[serde(default)]
     records: Vec<SyncRecord>,
     #[serde(default)]
-    sync_id: u64,
+    #[serde(deserialize_with = "::util::ser::str_i64_converter::deserialize")]
+    sync_id: i64,
 }
 
 struct Handlers {
@@ -35,7 +36,7 @@ struct Handlers {
 
 /// Given a Value object with sync_ids, try to ignore the sync ids. Kids' stuff.
 pub fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &str) {
-    match jedi::get_opt::<Vec<u64>>(&["sync_ids"], val_with_sync_ids) {
+    match jedi::get_opt::<Vec<i64>>(&["sync_ids"], val_with_sync_ids) {
         Some(x) => {
             let mut db_guard = turtl.db.write().unwrap();
             if db_guard.is_some() {
@@ -110,7 +111,7 @@ impl SyncIncoming {
     /// since the sync system should be able to handle situations like this
     /// (such as double-adding a note), however it can be much more efficient
     /// especially in the case of file syncing.
-    pub fn ignore_on_next(db: &mut Storage, sync_ids: &Vec<u64>) -> TResult<()> {
+    pub fn ignore_on_next(db: &mut Storage, sync_ids: &Vec<i64>) -> TResult<()> {
         let mut ignored = SyncIncoming::get_ignored_impl(db)?;
         for sync_id in sync_ids {
             ignored.push(sync_id.to_string());

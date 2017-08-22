@@ -179,7 +179,7 @@ impl User {
             "data": userdata,
         }));
         let joindata = turtl.api.post("/users", req)?;
-        let user_id: u64 = jedi::get(&["id"], &joindata)?;
+        let user_id: String = jedi::get(&["id"], &joindata)?;
         let user_id: String = user_id.to_string();
         let mut user_guard_w = turtl.user.write().unwrap();
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
@@ -236,7 +236,9 @@ impl User {
 
         #[derive(Deserialize, Debug)]
         struct PWChangeResponse {
-            sync_ids: Vec<u64>,
+            #[serde(default)]
+            #[serde(deserialize_with = "::util::ser::opt_vec_str_i64_converter::deserialize")]
+            sync_ids: Option<Vec<i64>>,
         }
         let auth_change = json!({
             "user": new_userdata,
@@ -245,15 +247,19 @@ impl User {
         });
         let url = format!("/users/{}", user_id);
         let res: PWChangeResponse = turtl.api.put(&url[..], ApiReq::new().data(auth_change))?;
-        let mut db_guard = turtl.db.write().unwrap();
-        match db_guard.as_mut() {
-            Some(db) => SyncIncoming::ignore_on_next(db, &res.sync_ids)?,
-            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
+        match res.sync_ids.as_ref() {
+            Some(ids) => {
+                let mut db_guard = turtl.db.write().unwrap();
+                match db_guard.as_mut() {
+                    Some(db) => SyncIncoming::ignore_on_next(db, ids)?,
+                    None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
+                }
+            }
+            None => {}
         }
-        drop(db_guard);
 
         turtl.api.set_auth(new_user.username.clone(), new_auth.clone())?;
-        let _user_id: u64 = turtl.api.post("/auth", ApiReq::new())?;
+        turtl.api.post::<String>("/auth", ApiReq::new())?;
         self.do_login(new_key.clone(), new_auth);
         sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
 

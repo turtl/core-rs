@@ -9,7 +9,8 @@ use ::sync::incoming;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SpaceMember {
     /// Member id
-    pub id: u64,
+    #[serde(with = "::util::ser::str_i64_converter")]
+    pub id: i64,
     /// Member's user_id
     #[serde(with = "::util::ser::int_converter")]
     pub user_id: String,

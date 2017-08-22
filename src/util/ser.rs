@@ -171,3 +171,115 @@ pub mod base64_converter {
     }
 }
 
+pub mod str_i64_converter {
+    use ::std::str::FromStr;
+    use ::serde::ser::Serializer;
+    use ::serde::de::{self, Deserializer, Deserialize};
+    use ::jedi::Value;
+
+    #[allow(dead_code)]
+    pub fn serialize<S>(val: &i64, ser: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        let tostr = val.to_string();
+        ser.serialize_str(tostr.as_str())
+    }
+
+    pub fn deserialize<'de, D>(des: D) -> Result<i64, D::Error>
+        where D: Deserializer<'de>
+    {
+        let val: Value = Deserialize::deserialize(des)?;
+        match val {
+            Value::Number(num) => {
+                match num.as_i64() {
+                    Some(x) => Ok(x),
+                    None => {
+                        match num.as_u64() {
+                            Some(x) => Ok(x as i64),
+                            None => Err(de::Error::custom("str_i64_converter: bad number: expected i64 or u64")),
+                        }
+                    }
+                }
+            }
+            Value::String(s) => {
+                match i64::from_str(s.as_str()) {
+                    Ok(x) => Ok(x),
+                    Err(_) => Err(de::Error::custom("str_i64_converter: bad number: couldn't parse")),
+                }
+            }
+            _ => { Err(de::Error::custom("str_i64_converter: unknown type encountered")) }
+        }
+    }
+}
+
+pub mod opt_vec_str_i64_converter {
+    use ::std::str::FromStr;
+    use ::serde::ser::{Serializer, SerializeSeq};
+    use ::serde::de::{self, Deserializer, Deserialize};
+    use ::jedi::Value;
+    use ::error::TResult;
+
+    #[allow(dead_code)]
+    pub fn serialize<S>(val: &Option<Vec<i64>>, ser: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        match val {
+            &Some(ref x) => {
+                let mut ret = Vec::with_capacity(x.len());
+                for i in x {
+                    ret.push(i.to_string());
+                }
+                let mut seq = ser.serialize_seq(Some(ret.len()))?;
+                for s in ret {
+                    seq.serialize_element(&s)?;
+                }
+                seq.end()
+            },
+            &None => ser.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(des: D) -> Result<Option<Vec<i64>>, D::Error>
+        where D: Deserializer<'de>
+    {
+        let val: Option<Vec<Value>> = Deserialize::deserialize(des)?;
+        match val {
+            Some(x) => {
+                let mut ret = Vec::with_capacity(x.len());
+                for val in x {
+                    match val {
+                        Value::Number(num) => {
+                            match num.as_i64() {
+                                Some(x) => {
+                                    ret.push(x);
+                                }
+                                None => {
+                                    match num.as_u64() {
+                                        Some(x) => ret.push(x as i64),
+                                        None => return Err(de::Error::custom("opt_vec_str_i64_converter: bad number: expected i64 or u64")),
+                                    }
+                                }
+                            }
+                        }
+                        Value::String(s) => {
+                            match i64::from_str(s.as_str()) {
+                                Ok(x) => ret.push(x),
+                                Err(_) => return Err(de::Error::custom("opt_vec_str_i64_converter: bad number: couldn't parse")),
+                            }
+                        }
+                        _ => {
+                            return Err(de::Error::custom("opt_vec_str_i64_converter: unknown type encountered"))
+                        }
+                    }
+                }
+                Ok(Some(ret))
+            }
+            None => { Ok(None) }
+        }
+    }
+
+    pub fn from_value(_val: Value) -> TResult<Option<Option<Vec<i64>>>> {
+        Ok(None)
+    }
+}
+

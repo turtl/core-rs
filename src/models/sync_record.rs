@@ -88,9 +88,11 @@ protected! {
         #[protected_field(public)]
         pub ty: SyncType,
 
+        #[serde(default)]
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
-        pub sync_ids: Option<Vec<u64>>,
+        #[serde(with = "::util::ser::opt_vec_str_i64_converter")]
+        pub sync_ids: Option<Vec<i64>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub missing: Option<bool>,

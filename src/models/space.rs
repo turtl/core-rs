@@ -138,7 +138,7 @@ impl Space {
     }
 
     /// Find a member by id, if such member exists. OR ELSE.
-    fn find_member_or_else<'a>(&'a mut self, member_id: u64) -> TResult<&'a mut SpaceMember> {
+    fn find_member_or_else<'a>(&'a mut self, member_id: i64) -> TResult<&'a mut SpaceMember> {
         let member = self.members.iter_mut()
             .filter(|x| x.id == member_id)
             .next();
