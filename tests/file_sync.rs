@@ -50,6 +50,8 @@ mod tests {
         dispatch_ass(json!(["app:wipe-user-data"]));
         wait_on("user:logout");
 
+        sleep(500);
+
         dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
         dispatch_ass(json!(["sync:start"]));
         let evdata = wait_on("sync:file:downloaded");

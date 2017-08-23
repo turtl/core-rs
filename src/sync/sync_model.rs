@@ -40,6 +40,8 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
                 debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), jedi::stringify(&data)?);
                 let model: Self = jedi::from_val(data)?;
                 model.db_save(db, Some(sync_item as &SyncRecord))?;
+                // set the data back into the sync record so's we'll have it
+                // handy when we run our trusty sync handler
                 sync_item.data = Some(model.data_for_storage()?);
                 Ok(())
             }

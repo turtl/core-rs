@@ -2,17 +2,14 @@
 //! functions/interfaces for updating or retrieving stateful info, and is passed
 //! around to various pieces of the app running in the main thread.
 
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, Mutex};
 use ::std::ops::Drop;
 use ::std::collections::HashMap;
 use ::std::fs;
-
 use ::regex::Regex;
 use ::num_cpus;
-
 use ::jedi::{self, Value};
 use ::config;
-
 use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::util::event::{self, Emitter};
@@ -90,6 +87,10 @@ pub struct Turtl {
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Holds our sync state data
     sync_state: Arc<RwLock<Option<SyncState>>>,
+    /// A lock that keeps our incoming sync from running when we don't want it
+    /// to (like while sync is initting and wehaven't loaded our profile yet).
+    /// Used alongside Turtl.sync_config.incoming_sync.
+    pub incoming_sync_lock: Mutex<()>,
     /// Whether or not we're connected to the API
     pub connected: RwLock<bool>,
 }
@@ -133,6 +134,7 @@ impl Turtl {
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
             connected: RwLock::new(false),
+            incoming_sync_lock: Mutex::new(()),
         };
         Ok(turtl)
     }
@@ -274,6 +276,9 @@ impl Turtl {
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
     pub fn sync_start(&self) -> TResult<()> {
+        // lock down incoming syncs so we have a chance to load our profile
+        // before dealing with a bunch of sync records
+        let sync_lock = self.incoming_sync_lock.lock();
         // start the sync, and save the resulting state into Turtl
         let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), self.db.clone())?;
         {
@@ -281,10 +286,24 @@ impl Turtl {
             *state_guard = Some(sync_state);
         }
 
+        // wipe our incoming sync queue. we're about to synchronize all our
+        // in-mem state with what's in the DB, so we don't really need to run
+        // MemorySaver on the incoming syncs we just created while doing our
+        // sync init.
+        {
+            let sync_config_guard = self.sync_config.read().unwrap();
+            loop {
+                if sync_config_guard.incoming_sync.try_pop().is_none() { break; }
+            }
+        }
         self.load_profile()?;
-        messaging::ui_event("profile:loaded", &jedi::obj())?;
+        messaging::ui_event("profile:loaded", &())?;
+        // let your freak flag fly, incoming syncs
+        drop(sync_lock);
+        // ok, profile is loaded, run our sync items
+        messaging::app_event("sync:incoming", &())?;
         self.index_notes()?;
-        messaging::ui_event("profile:indexed", &jedi::obj())?;
+        messaging::ui_event("profile:indexed", &())?;
         Ok(())
     }
 

@@ -23,18 +23,18 @@ pub mod sync_model;
 
 use ::std::thread;
 use ::std::sync::{Arc, RwLock, mpsc};
-
 use ::config;
-
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
 use ::sync::files::outgoing::FileSyncOutgoing;
 use ::sync::files::incoming::FileSyncIncoming;
+use ::models::sync_record::SyncRecord;
 use ::util;
 use ::error::{TResult, TError};
 use ::storage::Storage;
 use ::api::Api;
 use ::messaging;
+use ::crossbeam::sync::MsQueue;
 
 /// This holds the configuration for the sync system (whether it's enabled, the
 /// current user id/api endpoint, and any other information we need to make
@@ -56,6 +56,24 @@ pub struct SyncConfig {
     /// Whether or not to skip calling out to the API on init (useful for
     /// testing)
     pub skip_api_init: bool,
+    /// A channel we send/recv incoming sync data on. Normally we'd do this via
+    /// an app event (and we DO use this to trigger processing an incoming sync),
+    /// but we want to run our sync items *in-order* which means using a queue.
+    /// We could use the DB, but that's cumbersome, and we don't need the
+    /// persistence guarantees it gives us, so instead a channel should work
+    /// swimmingly.
+    ///
+    /// The SyncIncoming thread pushes incoming syncs on here, and our main
+    /// Turtl/dispatch thread(s) run them (and apply state using their MemSaver
+    /// impls).
+    ///
+    /// NOTE: This probably shouldn't be in the config object, much less one
+    /// that's a general config for all sync threads since it really only
+    /// applies to the incoming thread, however it was WAY easier to trojan
+    /// horse this here as opposed to finding a way to pass it in JUST to the
+    /// SyncIncoming thread (since the sync threads are all generalized). Deal
+    /// with it.
+    pub incoming_sync: Arc<MsQueue<SyncRecord>>,
 }
 
 impl SyncConfig {
@@ -66,6 +84,7 @@ impl SyncConfig {
             enabled: false,
             user_id: None,
             skip_api_init: false,
+            incoming_sync: Arc::new(MsQueue::new()),
         }
     }
 }
@@ -146,7 +165,7 @@ pub trait Syncer {
         macro_rules! send_or_return {
             ($sendex:expr) => {
                 match $sendex {
-                    Err(e) => error!("sync::{}::runner() -- problem sending init signal: {}", self.get_name(), e),
+                    Err(e) => error!("sync::runner() -- {}: problem sending init signal: {}", self.get_name(), e),
                     _ => (),
                 }
             }
@@ -252,6 +271,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
             Err(e) => return Err(toterr!(e)),
         }
     }
+    info!("sync::start() -- all sync threads started");
 
     // define some callbacks Turtl can use to control the sync processes. turtl
     // could manage this junk itself, but it's nicer to have a single object

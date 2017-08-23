@@ -7,7 +7,7 @@ mod tests {
     use ::config;
 
     #[test]
-    fn login_sync_load_logout() {
+    fn login_sync_logout() {
         let handle = init();
         let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();

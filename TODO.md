@@ -1,11 +1,7 @@
 v0.7:
-- files
-  - started on file integration test for incoming, but it seems to
-    a) erase files for other users?
-    b) getting errors in sync data (see log), something about a missing note or
-       some such nonsense
-- commit server
+- profile load: intermittent failures on incoming sync, points to race cond
 - invites
+  - add to profile, load in load_profile()
   - integraiton tests!
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)
@@ -35,4 +31,7 @@ later:
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
 - investigate more stateless way of syncing files?
+- convert Turtl.db to use Mutex instead of RwLock
+- move Turtl.find_model_key(s) et al to protected model (or wherever
+  appropriate)
 

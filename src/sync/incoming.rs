@@ -3,14 +3,23 @@ use ::std::io::ErrorKind;
 use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::sync::{SyncConfig, Syncer};
-use ::sync::sync_model::SyncModel;
+use ::sync::sync_model::{SyncModel, MemorySaver};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
-use ::messaging::{self, Messenger};
+use ::messaging;
 use ::models;
+use ::models::protected::Protected;
 use ::models::model::Model;
-use ::models::sync_record::{SyncType, SyncRecord};
+use ::models::user::User;
+use ::models::keychain::KeychainEntry;
+use ::models::space::Space;
+use ::models::invite::Invite;
+use ::models::board::Board;
+use ::models::note::Note;
+use ::models::file::FileData;
+use ::models::sync_record::{SyncType, SyncRecord, SyncAction};
 use ::turtl::Turtl;
+use ::std::mem;
 
 const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
@@ -214,26 +223,20 @@ impl SyncIncoming {
             db.conn.execute("COMMIT TRANSACTION", &[])?;
         }
 
-        for sync_record in records {
-            // let the app know we have an incoming sync. the purpose of this is
-            // mainly to run MemorySaver::save_to_mem/delete_from_mem on the
-            // model that gots synced. since those require access to the Turtl
-            // object, and we don't have access here, we need to pass a message
-            // to the dispatch to tell it to run the mem saver on this item.
-            //
-            // NOTE: we don't want to run this inside of run_sync_item for two
-            // reasons:
-            //  - if ANY of the above items fails to sync, the entire
-            //    transaction is rolled back. this means it's possible that we
-            //    would have called memsaver on an item that didn't actually end
-            //    up changing (SO embarassing...)
-            //  - the DB is locked during the entire loop above, and if the
-            //    memsaver uses the DB at all it will just block until the loop
-            //    is over.
-            messaging::app_event("sync:incoming", &sync_record)?;
-            // let the ui know we got a sync!
-            messaging::ui_event("sync:incoming", &sync_record)?;
-        }
+        // send our incoming syncs into a queue that the Turtl/dispatch thread
+        // can read and process. The purpose is to run MemorySaver for the syncs
+        // which can only happen if we have access to Turtl, which we DO NOT
+        // at this particular juncture.
+        let sync_incoming_queue = {
+            let conf = self.get_config();
+            let sync_config_guard = conf.read().unwrap();
+            sync_config_guard.incoming_sync.clone()
+        };
+        // queue em
+        for rec in records { sync_incoming_queue.push(rec); }
+        // this is what tells our dispatch thread to load the queued incoming
+        // syncs and process them
+        messaging::app_event("sync:incoming", &())?;
 
         // clear out the sync ignore list
         match self.clear_ignored() {
@@ -289,7 +292,6 @@ impl Syncer for SyncIncoming {
         let sync_id = with_db!{ db, self.db,
             db.kv_get("sync_id")?
         };
-        Messenger::event("sync:incoming:init:start", jedi::obj())?;
         let skip_init = {
             let config_guard = self.config.read().unwrap();
             config_guard.skip_api_init
@@ -317,6 +319,79 @@ impl Syncer for SyncIncoming {
         };
         res
     }
+}
+
+/// Grabs sync records off our Turtl.incoming_sync queue (sent to us from our
+/// incoming sync thread). It's important to know that this function runs with
+/// access to the Turtl data as one of the main dispatch threads, NOT in the
+/// incoming sync thread.
+///
+/// Essentially, this is what's responsible for running MemorySaver for our
+/// incoming syncs.
+pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
+    let sync_incoming_queue = {
+        let sync_config_guard = turtl.sync_config.read().unwrap();
+        sync_config_guard.incoming_sync.clone()
+    };
+    loop {
+        let sync_incoming_lock = turtl.incoming_sync_lock.lock();
+        println!("pis: locked");
+        let sync_item = match sync_incoming_queue.try_pop() {
+            Some(x) => x,
+            None => break,
+        };
+        match sync_item.action.clone() {
+            SyncAction::Add | SyncAction::Edit => {
+                fn load_save<T>(turtl: &Turtl, mut sync_item: SyncRecord) -> TResult<()>
+                    where T: Protected + MemorySaver
+                    {
+                        let mut data = Value::Null;
+                        match sync_item.data.as_mut() {
+                            Some(x) => mem::swap(&mut data, x),
+                            None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
+                        }
+                        let model: T = jedi::from_val(data)?;
+                        model.save_to_mem(turtl)?;
+                        messaging::ui_event("sync:incoming", &sync_item)?;
+                        Ok(())
+                    }
+                match sync_item.ty.clone() {
+                    SyncType::User => load_save::<User>(turtl, sync_item)?,
+                    SyncType::Keychain => load_save::<KeychainEntry>(turtl, sync_item)?,
+                    SyncType::Space => load_save::<Space>(turtl, sync_item)?,
+                    SyncType::Board => load_save::<Board>(turtl, sync_item)?,
+                    SyncType::Note => load_save::<Note>(turtl, sync_item)?,
+                    SyncType::File => load_save::<FileData>(turtl, sync_item)?,
+                    SyncType::Invite => load_save::<Invite>(turtl, sync_item)?,
+                    _ => (),
+                }
+            }
+            SyncAction::Delete => {
+                fn load_delete<T>(turtl: &Turtl, sync_item: SyncRecord) -> TResult<()>
+                    where T: Protected + MemorySaver
+                    {
+                        let mut model: T = Default::default();
+                        model.set_id(sync_item.item_id.clone());
+                        model.delete_from_mem(turtl)?;
+                        messaging::ui_event("sync:incoming", &sync_item)?;
+                        Ok(())
+                    }
+                match sync_item.ty.clone() {
+                    SyncType::User => load_delete::<User>(turtl, sync_item)?,
+                    SyncType::Keychain => load_delete::<KeychainEntry>(turtl, sync_item)?,
+                    SyncType::Space => load_delete::<Space>(turtl, sync_item)?,
+                    SyncType::Board => load_delete::<Board>(turtl, sync_item)?,
+                    SyncType::Note => load_delete::<Note>(turtl, sync_item)?,
+                    SyncType::File => load_delete::<FileData>(turtl, sync_item)?,
+                    SyncType::Invite => load_delete::<Invite>(turtl, sync_item)?,
+                    _ => (),
+                }
+            }
+            _ => {}
+        }
+        drop(sync_incoming_lock);
+    }
+    Ok(())
 }
 
 

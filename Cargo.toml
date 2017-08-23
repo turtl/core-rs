@@ -16,7 +16,7 @@ doctest = false				# these annoy me
 carrier = { path = "carrier" }
 config = { path = "config" }
 clouseau = { path = "clouseau" }
-crossbeam = "0.2.10"
+crossbeam = "0.3.0"
 dumpy = { path = "dumpy" }
 fern = "0.3.5"
 futures = "0.1.14"

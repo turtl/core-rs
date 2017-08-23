@@ -85,7 +85,6 @@ impl Messenger {
 
     /// Send an event out to our UI thread. Note that this is a static method!
     pub fn event(name: &str, data: Value) -> TResult<()> {
-        info!("Messenger::event() -- `{}`", name);
         let channel: String = config::get(&["messaging", "events"])?;
         let event = Event {
             e: String::from(name),
@@ -205,6 +204,7 @@ pub fn stop() {
 
 /// Send an event to our own dispatch handler
 pub fn ui_event<T: Serialize>(ev: &str, val: &T) -> TResult<()> {
+    info!("messaging::ui_event() -- {}", ev);
     Messenger::event(ev, jedi::to_val(val)?)
 }
 
