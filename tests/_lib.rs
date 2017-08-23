@@ -36,7 +36,9 @@ pub fn init() -> thread::JoinHandle<()> {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "config.yaml");
     }
+    config::set(&["integration_tests", "incoming_sync_timeout"], &5).unwrap();
     carrier::wipe();
+
     thread::spawn(|| {
         turtl_core::init().unwrap();
         // this is more or less ignored when testing, we use in-memory dbs and

@@ -20,6 +20,7 @@ use ::models::file::FileData;
 use ::models::sync_record::{SyncType, SyncRecord, SyncAction};
 use ::turtl::Turtl;
 use ::std::mem;
+use ::config;
 
 const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
@@ -143,7 +144,14 @@ impl SyncIncoming {
     fn sync_from_api(&self, sync_id: &String, poll: bool) -> TResult<()> {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
-        let timeout = if poll { 60 } else { 10 };
+        let timeout = if poll {
+            match config::get(&["integration_tests", "incoming_sync_timeout"]) {
+                Ok(x) => x,
+                Err(_) => 60,
+            }
+        } else {
+            10
+        };
         let syncres: TResult<SyncResponse> = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
         // if we have a timeout just return Ok(()) (the sync system is built to
         // timeout if no response is received)

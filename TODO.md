@@ -1,5 +1,4 @@
 v0.7:
-- profile load: intermittent failures on incoming sync, points to race cond
 - invites
   - add to profile, load in load_profile()
   - integraiton tests!
