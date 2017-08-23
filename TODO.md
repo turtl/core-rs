@@ -2,6 +2,14 @@ v0.7:
 - invites
   - add to profile, load in load_profile()
   - integraiton tests!
+- implement MemorySaver for ALL profile models
+  - user
+  - keychain
+  - space
+  - board
+  - note
+  - filedata
+  - invite
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)
 - migration crate

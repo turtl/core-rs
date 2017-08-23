@@ -10,11 +10,13 @@ use ::models::model::Model;
 use ::models::keychain::Keychain;
 use ::models::space::Space;
 use ::models::board::Board;
+use ::models::invite::Invite;
 
 pub struct Profile {
     pub keychain: Keychain,
     pub spaces: Vec<Space>,
     pub boards: Vec<Board>,
+    pub invites: Vec<Invite>,
 }
 
 impl Profile {
@@ -23,6 +25,7 @@ impl Profile {
             keychain: Keychain::new(),
             spaces: Vec::new(),
             boards: Vec::new(),
+            invites: Vec::new(),
         }
     }
 
@@ -31,6 +34,7 @@ impl Profile {
         self.keychain = Keychain::new();
         self.spaces = Vec::new();
         self.boards = Vec::new();
+        self.invites = Vec::new();
     }
 
     /// Find a model by id in a collection of items

@@ -132,6 +132,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 "user": &user_guard.as_ref(),
                 "spaces": &profile_guard.spaces,
                 "boards": &profile_guard.boards,
+                "invites": &profile_guard.invites,
             });
             Ok(profile_data)
         },

@@ -22,6 +22,7 @@ use ::models::model::Model;
 use ::models::user::{self, User};
 use ::models::space::Space;
 use ::models::board::Board;
+use ::models::invite::Invite;
 use ::models::keychain::{self, KeyRef, KeychainEntry};
 use ::models::note::Note;
 use ::models::file::FileData;
@@ -531,6 +532,7 @@ impl Turtl {
         let mut keychain: Vec<KeychainEntry> = db.all("keychain").unwrap();
         let mut spaces: Vec<Space> = db.all("spaces").unwrap();
         let mut boards: Vec<Board> = db.all("boards").unwrap();
+        let mut invites: Vec<Invite> = db.all("invites").unwrap();
 
         // keychain entries are always encrypted with the user's key
         for key in &mut keychain { key.set_key(Some(user_key.clone())); }
@@ -555,6 +557,14 @@ impl Turtl {
         // set the boards into the profile
         let mut profile_guard = self.profile.write().unwrap();
         profile_guard.boards = boards;
+        drop(profile_guard);
+
+        // now decrypt the invites
+        self.find_models_keys(&mut invites)?;
+        let invites: Vec<Invite> = protected::map_deserialize(self, invites)?;
+        // set the invites into the profile
+        let mut profile_guard = self.profile.write().unwrap();
+        profile_guard.invites = invites;
         drop(profile_guard);
 
         self.events.trigger("profile:loaded", &jedi::obj());
