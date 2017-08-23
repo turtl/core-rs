@@ -426,6 +426,10 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
         "sync:incoming" => {
             sync::incoming::process_incoming_sync(turtl)?;
         }
+        "user:edit" => {
+            let mut user_guard = turtl.user.write().unwrap();
+            user_guard.merge_fields(&data)?;
+        }
         "user:change-password:logout" => {
             messaging::ui_event("user:change-password:logout", &jedi::obj())?;
             util::sleep(3000);

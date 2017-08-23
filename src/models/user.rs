@@ -65,9 +65,12 @@ impl MemorySaver for User {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                // TODO: enable somehow??
-                //let mut user_guard = turtl.user.write().unwrap();
-                //user_guard.merge_fields(&self.data()?)?;
+                // NOTE: it's note wise to do a direct edit here (as in, lock
+                // Turtl.user) because there are many cases when Turtl.user is
+                // already locked when we get here. so instead, we blast out an
+                // app event that tells us to edit the user object with the data
+                // we have.
+                messaging::app_event("user:edit", &self.data()?)?;
             }
             SyncAction::Delete => {
                 match messaging::ui_event("user:delete", &()) {
@@ -278,9 +281,9 @@ impl User {
         turtl.api.set_auth(new_user.username.clone(), new_auth.clone())?;
         turtl.api.post::<String>("/auth", ApiReq::new())?;
         self.do_login(new_key.clone(), new_auth);
-        sync_model::save_model(SyncAction::Edit, turtl, self, false)?;
+        sync_model::save_model(SyncAction::Edit, turtl, self, true)?;
 
-        // save the new key into the keychain entries
+        // save the user's new key into the keychain entries
         let mut profile_guard = turtl.profile.write().unwrap();
         for entry in &mut profile_guard.keychain.entries {
             entry.set_key(Some(new_key.clone()));
