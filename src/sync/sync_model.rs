@@ -107,13 +107,8 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
 }
 
 pub trait MemorySaver: Protected {
-    /// Save a model to Turtl's memory on save
-    fn save_to_mem(self, _turtl: &Turtl) -> TResult<()> {
-        Ok(())
-    }
-
-    /// Remove a model from Turtl's memory on delete
-    fn delete_from_mem(&self, _turtl: &Turtl) -> TResult<()> {
+    /// Update in-mem state based on sync item
+    fn mem_update(self, _turtl: &Turtl, _action: SyncAction) -> TResult<()> {
         Ok(())
     }
 }
@@ -167,12 +162,12 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
-        model.outgoing(action, &user_id, db, skip_remote_sync)?;
+        model.outgoing(action.clone(), &user_id, db, skip_remote_sync)?;
     }
 
     let model_data = model.data()?;
     // TODO: is there a way around all the horrible cloning?
-    model.clone()?.save_to_mem(turtl)?;
+    model.clone()?.mem_update(turtl, action)?;
     Ok(model_data)
 }
 
@@ -199,6 +194,6 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
         };
         model.outgoing(SyncAction::Delete, &user_id, db, skip_remote_sync)?;
     }
-    model.delete_from_mem(turtl)
+    model.mem_update(turtl, SyncAction::Delete)
 }
 

@@ -113,15 +113,21 @@ impl SyncModel for FileData {
 
 impl Keyfinder for FileData {}
 impl MemorySaver for FileData {
-    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
-        // unwrap is ok. we will always have an id. hopefully. no, but we will.
-        let note_id = self.id().unwrap().clone();
-        let mut notes = turtl.load_notes(&vec![note_id.clone()])?;
-        if notes.len() == 0 { return Ok(()); }
-        let note = &mut notes[0];
-        note.has_file = false;
-        note.file = None;
-        sync_model::save_model(SyncAction::Edit, turtl, note, true)?;
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Delete => {
+                // unwrap is ok. we will always have an id. hopefully. no, but
+                // we will.
+                let note_id = self.id().unwrap().clone();
+                let mut notes = turtl.load_notes(&vec![note_id.clone()])?;
+                if notes.len() == 0 { return Ok(()); }
+                let note = &mut notes[0];
+                note.has_file = false;
+                note.file = None;
+                sync_model::save_model(SyncAction::Edit, turtl, note, true)?;
+            }
+            _ => {}
+        }
         Ok(())
     }
 }

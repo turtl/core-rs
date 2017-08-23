@@ -107,42 +107,45 @@ impl Keyfinder for Board {
 }
 
 impl MemorySaver for Board {
-    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        for board in &mut profile_guard.boards {
-            if board.id() == self.id() {
-                board.merge_fields(&self.data()?)?;
-                return Ok(());
-            }
-        }
-        // if it doesn't exist, push it on
-        profile_guard.boards.push(self);
-        Ok(())
-    }
-
-    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        let board_id = self.id().unwrap();
-
-        let notes: Vec<Note> = {
-            let db_guard = turtl.db.read().unwrap();
-            match *db_guard {
-                Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
-                None => vec![],
-            }
-        };
-        for note in notes {
-            let note_id = match note.id() {
-                Some(x) => x,
-                None => {
-                    warn!("Board.delete_from_mem() -- got a note from the local DB with empty `id` field");
-                    continue;
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                for board in &mut profile_guard.boards {
+                    if board.id() == self.id() {
+                        board.merge_fields(&self.data()?)?;
+                        return Ok(());
+                    }
                 }
-            };
-            sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+                // if it doesn't exist, push it on
+                profile_guard.boards.push(self);
+            }
+            SyncAction::Delete => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                let board_id = self.id().unwrap();
+
+                let notes: Vec<Note> = {
+                    let db_guard = turtl.db.read().unwrap();
+                    match *db_guard {
+                        Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
+                        None => vec![],
+                    }
+                };
+                for note in notes {
+                    let note_id = match note.id() {
+                        Some(x) => x,
+                        None => {
+                            warn!("Board.delete_from_mem() -- got a note from the local DB with empty `id` field");
+                            continue;
+                        }
+                    };
+                    sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+                }
+                // remove the board from memory
+                profile_guard.boards.retain(|b| b.id() != Some(&board_id));
+            }
+            _ => {}
         }
-        // remove the board from memory
-        profile_guard.boards.retain(|b| b.id() != Some(&board_id));
         Ok(())
     }
 }

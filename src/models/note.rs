@@ -166,32 +166,37 @@ impl Keyfinder for Note {
 
 impl MemorySaver for Note {
     // reindex note on add/update (reindex is idempotent)
-    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
-        let note_id = match self.id() {
-            Some(x) => x.clone(),
-            None => return Ok(()),
-        };
-        let notes = turtl.load_notes(&vec![note_id])?;
-        if notes.len() == 0 { return Ok(()); }
-        let note = &notes[0];
-        let mut search_guard = turtl.search.write().unwrap();
-        match search_guard.as_mut() {
-            Some(ref mut search) => search.reindex_note(note),
-            // i COULD throw an error here. i'm choosing not to...
-            None => Ok(()),
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                let note_id = match self.id() {
+                    Some(x) => x.clone(),
+                    None => return Ok(()),
+                };
+                let notes = turtl.load_notes(&vec![note_id])?;
+                if notes.len() == 0 { return Ok(()); }
+                let note = &notes[0];
+                let mut search_guard = turtl.search.write().unwrap();
+                match search_guard.as_mut() {
+                    Some(ref mut search) => {
+                        search.reindex_note(note)?;
+                    }
+                    // i COULD throw an error here. i'm choosing not to...
+                    None => {}
+                }
+            }
+            SyncAction::Delete => {
+                let mut search_guard = turtl.search.write().unwrap();
+                match search_guard.as_mut() {
+                    Some(ref mut search) => search.unindex_note(&self)?,
+                    // i COULD throw an error here. i'm choosing not to...
+                    None => {},
+                };
+
+                self.clear_files()?;
+            }
+            _ => {}
         }
-    }
-
-    // remove note from search on delete
-    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
-        let mut search_guard = turtl.search.write().unwrap();
-        match search_guard.as_mut() {
-            Some(ref mut search) => search.unindex_note(&self)?,
-            // i COULD throw an error here. i'm choosing not to...
-            None => {},
-        };
-
-        self.clear_files()?;
         Ok(())
     }
 }

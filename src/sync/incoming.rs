@@ -347,56 +347,37 @@ pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
             Some(x) => x,
             None => break,
         };
-        match sync_item.action.clone() {
-            SyncAction::Add | SyncAction::Edit => {
-                fn load_save<T>(turtl: &Turtl, mut sync_item: SyncRecord) -> TResult<()>
-                    where T: Protected + MemorySaver + Keyfinder
-                    {
-                        let mut data = Value::Null;
-                        match sync_item.data.as_mut() {
-                            Some(x) => mem::swap(&mut data, x),
-                            None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
-                        }
-                        let mut model: T = jedi::from_val(data)?;
-                        turtl.find_model_key(&mut model)?;
-                        model.deserialize()?;
-                        model.save_to_mem(turtl)?;
-                        messaging::ui_event("sync:incoming", &sync_item)?;
-                        Ok(())
-                    }
-                match sync_item.ty.clone() {
-                    SyncType::User => load_save::<User>(turtl, sync_item)?,
-                    SyncType::Keychain => load_save::<KeychainEntry>(turtl, sync_item)?,
-                    SyncType::Space => load_save::<Space>(turtl, sync_item)?,
-                    SyncType::Board => load_save::<Board>(turtl, sync_item)?,
-                    SyncType::Note => load_save::<Note>(turtl, sync_item)?,
-                    SyncType::File => load_save::<FileData>(turtl, sync_item)?,
-                    SyncType::Invite => load_save::<Invite>(turtl, sync_item)?,
-                    _ => (),
+        fn mem_save<T>(turtl: &Turtl, mut sync_item: SyncRecord) -> TResult<()>
+            where T: Protected + MemorySaver + Keyfinder
+        {
+            let model = if &sync_item.action == &SyncAction::Delete {
+                let mut model: T = Default::default();
+                model.set_id(sync_item.item_id.clone());
+                model
+            } else {
+                let mut data = Value::Null;
+                match sync_item.data.as_mut() {
+                    Some(x) => mem::swap(&mut data, x),
+                    None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
                 }
-            }
-            SyncAction::Delete => {
-                fn load_delete<T>(turtl: &Turtl, sync_item: SyncRecord) -> TResult<()>
-                    where T: Protected + MemorySaver
-                    {
-                        let mut model: T = Default::default();
-                        model.set_id(sync_item.item_id.clone());
-                        model.delete_from_mem(turtl)?;
-                        messaging::ui_event("sync:incoming", &sync_item)?;
-                        Ok(())
-                    }
-                match sync_item.ty.clone() {
-                    SyncType::User => load_delete::<User>(turtl, sync_item)?,
-                    SyncType::Keychain => load_delete::<KeychainEntry>(turtl, sync_item)?,
-                    SyncType::Space => load_delete::<Space>(turtl, sync_item)?,
-                    SyncType::Board => load_delete::<Board>(turtl, sync_item)?,
-                    SyncType::Note => load_delete::<Note>(turtl, sync_item)?,
-                    SyncType::File => load_delete::<FileData>(turtl, sync_item)?,
-                    SyncType::Invite => load_delete::<Invite>(turtl, sync_item)?,
-                    _ => (),
-                }
-            }
-            _ => {}
+                let mut model: T = jedi::from_val(data)?;
+                turtl.find_model_key(&mut model)?;
+                model.deserialize()?;
+                model
+            };
+            model.mem_update(turtl, sync_item.action.clone())?;
+            messaging::ui_event("sync:incoming", &sync_item)?;
+            Ok(())
+        }
+        match sync_item.ty.clone() {
+            SyncType::User => mem_save::<User>(turtl, sync_item)?,
+            SyncType::Keychain => mem_save::<KeychainEntry>(turtl, sync_item)?,
+            SyncType::Space => mem_save::<Space>(turtl, sync_item)?,
+            SyncType::Board => mem_save::<Board>(turtl, sync_item)?,
+            SyncType::Note => mem_save::<Note>(turtl, sync_item)?,
+            SyncType::File => mem_save::<FileData>(turtl, sync_item)?,
+            SyncType::Invite => mem_save::<Invite>(turtl, sync_item)?,
+            _ => (),
         }
         drop(sync_incoming_lock);
     }

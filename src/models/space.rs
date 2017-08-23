@@ -5,6 +5,7 @@ use ::models::note::Note;
 use ::models::invite::{Invite, InviteRequest};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::space_member::SpaceMember;
+use ::models::sync_record::SyncAction;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::lib_permissions::Permission;
@@ -53,47 +54,50 @@ impl Keyfinder for Space {
 }
 
 impl MemorySaver for Space {
-    fn save_to_mem(self, turtl: &Turtl) -> TResult<()> {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        for space in &mut profile_guard.spaces {
-            if space.id() == self.id() {
-                space.merge_fields(&self.data()?)?;
-                return Ok(());
-            }
-        }
-        // if it doesn't exist, push it on
-        profile_guard.spaces.push(self);
-        Ok(())
-    }
-
-    fn delete_from_mem(&self, turtl: &Turtl) -> TResult<()> {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        let space_id = self.id().unwrap();
-        for board in &profile_guard.boards {
-            if &board.space_id == space_id {
-                sync_model::delete_model::<Board>(turtl, board.id().unwrap(), true)?;
-            }
-        }
-
-        let notes: Vec<Note> = {
-            let db_guard = turtl.db.read().unwrap();
-            match *db_guard {
-                Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
-                None => vec![],
-            }
-        };
-        for note in notes {
-            let note_id = match note.id() {
-                Some(x) => x,
-                None => {
-                    warn!("Space.delete_from_mem() -- got a note from the local DB with empty `id` field");
-                    continue;
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                for space in &mut profile_guard.spaces {
+                    if space.id() == self.id() {
+                        space.merge_fields(&self.data()?)?;
+                        return Ok(());
+                    }
                 }
-            };
-            sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+                // if it doesn't exist, push it on
+                profile_guard.spaces.push(self);
+            }
+            SyncAction::Delete => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                let space_id = self.id().unwrap();
+                for board in &profile_guard.boards {
+                    if &board.space_id == space_id {
+                        sync_model::delete_model::<Board>(turtl, board.id().unwrap(), true)?;
+                    }
+                }
+
+                let notes: Vec<Note> = {
+                    let db_guard = turtl.db.read().unwrap();
+                    match *db_guard {
+                        Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
+                        None => vec![],
+                    }
+                };
+                for note in notes {
+                    let note_id = match note.id() {
+                        Some(x) => x,
+                        None => {
+                            warn!("Space.delete_from_mem() -- got a note from the local DB with empty `id` field");
+                            continue;
+                        }
+                    };
+                    sync_model::delete_model::<Note>(turtl, &note_id, true)?;
+                }
+                // remove the space from memory
+                profile_guard.spaces.retain(|s| s.id() != Some(&space_id));
+            }
+            _ => {}
         }
-        // remove the space from memory
-        profile_guard.spaces.retain(|s| s.id() != Some(&space_id));
         Ok(())
     }
 }

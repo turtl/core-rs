@@ -55,18 +55,35 @@ make_storable!(User, "users");
 impl SyncModel for User {
     // handle change-password syncs
     fn skip_incoming_sync(&self, sync_item: &SyncRecord) -> TResult<bool> {
-        if sync_item.action == SyncAction::ChangePassword {
-            messaging::app_event("user:change-password:logout", &jedi::obj())?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(sync_item.action == SyncAction::ChangePassword)
     }
 }
 
 impl Keyfinder for User {}
 
-impl MemorySaver for User {}
+impl MemorySaver for User {
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                // TODO: enable somehow??
+                //let mut user_guard = turtl.user.write().unwrap();
+                //user_guard.merge_fields(&self.data()?)?;
+            }
+            SyncAction::Delete => {
+                match messaging::ui_event("user:delete", &()) {
+                    Ok(_) => (),
+                    Err(e) => error!("User.mem_update() -- problem sending `user:delete` event: {}", e),
+                }
+                turtl.wipe_user_data()?;
+            }
+            SyncAction::ChangePassword => {
+                messaging::app_event("user:change-password:logout", &jedi::obj())?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
 
 /// Generate a user's key given some variables or something
 fn generate_key(username: &String, password: &String, version: u16) -> TResult<Key> {
