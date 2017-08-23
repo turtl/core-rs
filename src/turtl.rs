@@ -286,6 +286,11 @@ impl Turtl {
             *state_guard = Some(sync_state);
         }
 
+        self.load_profile()?;
+        messaging::ui_event("profile:loaded", &())?;
+        self.index_notes()?;
+        messaging::ui_event("profile:indexed", &())?;
+
         // wipe our incoming sync queue. we're about to synchronize all our
         // in-mem state with what's in the DB, so we don't really need to run
         // MemorySaver on the incoming syncs we just created while doing our
@@ -296,14 +301,9 @@ impl Turtl {
                 if sync_config_guard.incoming_sync.try_pop().is_none() { break; }
             }
         }
-        self.load_profile()?;
-        messaging::ui_event("profile:loaded", &())?;
         // let your freak flag fly, incoming syncs
         drop(sync_lock);
-        // ok, profile is loaded, run our sync items
-        messaging::app_event("sync:incoming", &())?;
-        self.index_notes()?;
-        messaging::ui_event("profile:indexed", &())?;
+
         Ok(())
     }
 
