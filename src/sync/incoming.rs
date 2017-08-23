@@ -8,7 +8,7 @@ use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
 use ::models;
-use ::models::protected::Protected;
+use ::models::protected::{Protected, Keyfinder};
 use ::models::model::Model;
 use ::models::user::User;
 use ::models::keychain::KeychainEntry;
@@ -335,7 +335,6 @@ pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
     };
     loop {
         let sync_incoming_lock = turtl.incoming_sync_lock.lock();
-        println!("pis: locked");
         let sync_item = match sync_incoming_queue.try_pop() {
             Some(x) => x,
             None => break,
@@ -343,14 +342,16 @@ pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
         match sync_item.action.clone() {
             SyncAction::Add | SyncAction::Edit => {
                 fn load_save<T>(turtl: &Turtl, mut sync_item: SyncRecord) -> TResult<()>
-                    where T: Protected + MemorySaver
+                    where T: Protected + MemorySaver + Keyfinder
                     {
                         let mut data = Value::Null;
                         match sync_item.data.as_mut() {
                             Some(x) => mem::swap(&mut data, x),
                             None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
                         }
-                        let model: T = jedi::from_val(data)?;
+                        let mut model: T = jedi::from_val(data)?;
+                        turtl.find_model_key(&mut model)?;
+                        model.deserialize()?;
                         model.save_to_mem(turtl)?;
                         messaging::ui_event("sync:incoming", &sync_item)?;
                         Ok(())
