@@ -9,6 +9,7 @@ use ::error::{TError, TResult};
 use ::storage::Storage;
 use ::models::model::Model;
 use ::models::protected::{Protected, Keyfinder};
+use ::models::keychain;
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::storable::Storable;
 use ::jedi::{self, Value};
@@ -146,8 +147,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
     model.generate_subkeys(&keyrefs)?;
 
     if model.add_to_keychain() {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        (*profile_guard).keychain.upsert_key_save(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), skip_remote_sync)?;
+        keychain::save_key(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), skip_remote_sync)?;
     }
 
     // TODO: is there a way around all the horrible cloning?
@@ -181,8 +181,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     // if this model adds itself to the keychain on create, then it should be
     // removed from the keychain on delete.
     if model.add_to_keychain() {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        (*profile_guard).keychain.remove_entry(model.id().as_ref().unwrap(), Some((turtl, skip_remote_sync)))?;
+        keychain::remove_key(turtl, model.id().as_ref().unwrap(), skip_remote_sync)?;
     }
 
     {

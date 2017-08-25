@@ -6,6 +6,7 @@ use ::models::invite::{Invite, InviteRequest};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::space_member::SpaceMember;
 use ::models::sync_record::SyncAction;
+use ::models::keychain;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::lib_permissions::Permission;
@@ -301,10 +302,7 @@ impl Space {
             };
             let key: Key = jedi::get(&["space_key"], &keyjson)?;
             let spacedata = invite.accept(turtl)?;
-            {
-                let mut profile_guard = turtl.profile.write().unwrap();
-                profile_guard.keychain.upsert_key_save(turtl, &space_id, &key, &String::from("space"), false)?;
-            }
+            keychain::save_key(turtl, &space_id, &key, &String::from("space"), false)?;
             spacedata
         };
         self.members = jedi::get(&["members"], &spacedata)?;

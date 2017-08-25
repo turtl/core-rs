@@ -83,7 +83,28 @@ protected! {
 make_storable!(KeychainEntry, "keychain");
 impl SyncModel for KeychainEntry {}
 impl Keyfinder for KeychainEntry {}
-impl MemorySaver for KeychainEntry {}
+impl MemorySaver for KeychainEntry {
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                let key = match self.key() {
+                    Some(x) => x,
+                    None => return TErr!(TError::MissingField(String::from("Keychain.k"))),
+                };
+                let mut profile_guard = turtl.profile.write().unwrap();
+                // upsert our key
+                profile_guard.keychain.upsert_key(turtl, &self.item_id, key, &self.type_)?;
+            }
+            SyncAction::Delete => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                profile_guard.keychain.remove_entry(&self.item_id, None)?;
+            }
+            _ => {}
+        }
+        Ok(())
+
+    }
+}
 
 #[derive(Debug)]
 pub struct Keychain {
@@ -203,5 +224,41 @@ impl Keychain {
         }
         found
     }
+}
+
+/// A nice wrapper for some key saving stuff
+pub fn save_key(turtl: &Turtl, item_id: &String, key: &Key, ty: &String, skip_remote_sync: bool) -> TResult<()> {
+    // NOTE: instead of using Turtl.profile here and adding the keychain
+    // entry directly to the in-mem Keychain, we use a tmp keychain, which
+    // runs our save for us via Turtl, which in turn calls MemorySaver for
+    // our key which then adds it to the profile.
+    //
+    // if we don't do it this way, then we have a write lock on
+    // Turtl.profile when the MemorySaver runs for the new key and we get
+    // a deadlock on any model that uses add_to_keychain() == true.
+    //
+    // so this, might seem a bit roundabout, but it lets us use MemorySaver
+    // for adding keys to the in-mem keychain so that logic can live in just
+    // one place.
+    let mut tmp_keychain = Keychain::new();
+    tmp_keychain.upsert_key_save(turtl, item_id, key, ty, skip_remote_sync)
+}
+
+/// A nice wrapper foor removing keys
+pub fn remove_key(turtl: &Turtl, item_id: &String, skip_remote_sync: bool) -> TResult<()> {
+    // NOTE: instead of using Turtl.profile here and adding the keychain
+    // entry directly to the in-mem Keychain, we use a tmp keychain, which
+    // runs our save for us via Turtl, which in turn calls MemorySaver for
+    // our key which then adds it to the profile.
+    //
+    // if we don't do it this way, then we have a write lock on
+    // Turtl.profile when the MemorySaver runs for the new key and we get
+    // a deadlock on any model that uses add_to_keychain() == true.
+    //
+    // so this, might seem a bit roundabout, but it lets us use MemorySaver
+    // for adding keys to the in-mem keychain so that logic can live in just
+    // one place.
+    let mut tmp_keychain = Keychain::new();
+    tmp_keychain.remove_entry(item_id, Some((turtl, skip_remote_sync)))
 }
 

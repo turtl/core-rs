@@ -284,12 +284,27 @@ impl User {
         sync_model::save_model(SyncAction::Edit, turtl, self, true)?;
 
         // save the user's new key into the keychain entries
-        let mut profile_guard = turtl.profile.write().unwrap();
-        for entry in &mut profile_guard.keychain.entries {
-            entry.set_key(Some(new_key.clone()));
-            sync_model::save_model(SyncAction::Edit, turtl, entry, true)?;
+        {
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut db_guard = turtl.db.write().unwrap();
+            let db = match (*db_guard).as_mut() {
+                Some(x) => x,
+                None => return TErr!(TError::MissingField(format!("Turtl.db"))),
+            };
+            let user_id = turtl.user_id()?;
+            for entry in &mut profile_guard.keychain.entries {
+                entry.set_key(Some(new_key.clone()));
+                // NOTE: sync_model::save_model() will call mem_update() on our
+                // keychain entry, which is bad because that locks the profile
+                // (which, as you can see above, is already locked).
+                //
+                // we kind of side-step syncing here by just directly calling our
+                // heroic outgoing() function which saves the object in the db for
+                // us. this is pretty much all we'd need save_model() for anyway, so
+                // why give it the satisfaction of deadlocking the app?
+                entry.outgoing(SyncAction::Edit, &user_id, db, true)?;
+            }
         }
-        drop(profile_guard);
         util::sleep(3000);
         Ok(())
     }

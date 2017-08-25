@@ -1,7 +1,7 @@
 v0.7:
 - implement MemorySaver for ALL profile models
-  - user
   - keychain
+    - getting deadlock in join_delete test
   - space
   - board
   - note
@@ -9,6 +9,8 @@ v0.7:
   - invite
 - invites
   - integraiton tests!
+  - on leave space, REMOVE KEY
+  - on delete space, delete key
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)
 - migration crate
@@ -40,4 +42,5 @@ later:
 - convert Turtl.db to use Mutex instead of RwLock
 - move Turtl.find_model_key(s) et al to protected model (or wherever
   appropriate)
+- rename KEychainEntry.type\_ to ty
 
