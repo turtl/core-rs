@@ -15,6 +15,7 @@ use ::models::storable::Storable;
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
 use ::std::mem;
+use ::messaging;
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Allows a model to handle an incoming sync item for its type.
@@ -33,6 +34,15 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
                     let sync_id = sync_item.id().map(|x| x.as_str()).unwrap_or("<no id>");
                     return TErr!(TError::MissingField(format!("SyncItem.data ({} / {})", sync_id, self.model_type())));
                 }
+
+                // if we're running an update and our object's data is missing,
+                // don't bother. odds are the sync item directly after this is a
+                // delete =]
+                let has_missing: Option<bool> = jedi::get_opt(&["missing"], sync_item.data.as_ref().unwrap());
+                if has_missing.is_some() {
+                    return Ok(());
+                }
+
                 self.transform(sync_item)?;
                 let mut data = Value::Null;
                 // swap the `data` out from under the SyncRecord so we don't
@@ -108,9 +118,27 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
 }
 
 pub trait MemorySaver: Protected {
-    /// Update in-mem state based on sync item
+    /// Update in-mem state based on sync item. Generally, models will overwrite
+    /// this with custom code that updates whatever respective state is in the
+    /// Turtl object.
     fn mem_update(self, _turtl: &Turtl, _action: SyncAction) -> TResult<()> {
         Ok(())
+    }
+
+    /// Our in-app entry point for calling mem_update(). Does some other nice
+    /// things for us like alerting the UI that a model changed in-mem.
+    fn run_mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        let mut sync_item = SyncRecord::default();
+        sync_item.action = action.clone();
+        sync_item.user_id = String::from("0");
+        sync_item.item_id = match self.id() {
+            Some(x) => x.clone(),
+            None => return TErr!(TError::MissingField(String::from("self.id"))),
+        };
+        sync_item.ty = SyncType::from_string(self.model_type())?;
+        sync_item.data = Some(self.data()?);
+        self.mem_update(turtl, action)?;
+        messaging::ui_event("sync:update", &sync_item)
     }
 }
 
@@ -167,7 +195,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
 
     let model_data = model.data()?;
     // TODO: is there a way around all the horrible cloning?
-    model.clone()?.mem_update(turtl, action)?;
+    model.clone()?.run_mem_update(turtl, action.clone())?;
     Ok(model_data)
 }
 
@@ -193,6 +221,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
         };
         model.outgoing(SyncAction::Delete, &user_id, db, skip_remote_sync)?;
     }
-    model.mem_update(turtl, SyncAction::Delete)
+    model.run_mem_update(turtl, SyncAction::Delete)?;
+    Ok(())
 }
 
