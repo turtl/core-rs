@@ -126,7 +126,7 @@ impl SyncIncoming {
         for sync_id in sync_ids {
             ignored.push(sync_id.to_string());
         }
-        db.kv_set("sync:incoming:ignore", &jedi::stringify(&ignored)?)
+        db.kv_set(SYNC_IGNORE_KEY, &jedi::stringify(&ignored)?)
     }
 
     /// Get all sync ids that should be ignored on the next sync run
@@ -223,9 +223,7 @@ impl SyncIncoming {
             for rec in &mut records {
                 self.run_sync_item(db, rec)?;
             }
-            // make sure we save our sync_id as the LAST STEP of our transaction.
-            // if this fails, then next time we load we just start from the same
-            // spot we were at before. SYNC BUGS HATE HIM!!!1
+            // save our sync id
             db.kv_set("sync_id", &sync_id.to_string())?;
             // ok, commit
             db.conn.execute("COMMIT TRANSACTION", &[])?;
@@ -297,9 +295,7 @@ impl Syncer for SyncIncoming {
     }
 
     fn init(&self) -> TResult<()> {
-        let sync_id = with_db!{ db, self.db,
-            db.kv_get("sync_id")?
-        };
+        let sync_id = with_db!{ db, self.db, db.kv_get("sync_id") }?;
         let skip_init = {
             let config_guard = self.config.read().unwrap();
             config_guard.skip_api_init
@@ -318,9 +314,7 @@ impl Syncer for SyncIncoming {
     }
 
     fn run_sync(&mut self) -> TResult<()> {
-        let sync_id = with_db!{ db, self.db,
-            db.kv_get("sync_id")?
-        };
+        let sync_id = with_db!{ db, self.db, db.kv_get("sync_id") }?;
         let res = match sync_id {
             Some(ref x) => self.sync_from_api(x, true),
             None => return TErr!(TError::MissingData(String::from("no sync_id present"))),
@@ -365,8 +359,7 @@ pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
                 model.deserialize()?;
                 model
             };
-            model.mem_update(turtl, sync_item.action.clone())?;
-            messaging::ui_event("sync:incoming", &sync_item)?;
+            model.run_mem_update(turtl, sync_item.action.clone())?;
             Ok(())
         }
         match sync_item.ty.clone() {
