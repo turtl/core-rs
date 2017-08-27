@@ -1,16 +1,12 @@
 v0.7:
-- implement MemorySaver for ALL profile models
-  - keychain
-    - getting deadlock in join_delete test
-  - space
-  - board
-  - note
-  - filedata
-  - invite
 - invites
-  - integraiton tests!
-  - on leave space, REMOVE KEY
-  - on delete space, delete key
+  - integration tests!
+  - deserializing user after logging in as testdata@turtlapp.com throws a crypto
+    error. does this happen on login_sync_logout?
+- model
+  - make id_or_else(), implement everywhere
+- update prot.(de)serialize() to consume model and return model so calls to
+  work() can skip the dumbass cloning
 - bookmarker
   - just takes a url (no http server, leave that to wrapper)
 - migration crate

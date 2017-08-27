@@ -332,15 +332,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(space.data()?)
         },
         "profile:space:accept-invite" => {
-            let space_id: String = jedi::get(&["2"], &data)?;
-            let invite_id: String = jedi::get(&["3"], &data)?;
-            let passphrase: Option<String> = jedi::get_opt(&["4"], &data);
-            let mut profile_guard = turtl.profile.write().unwrap();
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
-                Some(s) => s,
-                None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
-            };
-            space.accept_invite(turtl, &invite_id, passphrase)?;
+            let mut invite: Invite = jedi::get(&["2"], &data)?;
+            let passphrase: Option<String> = jedi::get_opt(&["3"], &data);
+            let space = Space::accept_invite(turtl, &mut invite, passphrase)?;
             Ok(space.data()?)
         },
         "profile:space:edit-invite" => {
@@ -363,6 +357,11 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.delete_invite(turtl, &invite_id)?;
             Ok(space.data()?)
+        },
+        "profile:delete-invite" => {
+            let invite_id: String = jedi::get(&["2"], &data)?;
+            Invite::delete_user_invite(turtl, &invite_id)?;
+            Ok(jedi::obj())
         },
         "profile:get-notes" => {
             let note_ids = jedi::get(&["2"], &data)?;

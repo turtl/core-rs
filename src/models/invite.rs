@@ -1,13 +1,15 @@
 use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::sync::sync_model::{SyncModel, MemorySaver};
+use ::models::sync_record::SyncAction;
+use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming;
 use ::lib_permissions::Role;
 use ::crypto::{self, Key};
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
 use ::api::ApiReq;
+use ::profile::Profile;
 
 /// Used as our passphrase for our invites if we don't provide one.
 const DEFAULT_INVITE_PASSPHRASE: &'static str = "this is the default passphrase lol";
@@ -56,7 +58,32 @@ pub struct InviteRequest {
 make_storable!(Invite, "invites");
 impl SyncModel for Invite {}
 impl Keyfinder for Invite {}
-impl MemorySaver for Invite {}
+
+impl MemorySaver for Invite {
+    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+        match action {
+            SyncAction::Add | SyncAction::Edit => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                for invite in &mut profile_guard.invites {
+                    if invite.id() == self.id() {
+                        invite.merge_fields(&self.data()?)?;
+                        return Ok(());
+                    }
+                }
+                // if it doesn't exist, push it on
+                profile_guard.invites.push(self);
+            }
+            SyncAction::Delete => {
+                let mut profile_guard = turtl.profile.write().unwrap();
+                let invite_id = self.id().unwrap();
+                // remove the invite from memory
+                profile_guard.invites.retain(|s| s.id() != Some(&invite_id));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
 
 impl Invite {
     /// Convert an invite request+key into an invite, sealed and ready to send
@@ -112,7 +139,7 @@ impl Invite {
     /// Open a sealed invite
     pub fn open(&mut self, our_pubkey: &Key, our_privkey: &Key, passphrase: Option<String>) -> TResult<()> {
         self.gen_invite_key(passphrase)?;
-        Protected::deserialize(self)?;
+        self.deserialize()?;
         let message = match self.message.as_ref() {
             Some(x) => x.clone(),
             None => return TErr!(TError::MissingField(String::from("Invite.message"))),
@@ -157,13 +184,26 @@ impl Invite {
         Ok(())
     }
 
-    /// Delete this invite from the space
+    /// Delete an invite
     pub fn delete(&self, turtl: &Turtl) -> TResult<()> {
         model_getter!(get_field, "Invite.delete()");
         let invite_id = get_field!(self, id);
         let url = format!("/spaces/{}/invites/{}", self.space_id, invite_id);
         let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
         incoming::ignore_syncs_maybe(turtl, &ret, "Invite.delete()");
+        Ok(())
+    }
+
+    /// Delete an invite. This is specifically for a space invitee to delete an
+    /// invite that was sent to them.
+    pub fn delete_user_invite(turtl: &Turtl, invite_id: &String) -> TResult<()> {
+        let mut profile_guard = turtl.profile.write().unwrap();
+        let invite = match Profile::finder(&mut profile_guard.invites, invite_id) {
+            Some(i) => i,
+            None => return TErr!(TError::MissingData(format!("invite doesn't exist: {}", invite_id))),
+        };
+        invite.delete(turtl)?;
+        sync_model::delete_model::<Invite>(turtl, invite_id, false)?;
         Ok(())
     }
 }

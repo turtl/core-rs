@@ -816,7 +816,7 @@ pub mod tests {
     #[test]
     fn loads_profile_search_notes() {
         let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
-        let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600}"#)).unwrap();
+        let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600,"body":"AAYBAAws5WZbVHnXwgSc1U4Txv7E2khclSUiQXK9/fquJa8="}"#)).unwrap();
         let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
         user.do_login(user_key, user_auth);
 
