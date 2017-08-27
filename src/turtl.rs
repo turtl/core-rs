@@ -244,6 +244,10 @@ impl Turtl {
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = None;
+        let mut user_guard = self.user.write().unwrap();
+        *user_guard = User::default();
+        let mut connguard = self.connected.write().unwrap();
+        *connguard = false;
         Ok(())
     }
 
@@ -382,7 +386,7 @@ impl Turtl {
         // make sure you model.set_key(None) before calling...
         if model.key().is_some() { return Ok(()); }
 
-        let notfound = TErr!(TError::MissingField(format!("{}.key ({:?})", model.model_type(), model.id())));
+        let notfound = TErr!(TError::NotFound(format!("key for `{}` not found ({:?})", model.model_type(), model.id())));
 
         /// A standard "found a key" function
         fn found_key<T>(model: &mut T, key: Key) -> TResult<()>
@@ -390,6 +394,19 @@ impl Turtl {
         {
             model.set_key(Some(key));
             return Ok(());
+        }
+
+        // keychain entries are always encrypted using the user's key, so we
+        // skip the song and dance of searching and just set it in here.
+        if model.model_type() == "keychain" {
+            let user_key = {
+                let user_guard = self.user.read().unwrap();
+                match user_guard.key() {
+                    Some(x) => x.clone(),
+                    None => return TErr!(TError::MissingField(String::from("Turtl.user.key"))),
+                }
+            };
+            return found_key(model, user_key);
         }
 
         // fyi ders, this read lock is going to be open until we return
@@ -420,10 +437,6 @@ impl Turtl {
             Some(x) => x.clone(),
             None => Vec::new(),
         };
-
-        // if we have no self-decrypting keys, and there's no keychain entry for
-        // this model, then there's no way we can find a key
-        if encrypted_keys.len() == 0 { return notfound; }
 
         // turn model.keys into a KeyRef collection, and filter out crappy
         // entries
@@ -517,27 +530,18 @@ impl Turtl {
     /// Meaning, we decrypt the keychain, spaces, and boards and store them
     /// in-memory in our `turtl.profile` object.
     pub fn load_profile(&self) -> TResult<()> {
-        let user_key = {
-            let user_guard = self.user.read().unwrap();
-            match user_guard.key() {
-                Some(x) => x.clone(),
-                None => return TErr!(TError::MissingField(String::from("Turtl.user.key"))),
-            }
-        };
         let db_guard = self.db.write().unwrap();
         if db_guard.is_none() {
             return TErr!(TError::MissingField(String::from("Turtl.db")));
         }
         let db = db_guard.as_ref().unwrap();
-        let mut keychain: Vec<KeychainEntry> = db.all("keychain").unwrap();
-        let mut spaces: Vec<Space> = db.all("spaces").unwrap();
-        let mut boards: Vec<Board> = db.all("boards").unwrap();
-        let mut invites: Vec<Invite> = db.all("invites").unwrap();
-
-        // keychain entries are always encrypted with the user's key
-        for key in &mut keychain { key.set_key(Some(user_key.clone())); }
+        let mut keychain: Vec<KeychainEntry> = db.all("keychain")?;
+        let mut spaces: Vec<Space> = db.all("spaces")?;
+        let mut boards: Vec<Board> = db.all("boards")?;
+        let invites: Vec<Invite> = db.all("invites")?;
 
         // decrypt the keychain
+        self.find_models_keys(&mut keychain)?;
         let keychain: Vec<KeychainEntry> = protected::map_deserialize(self, keychain)?;
         let mut profile_guard = self.profile.write().unwrap();
         profile_guard.keychain.entries = keychain;
@@ -559,13 +563,14 @@ impl Turtl {
         profile_guard.boards = boards;
         drop(profile_guard);
 
-        // now decrypt the invites
-        self.find_models_keys(&mut invites)?;
-        let invites: Vec<Invite> = protected::map_deserialize(self, invites)?;
+        // invites are NOT decrypted. they are stored as-is.
         // set the invites into the profile
         let mut profile_guard = self.profile.write().unwrap();
         profile_guard.invites = invites;
         drop(profile_guard);
+
+        let mut user_guard = self.user.write().unwrap();
+        user_guard.deserialize()?;
 
         self.events.trigger("profile:loaded", &jedi::obj());
         Ok(())
