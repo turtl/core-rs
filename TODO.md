@@ -1,8 +1,6 @@
 v0.7:
 - invites
   - integration tests!
-  - deserializing user after logging in as testdata@turtlapp.com throws a crypto
-    error. does this happen on login_sync_logout?
 - model
   - make id_or_else(), implement everywhere
 - update prot.(de)serialize() to consume model and return model so calls to

@@ -107,23 +107,9 @@ impl Turtl {
         // make sure we have a client id
         storage::setup_client_id(kv.clone())?;
 
-        let user = User::new();
-        user.bind("login", |obj| {
-            match messaging::ui_event("user:login", obj) {
-                Ok(_) => {},
-                Err(e) => error!("Turtl::new() -- user.login -- error sending UI login event: {}", e),
-            }
-        }, "turtl:user:login");
-        user.bind("logout", |obj| {
-            match messaging::ui_event("user:logout", obj) {
-                Ok(_) => {},
-                Err(e) => error!("Turtl::new() -- user.logout -- error sending UI logout event: {}", e),
-            }
-        }, "turtl:user:logout");
-
         let turtl = Turtl {
             events: event::EventEmitter::new(),
-            user: RwLock::new(user),
+            user: RwLock::new(User::default()),
             user_id: RwLock::new(None),
             profile: RwLock::new(Profile::new()),
             api: api,
@@ -137,6 +123,7 @@ impl Turtl {
             connected: RwLock::new(false),
             incoming_sync_lock: Mutex::new(()),
         };
+        turtl.setup_user();
         Ok(turtl)
     }
 
@@ -172,6 +159,24 @@ impl Turtl {
         };
         let msg = jedi::stringify(&res)?;
         self.remote_send(Some(mid.clone()), msg)
+    }
+
+    /// Set up the user object
+    fn setup_user(&self) {
+        let mut user_guard = self.user.write().unwrap();
+        *user_guard = User::default();
+        user_guard.bind("login", |obj| {
+            match messaging::ui_event("user:login", obj) {
+                Ok(_) => {},
+                Err(e) => error!("Turtl::new() -- user.login -- error sending UI login event: {}", e),
+            }
+        }, "turtl:user:login");
+        user_guard.bind("logout", |obj| {
+            match messaging::ui_event("user:logout", obj) {
+                Ok(_) => {},
+                Err(e) => error!("Turtl::new() -- user.logout -- error sending UI logout event: {}", e),
+            }
+        }, "turtl:user:logout");
     }
 
     /// If the `turtl.user` object has a valid ID, set it into `turtl.user_id`
@@ -244,8 +249,7 @@ impl Turtl {
         User::logout(self)?;
         let mut db_guard = self.db.write().unwrap();
         *db_guard = None;
-        let mut user_guard = self.user.write().unwrap();
-        *user_guard = User::default();
+        self.setup_user();
         let mut connguard = self.connected.write().unwrap();
         *connguard = false;
         Ok(())
@@ -669,6 +673,7 @@ impl Turtl {
         let files = FileData::file_finder_all(Some(&user_id), None)?;
         for file in files {
             fs::remove_file(&file)?;
+            info!("turtl.wipe_user_data() -- removing {}", file.display());
         }
 
         self.logout()?;
