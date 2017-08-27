@@ -7,7 +7,11 @@ pub mod int_converter {
     pub fn serialize<S>(val: &String, ser: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        ser.serialize_i64(val.parse().unwrap())
+        if val == "" {
+            ser.serialize_i64(0)
+        } else {
+            ser.serialize_i64(val.parse().unwrap())
+        }
     }
 
     pub fn deserialize<'de, D>(des: D) -> Result<String, D::Error>
@@ -132,7 +136,7 @@ pub mod int_opt_converter {
 }
 
 pub mod base64_converter {
-    use ::error::TResult;
+    use ::error::{TResult, TError};
     use ::serde::ser::{self, Serializer};
     use ::serde::de::{self, Deserializer, Deserialize};
     use ::jedi::Value;
@@ -166,8 +170,14 @@ pub mod base64_converter {
         }
     }
 
-    pub fn from_value(_val: Value) -> TResult<Option<Option<Vec<u8>>>> {
-        Ok(None)
+    pub fn from_value(val: Value) -> TResult<Option<Option<Vec<u8>>>> {
+        match val {
+            Value::String(base) => {
+                let parsed = crypto::from_base64(&base)?;
+                Ok(Some(Some(parsed)))
+            },
+            _ => TErr!(TError::BadValue(String::from("expecting base64 string"))),
+        }
     }
 }
 
