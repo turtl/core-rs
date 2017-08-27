@@ -131,21 +131,24 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
 
     let mut user_guard_w = turtl.user.write().unwrap();
     let id_err = TErr!(TError::BadValue(format!("auth was successful, but API returned strange id object: {:?}", user_id)));
-    user_guard_w.id = match user_id {
+    let user_id = match user_id {
         Value::Number(x) => {
             match x.as_i64() {
-                Some(id) => Some(id.to_string()),
+                Some(id) => id.to_string(),
                 None => return id_err,
             }
         },
-        Value::String(x) => Some(x),
+        Value::String(x) => x,
         _ => return id_err,
     };
+    let url = format!("/users/{}", user_id);
+    user_guard_w.id = Some(user_id);
     user_guard_w.do_login(key, auth);
     drop(user_guard_w);
-    let user_guard_r = turtl.user.read().unwrap();
-    user_guard_r.trigger("login", &jedi::obj());
-    drop(user_guard_r);
+    let userdata = turtl.api.get(url.as_str(), ApiReq::new())?;
+    let mut user_guard = turtl.user.write().unwrap();
+    user_guard.merge_fields(&userdata)?;
+    user_guard.trigger("login", &jedi::obj());
     debug!("user::do_login() -- auth success, logged in");
     Ok(())
 }
