@@ -55,7 +55,7 @@ impl PartialEq for Key {
 }
 
 impl ser::Serialize for Key {
-    fn serialize<S>(&self, serializer:S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: ser::Serializer
     {
         let base64: String = match ::crypto::to_base64(self.data()) {
