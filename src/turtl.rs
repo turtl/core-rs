@@ -404,10 +404,7 @@ impl Turtl {
         if model.model_type() == "keychain" {
             let user_key = {
                 let user_guard = self.user.read().unwrap();
-                match user_guard.key() {
-                    Some(x) => x.clone(),
-                    None => return TErr!(TError::MissingField(String::from("Turtl.user.key"))),
-                }
+                user_guard.key_or_else()?
             };
             return found_key(model, user_key);
         }

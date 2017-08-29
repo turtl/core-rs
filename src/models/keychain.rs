@@ -124,10 +124,7 @@ impl Keychain {
         let (user_id, user_key) = {
             let user_guard = turtl.user.read().unwrap();
             let id = user_guard.id_or_else()?;
-            let key = match user_guard.key() {
-                Some(k) => k.clone(),
-                None => return Err(TError::MissingField(String::from("Turtl.user.key"))),
-            };
+            let key = user_guard.key_or_else()?;
             (id, key)
         };
         let remove = {

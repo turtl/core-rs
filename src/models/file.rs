@@ -177,10 +177,7 @@ impl FileData {
     /// Load a note's file, if we have one.
     pub fn load_file(turtl: &Turtl, note: &Note) -> TResult<Vec<u8>> {
         let note_id = note.id_or_else()?;
-        let note_key = match note.key() {
-            Some(key) => key.clone(),
-            None => return TErr!(TError::MissingField(format!("Note.key"))),
-        };
+        let note_key = note.key_or_else()?;
 
         let filename = FileData::file_finder(None, Some(&note_id))?;
         let enc = {
@@ -205,10 +202,7 @@ impl FileData {
         // filename, note_key for encrypting the file).
         let user_id = turtl.user_id()?;
         let note_id = note.id_or_else()?;
-        let note_key = match note.key() {
-            Some(key) => key.clone(),
-            None => return TErr!(TError::MissingField(format!("Note.key"))),
-        };
+        let note_key = note.key_or_else()?;
 
         // the file id should ref the note
         self.id = Some(note_id.clone());

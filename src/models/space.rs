@@ -266,10 +266,7 @@ impl Space {
             let user_id = user_guard.id_or_else()?;
             (user_id, user_guard.username.clone())
         };
-        let space_key = match self.key() {
-            Some(k) => k.clone(),
-            None => return TErr!(TError::MissingField(String::from("Space.key"))),
-        };
+        let space_key = self.key_or_else()?;
         self.can_i_or_else(&user_id, &Permission::AddSpaceInvite)?;
 
         // if we have an existing member, bail
