@@ -146,7 +146,7 @@ impl Api {
     /// Start an API request. call_start()/call_end() can be used to stream a
     /// large HTTP body
     pub fn call_start(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<(Request<hyper::net::Streaming>, CallInfo)> {
-        info!("api::call_start() -- req: {} {}", method, resource);
+        debug!("api::call_start() -- req: {} {}", method, resource);
         let ApiReq {mut headers, timeout, data: _data} = builder;
         let url = self.build_url(resource)?;
         let resource = String::from(resource);
@@ -167,7 +167,7 @@ impl Api {
 
     /// Send out an API request
     pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<T> {
-        info!("api::call() -- req: {} {}", method, resource);
+        debug!("api::call() -- req: {} {}", method, resource);
         let ApiReq {mut headers, timeout, data} = builder;
         let url = self.build_url(resource)?;
         let resource = String::from(resource);
@@ -213,7 +213,7 @@ impl Api {
                 str_res.map(move |x| (x, res))
             })
             .map(|(out, res)| {
-                info!("api::call() -- response({}): {:?} {} {}", out.len(), res.status_raw(), &callinfo.method, &callinfo.resource);
+                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status_raw(), &callinfo.method, &callinfo.resource);
                 trace!("  api::call() -- body: {}", out);
                 out
             })
