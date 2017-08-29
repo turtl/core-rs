@@ -366,10 +366,9 @@ impl Turtl {
     /// Get the physical location of the per-user database file we will use for
     /// the current logged-in user.
     pub fn get_user_db_location(&self) -> TResult<String> {
-        let user_guard = self.user.read().unwrap();
-        let user_id = match user_guard.id() {
-            Some(x) => x,
-            None => return TErr!(TError::MissingData(String::from("Turtl.user.id"))),
+        let user_id = {
+            let user_guard = self.user.read().unwrap();
+            user_guard.id_or_else()?
         };
 
         lazy_static! {

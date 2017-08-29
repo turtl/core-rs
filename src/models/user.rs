@@ -368,10 +368,7 @@ impl User {
     pub fn delete_account(turtl: &Turtl) -> TResult<()> {
         let id = {
             let user_guard = turtl.user.read().unwrap();
-            match user_guard.id() {
-                Some(x) => x.clone(),
-                None => return TErr!(TError::MissingData(String::from("Turtl.user.id"))),
-            }
+            user_guard.id_or_else()?
         };
         turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
         Ok(())

@@ -168,6 +168,7 @@ impl MemorySaver for Note {
             SyncAction::Add | SyncAction::Edit => {
                 let note_id = match self.id() {
                     Some(x) => x.clone(),
+                    // silent fail
                     None => return Ok(()),
                 };
                 let notes = turtl.load_notes(&vec![note_id])?;
