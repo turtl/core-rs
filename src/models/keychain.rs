@@ -91,8 +91,8 @@ impl MemorySaver for KeychainEntry {
                     Some(x) => x,
                     None => return TErr!(TError::MissingField(String::from("Keychain.k"))),
                 };
-                let mut profile_guard = turtl.profile.write().unwrap();
                 // upsert our key
+                let mut profile_guard = turtl.profile.write().unwrap();
                 profile_guard.keychain.upsert_key(turtl, &self.item_id, key, &self.type_)?;
             }
             SyncAction::Delete => {
