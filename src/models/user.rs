@@ -65,7 +65,7 @@ impl MemorySaver for User {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                // NOTE: it's note wise to do a direct edit here (as in, lock
+                // NOTE: it's not wise to do a direct edit here (as in, lock
                 // Turtl.user) because there are many cases when Turtl.user is
                 // already locked when we get here. so instead, we blast out an
                 // app event that tells us to edit the user object with the data
