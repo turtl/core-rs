@@ -13,6 +13,7 @@ use ::lib_permissions::Permission;
 use ::api::ApiReq;
 use ::jedi::{self, Value};
 use ::crypto::Key;
+use ::messaging;
 
 /// Defines a Space, which is a container for notes and boards. It also acts as
 /// an organization of sorts, allowing multiple members to access the space,
@@ -23,15 +24,11 @@ protected! {
         #[serde(with = "::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
-
-        // NOTE: with members/spaces, we don't actually have them listed as
-        // public/private because we don't want them gumming up the local DB
-        // with their nonsense (the API ignores them anyway), but they are not
-        // skipped because we do want to be able to send them to the UI as part
-        // of the space.
         #[serde(default)]
+        #[protected_field(public)]
         pub members: Vec<SpaceMember>,
         #[serde(default)]
+        #[protected_field(public)]
         pub invites: Vec<Invite>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -250,12 +247,14 @@ impl Space {
     /// permission check.
     pub fn leave(&mut self, turtl: &Turtl) -> TResult<()> {
         turtl.assert_connected()?;
-        model_getter!(get_field, "Space.delete_member()");
+        model_getter!(get_field, "Space.leave()");
         let space_id = get_field!(self, id);
         let user_id = turtl.user_id()?;
         let existing_member = self.find_member_by_user_id_or_else(&user_id)?;
         existing_member.delete(turtl)?;
-        sync_model::delete_model::<Space>(turtl, &space_id, true)?;
+        // do the delete async because space deletion requires a profile lock,
+        // but it's already locked here.
+        messaging::app_event("space:delete", &json!([&space_id, true]))?;
         Ok(())
     }
 
@@ -330,7 +329,7 @@ impl Space {
         // saved because we are paranoid).
         sync_model::save_model(SyncAction::Add, turtl, &mut space, true)?;
         // also, remove our invite locally. it's not...economically viable.
-        sync_model::delete_model::<Invite>(turtl, &invite_id, false)?;
+        sync_model::delete_model::<Invite>(turtl, &invite_id, true)?;
         Ok(space)
     }
 
