@@ -77,6 +77,7 @@ impl SyncOutgoing {
     /// sync items that might need inspection/alerting.
     fn handle_sync_failures(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
         for failure in fail {
+            warn!("SyncOutgoing.handle_sync_failures() -- failwhale: {:?}/{:?}", failure.ty, failure.action);
             with_db!{ db, self.db,
                 SyncRecord::handle_failed_sync(db, failure)?;
             }
