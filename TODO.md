@@ -1,8 +1,6 @@
 v0.7:
 - invites
   - integration tests!
-- model
-  - make id_or_else(), implement everywhere
 - update prot.(de)serialize() to consume model and return model so calls to
   work() can skip the dumbass cloning
 - bookmarker
