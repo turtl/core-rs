@@ -1,5 +1,5 @@
 use ::turtl::Turtl;
-use ::error::{TResult, TError};
+use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef};
@@ -68,10 +68,7 @@ impl Note {
     /// Remove the files attached to this note, if any.
     fn clear_files(&self) -> TResult<()> {
         // delete all local file(s) associated with this note
-        let note_id = match self.id() {
-            Some(x) => x.clone(),
-            None => return TErr!(TError::MissingField(String::from("Note.id"))),
-        };
+        let note_id = self.id_or_else()?;
         let files = FileData::file_finder_all(Some(&self.user_id), Some(&note_id))?;
         for file in files {
             fs::remove_file(&file)?;

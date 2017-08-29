@@ -14,7 +14,7 @@ use ::models::model::{self};
 use ::models::protected::Protected;
 use ::models::storable::Storable;
 
-use ::error::{TResult, TError};
+use ::error::TResult;
 
 /// Given a db filename, return the foll path we'll use for the db file
 pub fn db_location(db_name: &String) -> TResult<String> {
@@ -113,10 +113,7 @@ impl Storage {
     pub fn delete<T>(&self, model: &T) -> TResult<()>
         where T: Protected + Storable
     {
-        let id = match model.id() {
-            Some(x) => x,
-            None => return TErr!(TError::MissingField(format!("{}.id", model.model_type()))),
-        };
+        let id = model.id_or_else()?;
         let table = model.table();
         Ok(self.dumpy.delete(&self.conn, &String::from(table), &id)?)
     }

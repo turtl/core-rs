@@ -123,10 +123,7 @@ impl Keychain {
     fn upsert_key_impl(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, save: bool, skip_remote_sync: bool) -> TResult<()> {
         let (user_id, user_key) = {
             let user_guard = turtl.user.read().unwrap();
-            let id = match user_guard.id() {
-                Some(id) => id.clone(),
-                None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
-            };
+            let id = user_guard.id_or_else()?;
             let key = match user_guard.key() {
                 Some(k) => k.clone(),
                 None => return Err(TError::MissingField(String::from("Turtl.user.key"))),

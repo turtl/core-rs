@@ -1,6 +1,6 @@
 use ::jedi::Value;
 
-use ::error::{TResult, TError};
+use ::error::TResult;
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
@@ -34,10 +34,7 @@ impl SyncModel for Board {}
 impl Board {
     /// Move a note to a different space
     pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String) -> TResult<()> {
-        let board_id = match self.id() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(String::from("Board.id"))),
-        };
+        let board_id = self.id_or_else()?;
         self.space_id = new_space_id.clone();
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
 

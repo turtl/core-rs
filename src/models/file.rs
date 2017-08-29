@@ -89,10 +89,7 @@ impl SyncModel for FileData {
 
     // remove the file
     fn db_delete(&self, _db: &mut Storage, _sync_item: Option<&SyncRecord>) -> TResult<()> {
-        let id = match self.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(String::from("FileData.id"))),
-        };
+        let id = self.id_or_else()?;
 
         // we could use FileData::file_finder here, but we actually do want to
         // find ALL files with this note ID and remove them. just a paranoid
@@ -179,10 +176,7 @@ impl FileData {
 
     /// Load a note's file, if we have one.
     pub fn load_file(turtl: &Turtl, note: &Note) -> TResult<Vec<u8>> {
-        let note_id = match note.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(format!("Note.id"))),
-        };
+        let note_id = note.id_or_else()?;
         let note_key = match note.key() {
             Some(key) => key.clone(),
             None => return TErr!(TError::MissingField(format!("Note.key"))),
@@ -210,10 +204,7 @@ impl FileData {
         // grab some items we'll need to do our work (user_id/note_id for the
         // filename, note_key for encrypting the file).
         let user_id = turtl.user_id()?;
-        let note_id = match note.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(format!("Note.id"))),
-        };
+        let note_id = note.id_or_else()?;
         let note_key = match note.key() {
             Some(key) => key.clone(),
             None => return TErr!(TError::MissingField(format!("Note.key"))),

@@ -263,10 +263,7 @@ impl Space {
         turtl.assert_connected()?;
         let (user_id, username) = {
             let user_guard = turtl.user.read().unwrap();
-            let user_id = match user_guard.id() {
-                Some(id) => id.clone(),
-                None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
-            };
+            let user_id = user_guard.id_or_else()?;
             (user_id, user_guard.username.clone())
         };
         let space_key = match self.key() {

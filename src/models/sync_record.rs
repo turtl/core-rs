@@ -172,10 +172,7 @@ impl SyncRecord {
     /// until it gets manually shaken/removed.
     pub fn handle_failed_sync(db: &mut Storage, failure: &SyncRecord) -> TResult<()> {
         debug!("SyncRecord::handle_failed_sync() -- handle failure: {:?}", failure);
-        let sync_id = match failure.id().as_ref() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(format!("SyncRecord.id"))),
-        };
+        let sync_id = failure.id_or_else()?;
         let sync_record: Option<SyncRecord> = db.get("sync", &sync_id)?;
         match sync_record {
             Some(mut rec) => {

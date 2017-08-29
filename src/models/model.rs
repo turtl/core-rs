@@ -111,6 +111,9 @@ pub trait Model: Emitter + Serialize + DeserializeOwned + Default {
     /// Generate an id for this model if it doesn't have one
     fn generate_id<'a>(&'a mut self) -> TResult<&'a String>;
 
+    /// Return a result to this models id. Ok if it exists, error if None
+    fn id_or_else(&self) -> TResult<String>;
+
     /// Turn this model into a JSON string
     fn stringify(&self) -> TResult<String> {
         jedi::stringify(self).map_err(|e| toterr!(e))
@@ -188,6 +191,13 @@ macro_rules! model {
                 match self.id {
                     Some(ref x) => Some(x),
                     None => None,
+                }
+            }
+
+            fn id_or_else(&self) -> ::error::TResult<String> {
+                match self.id() {
+                    Some(id) => Ok(id.clone()),
+                    None => TErr!(::error::TError::MissingField(format!("{}.id", stringify!($name)))),
                 }
             }
 

@@ -77,10 +77,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
         sync_record.action = action;
         sync_record.user_id = user_id.clone();
         sync_record.ty = SyncType::from_string(self.model_type())?;
-        sync_record.item_id = match self.id() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(format!("{}.id", self.model_type()))),
-        };
+        sync_record.item_id = self.id_or_else()?;
         match sync_record.action {
             SyncAction::Delete => {
                 sync_record.data = Some(json!({
@@ -131,10 +128,7 @@ pub trait MemorySaver: Protected {
         let mut sync_item = SyncRecord::default();
         sync_item.action = action.clone();
         sync_item.user_id = String::from("0");
-        sync_item.item_id = match self.id() {
-            Some(x) => x.clone(),
-            None => return TErr!(TError::MissingField(String::from("self.id"))),
-        };
+        sync_item.item_id = self.id_or_else()?;
         sync_item.ty = SyncType::from_string(self.model_type())?;
         sync_item.data = Some(self.data()?);
         self.mem_update(turtl, action)?;

@@ -229,11 +229,7 @@ impl User {
     /// we tried to shoehorn this through the sync system, but this tends to be
     /// a delicate procedure and you really want everything to work or nothing.
     pub fn change_password(&mut self, turtl: &Turtl, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
-        let user_id = match self.id() {
-            Some(id) => id.clone(),
-            None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
-        };
-
+        let user_id = self.id_or_else()?;
         let (_, auth) = generate_auth(&current_username, &current_password, CURRENT_AUTH_VERSION)?;
         if Some(auth) != self.auth {
             return TErr!(TError::BadValue(String::from("invalid current username/password given")));
@@ -314,12 +310,10 @@ impl User {
 
     /// Once the user has joined, we set up a default profile for them.
     pub fn post_join(turtl: &Turtl) -> TResult<()> {
-        let user_guard = turtl.user.read().unwrap();
-        let user_id = match user_guard.id() {
-            Some(x) => x.clone(),
-            None => return TErr!(TError::MissingField(String::from("Turtl.user.id"))),
+        let user_id = {
+            let user_guard = turtl.user.read().unwrap();
+            user_guard.id_or_else()?
         };
-        drop(user_guard);
 
         fn save_space(turtl: &Turtl, user_id: &String, title: &str, color: &str) -> TResult<String> {
             let mut space: Space = Default::default();
