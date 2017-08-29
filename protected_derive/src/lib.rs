@@ -251,6 +251,13 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 self._key.as_ref()
             }
 
+            fn key_or_else(&self) -> ::error::TResult<::crypto::Key> {
+                match self.key() {
+                    Some(x) => Ok(x.clone()),
+                    None => TErr!(::error::TError::MissingField(format!("{}.key", stringify!(#name)))),
+                }
+            }
+
             fn set_key(&mut self, key: Option<::crypto::Key>) {
                 self._key = key;
                 self._set_key_on_submodels();

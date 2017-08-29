@@ -145,6 +145,9 @@ pub trait Protected: Model + fmt::Debug {
     /// Get the key for this model
     fn key(&self) -> Option<&Key>;
 
+    /// Get the key for this model, or return an error of it's missing
+    fn key_or_else(&self) -> TResult<Key>;
+
     /// Set this model's key
     fn set_key(&mut self, key: Option<Key>);
 
@@ -296,7 +299,7 @@ pub trait Protected: Model + fmt::Debug {
             let data = self._private_data()?;
             let json = jedi::stringify(&data)?;
 
-            let key = match self.key() {
+            let key: &Key = match self.key() {
                 Some(x) => x,
                 None => return TErr!(TError::MissingField(format!("model {} ({}) missing `key`", id, self.model_type()))),
             };
