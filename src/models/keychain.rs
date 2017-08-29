@@ -87,7 +87,7 @@ impl MemorySaver for KeychainEntry {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                let key = match self.key() {
+                let key = match self.k.as_ref() {
                     Some(x) => x,
                     None => return TErr!(TError::MissingField(String::from("Keychain.k"))),
                 };
