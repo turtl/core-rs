@@ -41,7 +41,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let username = jedi::get(&["2"], &data)?;
             let password = jedi::get(&["3"], &data)?;
             turtl.login(username, password)?;
-            Ok(jedi::obj())
+            Ok(Value::String(turtl.user_id()?))
         },
         "user:join" => {
             let username = jedi::get(&["2"], &data)?;
@@ -433,6 +433,14 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
             messaging::ui_event("user:change-password:logout", &jedi::obj())?;
             util::sleep(3000);
             turtl.logout()?;
+        }
+        "space:delete" => {
+            let space_id: String = jedi::get(&["0"], &data)?;
+            let skip_remote_sync: bool = match jedi::get_opt(&["1"], &data) {
+                Some(x) => x,
+                None => false,
+            };
+            sync_model::delete_model::<Space>(turtl, &space_id, skip_remote_sync)?;
         }
         _ => {
             warn!("dispatch_event() -- encountered unknown event: {}", cmd);
