@@ -16,7 +16,7 @@ quick_error! {
     pub enum TError {
         Wrapped(function: &'static str, file: &'static str, line: u32, err: Arc<TError>) {
             description("Turtl wrap error")
-            display("{{\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", function, file, line, err)
+            display("{{\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", file, line, err)
         }
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
