@@ -1,10 +1,6 @@
 v0.7:
 - invites
   - integration tests!
-- update prot.(de)serialize() to consume model and return model so calls to
-  work() can skip the dumbass cloning
-- bookmarker
-  - just takes a url (no http server, leave that to wrapper)
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
