@@ -78,6 +78,14 @@ quick_error! {
             description("API error")
             display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
         }
+        Http(status: StatusCode, msg: String) {
+            description("HTTP error")
+            display("http error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+        }
+        ParseError(msg: String) {
+            description("Parse error")
+            display("parse error: {}", msg)
+        }
         TryAgain {
             description("try again")
             display("try again")
