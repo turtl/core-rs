@@ -5,9 +5,34 @@ mod tests {
     use super::*;
     use ::config;
 
-    #[test]
-    fn invites() {
-        let handle = init();
+    // login to the temporary (sender) account
+    fn login_tmp() -> String {
+        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
+        dispatch_ass(json!(["app:wipe-user-data"]));
+        let ret = dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
+        let user_id: String = jedi::from_val(ret).unwrap();
+        dispatch_ass(json!(["sync:start"]));
+        wait_on("sync:connected");
+        wait_on("profile:loaded");
+        wait_on("profile:indexed");
+        user_id
+    }
+
+    fn login_testacct() -> String {
+        let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
+        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
+        dispatch_ass(json!(["app:wipe-user-data"]));
+        let ret = dispatch_ass(json!(["user:login", username, password]));
+        let user_id: String = jedi::from_val(ret).unwrap();
+        dispatch_ass(json!(["sync:start"]));
+        wait_on("sync:connected");
+        wait_on("profile:loaded");
+        wait_on("profile:indexed");
+        user_id
+    }
+
+    // a function we use to join and send an invite to our test user
+    fn setup_invite() {
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
         dispatch_ass(json!(["app:wipe-app-data"]));
@@ -32,16 +57,15 @@ mod tests {
             "title": title,
             "their_pubkey": pubkey,
         }]));
+    }
 
-        // log out of the created account and log into the invitee's account
-        dispatch_ass(json!(["user:logout"]));
-        dispatch_ass(json!(["user:login", to_user_email, password]));
-        dispatch_ass(json!(["sync:start"]));
-        wait_on("profile:loaded");
-        wait_on("profile:indexed");
+    fn load_invite() -> Value {
         let profile = dispatch_ass(json!(["profile:load"]));
-        let invite: Value = jedi::get(&["invites", "0"], &profile).unwrap();
-        let space_id: String = jedi::get(&["invites", "0", "space_id"], &profile).unwrap();
+        jedi::get(&["invites", "0"], &profile).unwrap()
+    }
+
+    fn accept_invite(invite: &Value) -> Value {
+        let space_id: String = jedi::get(&["space_id"], invite).unwrap();
         dispatch_ass(json!(["profile:space:accept-invite", invite]));
 
         // ok, the space should come through in a sync:update event now, and it
@@ -52,19 +76,66 @@ mod tests {
             // if we got our space, make sure it all checks out
             if ty == "space" {
                 let id: String = jedi::get(&["item_id"], &data).unwrap();
-                let title: String = jedi::get(&["data", "title"], &data).unwrap();
-                assert_eq!(id, space_id);
-                assert_eq!(title, "Personal");
-                break;
+                if id == space_id {
+                    return jedi::get(&["data"], &data).unwrap();
+                }
             }
         }
+    }
 
-        // now logout and delete our account from above ^^
-        dispatch_ass(json!(["user:logout"]));
-        dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
-        dispatch_ass(json!(["sync:start"]));
-        wait_on("sync:connected");
+    fn find_member(space: &Value, not_user_id: &String) -> Option<Value> {
+        let members: Vec<Value> = jedi::get(&["members"], space).unwrap();
+        for mem in members {
+            let user_id: String = jedi::get(&["user_id"], &mem).unwrap();
+            if &user_id == not_user_id { continue; }
+            return Some(mem);
+        }
+        None
+    }
+
+    #[test]
+    fn invites() {
+        let handle = init();
+
+        // TODO:
+        // - edit-invite
+        // - delete-invite (as sender)
+        // - delete-invite (as recv)
+
+        // test send invite, accept invite, leave space
+        setup_invite();
+        login_testacct();
+        let invite = load_invite();
+        let space = accept_invite(&invite);
+        let space_id: String = jedi::get(&["id"], &space).unwrap();
+        let title: String = jedi::get(&["title"], &space).unwrap();
+        assert_eq!(title, "Personal");
+        dispatch_ass(json!(["profile:space:leave", space_id]));
+        login_tmp();
         dispatch_ass(json!(["user:delete-account"]));
+
+
+        // test send invite, accept invite, set owner (and set back), edit
+        // member, delete member
+        setup_invite();
+        let test_user_id = login_testacct();
+        let invite = load_invite();
+        let space = accept_invite(&invite);
+        let space_id: String = jedi::get(&["id"], &space).unwrap();
+        let tmp_user_id = login_tmp();
+        dispatch_ass(json!(["profile:space:set-owner", space_id, test_user_id]));
+        wait_on("sync:update");
+        login_testacct();
+        let space = dispatch_ass(json!(["profile:space:set-owner", space_id, tmp_user_id]));
+        wait_on("sync:update");
+        login_tmp();
+        let mut member = find_member(&space, &tmp_user_id).unwrap();
+        jedi::set(&["role"], &mut member, &String::from("admin")).unwrap();
+        dispatch_ass(json!(["profile:space:edit-member", member]));
+        wait_on("sync:update");
+        dispatch_ass(json!(["profile:space:delete-member", space_id, test_user_id]));
+        dispatch_ass(json!(["user:delete-account"]));
+
         end(handle);
     }
 }
