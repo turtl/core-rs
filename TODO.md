@@ -1,6 +1,8 @@
 v0.7:
 - invites
   - integration tests!
+- bookmarker
+  - only takes url
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
