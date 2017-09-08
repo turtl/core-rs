@@ -1,4 +1,4 @@
-include!("./_lib.rs");
+include!("./lib/util.rs");
 
 #[cfg(test)]
 mod tests {
