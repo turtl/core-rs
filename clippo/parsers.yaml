@@ -1,0 +1,13 @@
+---
+- domain: "amazon.com"
+  selector_desc: "#productDescription p"
+  selector_image: "img.a-dynamic-image.miniATFImage"
+
+- domain: "youtube.com"
+  re_json: 'window\["ytInitialData"\] = (?P<json>\{.*\});[\r\n]'
+  jpath_title: ["contents", "twoColumnWatchNextResults", "results", "results", "contents", "0", "videoPrimaryInfoRenderer", "title", "simpleText"]
+  jpath_desc: ["contents", "twoColumnWatchNextResults", "results", "results", "contents", "1", "videoSecondaryInfoRenderer", "description", "runs", "0", "text"]
+  re_image: 
+    - '^.*(/watch\?v=(?P<v1>[^&]+)|/v/(?P<v2>[&/]+)).*$'
+    - 'https://i1.ytimg.com/vi/$v1$v2/0.jpg'
+
