@@ -1,6 +1,7 @@
 #![recursion_limit="128"]
 
 extern crate carrier;
+extern crate clippo;
 extern crate clouseau;
 extern crate config;
 extern crate crossbeam;
@@ -24,7 +25,7 @@ extern crate protected_derive;
 extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
-extern crate rustc_serialize as serialize;
+extern crate rustc_serialize as serialize;  // for hex/base64
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

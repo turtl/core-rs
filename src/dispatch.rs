@@ -28,6 +28,7 @@ use ::models::invite::{Invite, InviteRequest};
 use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
+use ::clippo::{self, CustomParser};
 use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
@@ -42,18 +43,18 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let password = jedi::get(&["3"], &data)?;
             turtl.login(username, password)?;
             Ok(Value::String(turtl.user_id()?))
-        },
+        }
         "user:join" => {
             let username = jedi::get(&["2"], &data)?;
             let password = jedi::get(&["3"], &data)?;
             turtl.join(username, password)?;
             Ok(jedi::obj())
-        },
+        }
         "user:logout" => {
             turtl.logout()?;
             util::sleep(1000);
             Ok(jedi::obj())
-        },
+        }
         "user:change-password" => {
             let current_username = jedi::get(&["2"], &data)?;
             let current_password = jedi::get(&["3"], &data)?;
@@ -61,11 +62,11 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let new_password = jedi::get(&["5"], &data)?;
             turtl.change_user_password(current_username, current_password, new_username, new_password)?;
             Ok(jedi::obj())
-        },
+        }
         "user:delete-account" => {
             turtl.delete_account()?;
             Ok(jedi::obj())
-        },
+        }
         "user:find-by-email" => {
             let email: String = jedi::get(&["2"], &data)?;
             let user = User::find_by_email(turtl, &email)?;
@@ -76,55 +77,55 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let connected: bool = *connguard;
             drop(connguard);
             Ok(Value::Bool(connected))
-        },
+        }
         "app:wipe-user-data" => {
             turtl.wipe_user_data()?;
             Ok(jedi::obj())
-        },
+        }
         "app:wipe-app-data" => {
             turtl.wipe_app_data()?;
             Ok(jedi::obj())
-        },
+        }
         "sync:start" => {
             turtl.sync_start()?;
             Ok(jedi::obj())
-        },
+        }
         "sync:pause" => {
             turtl.sync_pause();
             Ok(jedi::obj())
-        },
+        }
         "sync:resume" => {
             turtl.sync_resume();
             Ok(jedi::obj())
-        },
+        }
         "sync:shutdown" => {
             turtl.sync_shutdown(true)?;
             Ok(jedi::obj())
-        },
+        }
         "sync:get-pending" => {
             let frozen = SyncRecord::get_all_pending(turtl)?;
             Ok(jedi::to_val(&frozen)?)
-        },
+        }
         "sync:unfreeze-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;
             SyncRecord::kick_frozen_sync(turtl, &sync_id)?;
             Ok(jedi::obj())
-        },
+        }
         "sync:delete-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;
             SyncRecord::delete_sync_item(turtl, &sync_id)?;
             Ok(jedi::obj())
-        },
+        }
         "app:api:set-endpoint" => {
             let endpoint: String = jedi::get(&["2"], &data)?;
             config::set(&["api", "endpoint"], &endpoint)?;
             Ok(jedi::obj())
-        },
+        }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
             turtl.events.trigger("app:shutdown", &jedi::obj());
             Ok(jedi::obj())
-        },
+        }
         "profile:load" => {
             let user_guard = turtl.user.read().unwrap();
             let profile_guard = turtl.profile.read().unwrap();
@@ -135,7 +136,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 "invites": &profile_guard.invites,
             });
             Ok(profile_data)
-        },
+        }
         "profile:sync:model" => {
             let action: SyncAction = match jedi::get(&["2"], &data) {
                 Ok(action) => action,
@@ -278,7 +279,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     TErr!(TError::BadValue(format!("unimplemented sync action {:?}", action)))
                 }
             }
-        },
+        }
         "profile:space:set-owner" => {
             let space_id = jedi::get(&["2"], &data)?;
             let user_id = jedi::get(&["3"], &data)?;
@@ -289,7 +290,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.set_owner(turtl, &user_id)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:edit-member" => {
             let mut member: SpaceMember = jedi::get(&["2"], &data)?;
             let mut profile_guard = turtl.profile.write().unwrap();
@@ -299,7 +300,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.edit_member(turtl, &mut member)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:delete-member" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let user_id: String = jedi::get(&["3"], &data)?;
@@ -310,7 +311,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.delete_member(turtl, &user_id)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:leave" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let mut profile_guard = turtl.profile.write().unwrap();
@@ -320,7 +321,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.leave(turtl)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:send-invite" => {
             let req: InviteRequest = jedi::get(&["2"], &data)?;
             let mut profile_guard = turtl.profile.write().unwrap();
@@ -330,13 +331,13 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.send_invite(turtl, req)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:accept-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
             let passphrase: Option<String> = jedi::get_opt(&["3"], &data);
             let space = Space::accept_invite(turtl, &mut invite, passphrase)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:edit-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
             let mut profile_guard = turtl.profile.write().unwrap();
@@ -346,7 +347,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.edit_invite(turtl, &mut invite)?;
             Ok(space.data()?)
-        },
+        }
         "profile:space:delete-invite" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let invite_id: String = jedi::get(&["3"], &data)?;
@@ -357,17 +358,17 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             };
             space.delete_invite(turtl, &invite_id)?;
             Ok(space.data()?)
-        },
+        }
         "profile:delete-invite" => {
             let invite_id: String = jedi::get(&["2"], &data)?;
             Invite::delete_user_invite(turtl, &invite_id)?;
             Ok(jedi::obj())
-        },
+        }
         "profile:get-notes" => {
             let note_ids = jedi::get(&["2"], &data)?;
             let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
             Ok(jedi::to_val(&notes)?)
-        },
+        }
         "profile:find-notes" => {
             let qry: Query = jedi::get(&["2"], &data)?;
             let search_guard = turtl.search.read().unwrap();
@@ -378,13 +379,13 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let note_ids = search.find(&qry)?;
             let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
             Ok(jedi::to_val(&notes)?)
-        },
+        }
         "profile:get-file" => {
             let note_id = jedi::get(&["2"], &data)?;
             let notes: Vec<Note> = turtl.load_notes(&vec![note_id])?;
             FileData::load_file(turtl, &notes[0])?;
             Ok(Value::Null)
-        },
+        }
         "profile:get-tags" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let boards: Vec<String> = jedi::get(&["3"], &data)?;
@@ -396,16 +397,22 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
             Ok(jedi::to_val(&tags)?)
-        },
+        }
         "feedback:send" => {
             let feedback: Feedback = jedi::get(&["2"], &data)?;
             feedback.send(turtl)?;
             Ok(jedi::obj())
-        },
+        }
+        "clip" => {
+            let url: String = jedi::get(&["2"], &data)?;
+            let custom_parsers: Vec<CustomParser> = jedi::get(&["3"], &data)?;
+            let res = clippo::clip(&url, &custom_parsers)?;
+            Ok(jedi::to_val(&res)?)
+        }
         "ping" => {
             info!("ping!");
             Ok(Value::String(String::from("pong")))
-        },
+        }
         _ => {
             TErr!(TError::MissingCommand(cmd.clone()))
         }

@@ -7,6 +7,7 @@ use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
 use ::jedi::JSONError;
 use ::dumpy::DError;
+use ::clippo::error::CError as ClippoError;
 
 use ::crypto::CryptoError;
 
@@ -16,7 +17,7 @@ quick_error! {
     pub enum TError {
         Wrapped(function: &'static str, file: &'static str, line: u32, err: Arc<TError>) {
             description("Turtl wrap error")
-            display("{{\"fn\":\"{}\",\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", function, file, line, err)
+            display("{{\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", file, line, err)
         }
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
@@ -69,6 +70,11 @@ quick_error! {
             description("Dumpy error")
             display("Dumpy error: {}", err)
         }
+        Clippo(err: ClippoError) {
+            cause(err)
+            description("Clippo error")
+            display("Clippo error: {}", err)
+        }
         Io(err: IoError) {
             cause(err)
             description("io error")
@@ -77,6 +83,14 @@ quick_error! {
         Api(status: StatusCode, msg: String) {
             description("API error")
             display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+        }
+        Http(status: StatusCode, msg: String) {
+            description("HTTP error")
+            display("http error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+        }
+        ParseError(msg: String) {
+            description("Parse error")
+            display("parse error: {}", msg)
         }
         TryAgain {
             description("try again")
@@ -166,6 +180,15 @@ impl From<CryptoError> for TError {
             panic!("{:?}", err);
         } else {
             TError::Crypto(err)
+        }
+    }
+}
+impl From<ClippoError> for TError {
+    fn from(err: ClippoError) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Clippo(err)
         }
     }
 }
