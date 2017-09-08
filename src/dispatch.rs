@@ -28,6 +28,7 @@ use ::models::invite::{Invite, InviteRequest};
 use ::models::file::FileData;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
 use ::models::feedback::Feedback;
+use ::clippo::{self, CustomParser};
 use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
@@ -401,6 +402,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let feedback: Feedback = jedi::get(&["2"], &data)?;
             feedback.send(turtl)?;
             Ok(jedi::obj())
+        }
+        "clip" => {
+            let url: String = jedi::get(&["2"], &data)?;
+            let custom_parsers: Vec<CustomParser> = jedi::get(&["3"], &data)?;
+            let res = clippo::clip(&url, &custom_parsers)?;
+            Ok(jedi::to_val(&res)?)
         }
         "ping" => {
             info!("ping!");

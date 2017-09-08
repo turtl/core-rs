@@ -7,6 +7,7 @@ use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
 use ::jedi::JSONError;
 use ::dumpy::DError;
+use ::clippo::error::CError as ClippoError;
 
 use ::crypto::CryptoError;
 
@@ -68,6 +69,11 @@ quick_error! {
             cause(err)
             description("Dumpy error")
             display("Dumpy error: {}", err)
+        }
+        Clippo(err: ClippoError) {
+            cause(err)
+            description("Clippo error")
+            display("Clippo error: {}", err)
         }
         Io(err: IoError) {
             cause(err)
@@ -174,6 +180,15 @@ impl From<CryptoError> for TError {
             panic!("{:?}", err);
         } else {
             TError::Crypto(err)
+        }
+    }
+}
+impl From<ClippoError> for TError {
+    fn from(err: ClippoError) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Clippo(err)
         }
     }
 }

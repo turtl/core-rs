@@ -2,7 +2,6 @@ v0.7:
 - invites
   - integration tests!
 - bookmarker
-  - only takes url
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
@@ -33,4 +32,17 @@ later:
 - move Turtl.find_model_key(s) et al to protected model (or wherever
   appropriate)
 - rename KEychainEntry.type\_ to ty
+- file writing locally: use buffers/locks:
+  {
+      let mut out = File::new("test.out");
+      let mut buf = BufWriter::new(out);
+      let mut lock = io::stdout().lock();
+      writeln!(lock, "{}", header);
+      for line in lines {
+          writeln!(lock, "{}", line);
+          writeln!(buf, "{}", line);
+      }
+      writeln!(lock, "{}", footer);
+  }   // end scope to unlock stdout and flush/close buf
+
 

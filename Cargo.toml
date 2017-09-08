@@ -1,5 +1,5 @@
 [workspace]
-members = ["carrier", "config", "client", "clouseau", "dumpy", "jedi", "migrate"]
+members = ["carrier", "clippo", "config", "client", "clouseau", "dumpy", "jedi", "migrate"]
 
 [package]
 name = "turtl_core"
@@ -15,6 +15,7 @@ doctest = false				# these annoy me
 [dependencies]
 carrier = { path = "carrier" }
 config = { path = "config" }
+clippo = { path = "clippo" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.3.0"
 dumpy = { path = "dumpy" }
@@ -39,7 +40,7 @@ serde_derive = "1.0.8"
 serde_json = "1.0.2"
 #sodiumoxide = { git = "https://github.com/orthecreedence/sodiumoxide", branch = "aeads" }
 sodiumoxide = { path = "sodiumoxide-aead" }
-time = "0.1.35" # TODO: imports a ton of crap, maybe find a better way to get timestamps?
+time = "0.1.35"
 
 [features]
 panic-on-error = []
