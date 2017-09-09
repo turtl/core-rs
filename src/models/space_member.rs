@@ -12,7 +12,6 @@ pub struct SpaceMember {
     #[serde(with = "::util::ser::str_i64_converter")]
     pub id: i64,
     /// Member's user_id
-    #[serde(with = "::util::ser::int_converter")]
     pub user_id: String,
     /// The space_id this member belongs to
     pub space_id: String,

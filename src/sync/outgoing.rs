@@ -136,6 +136,10 @@ impl Syncer for SyncOutgoing {
             self.handle_sync_failures(&sync_result.failures)?;
         }
 
+        // let the ui know we had an outgoing sync. there are cases where it
+        // will want to know this happened.
+        messaging::ui_event("sync:outgoing:complete", &())?;
+
         // if we did indeed get an error while deleting our sync records,
         // send the first error we got back. obviously there may be more
         // than one, but we can only do so much here to maintain resilience.

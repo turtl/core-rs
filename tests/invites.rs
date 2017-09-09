@@ -7,8 +7,8 @@ mod tests {
 
     // login to the temporary (sender) account
     fn login_tmp() -> String {
-        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
         dispatch_ass(json!(["app:wipe-user-data"]));
+        let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
         let ret = dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
         let user_id: String = jedi::from_val(ret).unwrap();
         dispatch_ass(json!(["sync:start"]));
@@ -19,9 +19,9 @@ mod tests {
     }
 
     fn login_testacct() -> String {
+        dispatch_ass(json!(["app:wipe-user-data"]));
         let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
-        dispatch_ass(json!(["app:wipe-user-data"]));
         let ret = dispatch_ass(json!(["user:login", username, password]));
         let user_id: String = jedi::from_val(ret).unwrap();
         dispatch_ass(json!(["sync:start"]));
@@ -32,7 +32,7 @@ mod tests {
     }
 
     // a function we use to join and send an invite to our test user
-    fn setup_invite() {
+    fn setup_invite() -> Value {
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
         dispatch_ass(json!(["app:wipe-app-data"]));
@@ -56,7 +56,7 @@ mod tests {
             "role": role,
             "title": title,
             "their_pubkey": pubkey,
-        }]));
+        }]))
     }
 
     fn load_invite() -> Value {
@@ -97,11 +97,6 @@ mod tests {
     fn invites() {
         let handle = init();
 
-        // TODO:
-        // - edit-invite
-        // - delete-invite (as sender)
-        // - delete-invite (as recv)
-
         // test send invite, accept invite, leave space
         setup_invite();
         login_testacct();
@@ -114,26 +109,46 @@ mod tests {
         login_tmp();
         dispatch_ass(json!(["user:delete-account"]));
 
-
         // test send invite, accept invite, set owner (and set back), edit
         // member, delete member
         setup_invite();
         let test_user_id = login_testacct();
         let invite = load_invite();
         let space = accept_invite(&invite);
+        // we *need* to wait here for our keychain save to sync (before wiping
+        // our local data and along with it our space key)
+        wait_on("sync:outgoing:complete");
         let space_id: String = jedi::get(&["id"], &space).unwrap();
         let tmp_user_id = login_tmp();
         dispatch_ass(json!(["profile:space:set-owner", space_id, test_user_id]));
-        wait_on("sync:update");
         login_testacct();
         let space = dispatch_ass(json!(["profile:space:set-owner", space_id, tmp_user_id]));
-        wait_on("sync:update");
         login_tmp();
         let mut member = find_member(&space, &tmp_user_id).unwrap();
         jedi::set(&["role"], &mut member, &String::from("admin")).unwrap();
         dispatch_ass(json!(["profile:space:edit-member", member]));
         wait_on("sync:update");
         dispatch_ass(json!(["profile:space:delete-member", space_id, test_user_id]));
+        dispatch_ass(json!(["user:delete-account"]));
+
+        // test send invite, edit invite, then delete invite (as receiver)
+        let space = setup_invite();
+        let mut invite = jedi::get(&["invites", "0"], &space).unwrap();
+        jedi::set(&["role"], &mut invite, &String::from("member")).unwrap();
+        dispatch_ass(json!(["profile:space:edit-invite", invite]));
+        login_testacct();
+        let invite: Value = load_invite();
+        let invite_id: String = jedi::get(&["id"], &invite).unwrap();
+        dispatch_ass(json!(["profile:delete-invite", invite_id]));
+        login_tmp();
+        dispatch_ass(json!(["user:delete-account"]));
+
+        // test send invite, delete invite (as sender)
+        let space = setup_invite();
+        let invite: Value = jedi::get(&["invites", "0"], &space).unwrap();
+        let invite_id: String = jedi::get(&["id"], &invite).unwrap();
+        let space_id: String = jedi::get(&["space_id"], &invite).unwrap();
+        dispatch_ass(json!(["profile:space:delete-invite", space_id, invite_id]));
         dispatch_ass(json!(["user:delete-account"]));
 
         end(handle);

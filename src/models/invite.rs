@@ -197,13 +197,15 @@ impl Invite {
     /// Delete an invite. This is specifically for a space invitee to delete an
     /// invite that was sent to them.
     pub fn delete_user_invite(turtl: &Turtl, invite_id: &String) -> TResult<()> {
-        let mut profile_guard = turtl.profile.write().unwrap();
-        let invite = match Profile::finder(&mut profile_guard.invites, invite_id) {
-            Some(i) => i,
-            None => return TErr!(TError::MissingData(format!("invite doesn't exist: {}", invite_id))),
-        };
-        invite.delete(turtl)?;
-        sync_model::delete_model::<Invite>(turtl, invite_id, false)?;
+        {
+            let mut profile_guard = turtl.profile.write().unwrap();
+            let invite = match Profile::finder(&mut profile_guard.invites, invite_id) {
+                Some(i) => i,
+                None => return TErr!(TError::MissingData(format!("invite doesn't exist: {}", invite_id))),
+            };
+            invite.delete(turtl)?;
+        }
+        sync_model::delete_model::<Invite>(turtl, invite_id, true)?;
         Ok(())
     }
 }
