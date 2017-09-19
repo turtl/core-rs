@@ -9,6 +9,7 @@ crate-type = ["rlib"]
 doctest = false				# these annoy me
 
 [dependencies]
+config = { path = "../config" }
 fern = "0.3.5"
 gcrypt = "0.3.0"
 hyper = "0.9.10"

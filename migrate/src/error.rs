@@ -10,7 +10,7 @@ use ::crypto::CryptoError;
 quick_error! {
     #[derive(Debug)]
     /// Turtl's main error object.
-    pub enum TError {
+    pub enum MError {
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err)
@@ -64,47 +64,47 @@ quick_error! {
     }
 }
 
-/// converts non-TError errors to TError, via the From trait. This means that
+/// converts non-MError errors to MError, via the From trait. This means that
 /// we can't do blanket conversions of errors anymore (like the good ol' days)
-/// but instead must provide a Err -> TError From implementation. This is made
+/// but instead must provide a Err -> MError From implementation. This is made
 /// much easier by the from_err! macro below, although hand-written conversions
 /// are welcome as well.
 #[macro_export]
 macro_rules! toterr {
     ($e:expr) => (
         {
-            let err: TError = From::from($e);
+            let err: MError = From::from($e);
             err
         }
     )
 }
 
-/// A macro to make it easy to create From impls for TError
+/// A macro to make it easy to create From impls for MError
 macro_rules! from_err {
     ($t:ty) => (
-        impl From<$t> for TError {
-            fn from(err: $t) -> TError {
-                TError::Boxed(Box::new(err))
+        impl From<$t> for MError {
+            fn from(err: $t) -> MError {
+                MError::Boxed(Box::new(err))
             }
         }
     )
 }
 
-impl From<CryptoError> for TError {
-    fn from(err: CryptoError) -> TError {
-        TError::Crypto(err)
+impl From<CryptoError> for MError {
+    fn from(err: CryptoError) -> MError {
+        MError::Crypto(err)
     }
 }
-impl From<Box<::std::any::Any + Send>> for TError {
-    fn from(err: Box<::std::any::Any + Send>) -> TError {
-        TError::Msg(format!("{:?}", err))
+impl From<Box<::std::any::Any + Send>> for MError {
+    fn from(err: Box<::std::any::Any + Send>) -> MError {
+        MError::Msg(format!("{:?}", err))
     }
 }
 from_err!(::fern::InitError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::std::num::ParseIntError);
 
-pub type TResult<T> = Result<T, TError>;
+pub type MResult<T> = Result<T, MError>;
 
 /// A helper to make reporting errors easier
 #[macro_export]

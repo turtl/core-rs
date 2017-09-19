@@ -17,7 +17,7 @@ extern crate lazy_static;
 extern crate lib_permissions;
 #[macro_use]
 extern crate log;
-//extern crate migrate;
+extern crate migrate;
 extern crate num_cpus;
 #[macro_use]
 extern crate protected_derive;

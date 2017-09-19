@@ -2,10 +2,10 @@
 //! auth tag generation.
 
 use ::crypto::{self, Key};
-use ::error::{TResult, TError};
+use ::error::{MResult, MError};
 
 /// Generate a user's key given some variables or something
-fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> TResult<Key> {
+fn generate_key(username: &String, password: &String, version: u16, iterations: usize) -> MResult<Key> {
     let key: Key = match version {
         0 => {
             let mut salt = String::from(&username[..]);
@@ -16,13 +16,13 @@ fn generate_key(username: &String, password: &String, version: u16, iterations: 
             let salt = crypto::to_hex(&crypto::sha256(username.as_bytes())?)?;
             crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations)?
         },
-        _ => return Err(TError::NotImplemented),
+        _ => return Err(MError::NotImplemented),
     };
     Ok(key)
 }
 
 /// Generate a user's auth token given some variables or something
-pub fn generate_auth(username: &String, password: &String, version: u16) -> TResult<(Key, String)> {
+pub fn generate_auth(username: &String, password: &String, version: u16) -> MResult<(Key, String)> {
     info!("user::generate_auth() -- generating v{} auth", version);
     let key_auth = match version {
         0 => {
@@ -57,7 +57,7 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
             (key, auth)
 
         },
-        _ => return Err(TError::NotImplemented),
+        _ => return Err(MError::NotImplemented),
     };
     Ok(key_auth)
 }

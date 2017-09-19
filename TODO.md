@@ -1,6 +1,5 @@
 v0.7:
 - migration crate
-  - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
   - migrate_account() -- takes older server, old login, new server, new login
     - download data
@@ -8,6 +7,7 @@ v0.7:
 	- create a default space "Personal" or some shit
 	- move all boards into the new space
 	- move all notes into the new space
+- import/export
 - premium
 
 later:
