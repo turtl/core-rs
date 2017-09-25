@@ -1,7 +1,7 @@
 # NOTE
 
-This is a from [sodiumoxide](https://github.com/dnaq/sodiumoxide). Basically,
-this fork only needs to exist until the [AEAD pull request](https://github.com/dnaq/sodiumoxide/pull/149)
+This is a fork from [sodiumoxide](https://github.com/dnaq/sodiumoxide).
+Basically, this fork only needs to exist until the [AEAD pull request](https://github.com/dnaq/sodiumoxide/pull/149)
 is accepted.
 
 
