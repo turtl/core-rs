@@ -8,6 +8,7 @@ use ::models::sync_record::SyncAction;
 use ::crypto::Key;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::std::fs;
+use ::models::storable::Storable;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -81,6 +82,20 @@ impl Note {
         self.space_id = new_space_id;
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
         Ok(())
+    }
+
+    /// Given a Turtl/note_id, grab that note's space_id (if it exists)
+    pub fn get_space_id(turtl: &Turtl, note_id: &String) -> Option<String> {
+        let mut db_guard = turtl.db.write().unwrap();
+        match db_guard.as_mut() {
+            Some(db) => {
+                match db.get::<Self>(Self::tablename(), note_id) {
+                    Ok(x) => x.map(|i| i.space_id.clone()),
+                    Err(_) => None,
+                }
+            },
+            None => None,
+        }
     }
 }
 

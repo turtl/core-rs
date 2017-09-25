@@ -8,6 +8,19 @@ v0.7:
 	- create a default space "Personal" or some shit
 	- move all boards into the new space
 	- move all notes into the new space
+- import/export
+- integration tests
+  - sync:pause
+  - sync:resume
+  - sync:get-pending
+  - sync:unfreeze-item
+  - sync:delete-item
+  - profile:find-notes
+  - profile:get-file
+  - profile:get-tags
+  - profile:sync:model
+    - move space
+  - feedback:send??
 - premium
 
 later:
@@ -28,6 +41,9 @@ later:
 - convert Turtl.db to use Mutex instead of RwLock
 - move Turtl.find_model_key(s) et al to protected model (or wherever
   appropriate)
+  - profile loading
+  - messaging
+  - key management
 - rename KEychainEntry.type\_ to ty
 - file writing locally: use buffers/locks:
   {

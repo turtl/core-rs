@@ -9,6 +9,7 @@ use ::models::keychain::{Keychain, KeyRef};
 use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
+use ::models::storable::Storable;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -56,6 +57,20 @@ impl Board {
         }
 
         Ok(())
+    }
+
+    /// Given a Turtl/board_id, grab that boards's space_id (if it exists)
+    pub fn get_space_id(turtl: &Turtl, board_id: &String) -> Option<String> {
+        let mut db_guard = turtl.db.write().unwrap();
+        match db_guard.as_mut() {
+            Some(db) => {
+                match db.get::<Self>(Self::tablename(), board_id) {
+                    Ok(x) => x.map(|i| i.space_id.clone()),
+                    Err(_) => None,
+                }
+            },
+            None => None,
+        }
     }
 }
 
