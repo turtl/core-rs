@@ -144,7 +144,6 @@ pub trait MemorySaver: Protected {
 }
 
 /// Serialize this model and save it to the local db
-///
 pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
