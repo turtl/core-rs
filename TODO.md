@@ -19,6 +19,9 @@ v0.7:
   - profile:get-file
   - profile:get-tags
   - profile:sync:model
+    - edit a note with a file (without re-uploading file, ie just edit title)
+      - does the file still remain?
+      - does the sync system break in any way?
     - move space
   - feedback:send??
 - premium

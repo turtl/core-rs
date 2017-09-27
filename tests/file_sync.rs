@@ -27,19 +27,17 @@ mod tests {
             "user_id": user_id,
             "file": {
                 "name": "slappy.json",
-                "type": "application/json"
+                "type": "application/json",
+                "filedata": {
+                    "data": String::from(r#"eyJuYW1lIjoic2xhcHB5IiwibG9jYXRpb24iOnsiY2l0eSI6InNhbnRhIGNydXp6eiJ9LCJlbmpveXMiOiJzaGFyaW5nIHNlbGZpZXMgd2l0aCBtYWkgaW5zdGFncmFtIGZvbGxvd2VycyEiLCJpbnN0YWdyYW1fZm9sbG93ZXJzIjpbXX0="#),
+                },
             }
-        });
-        let file_contents = String::from(r#"eyJuYW1lIjoic2xhcHB5IiwibG9jYXRpb24iOnsiY2l0eSI6InNhbnRhIGNydXp6eiJ9LCJlbmpveXMiOiJzaGFyaW5nIHNlbGZpZXMgd2l0aCBtYWkgaW5zdGFncmFtIGZvbGxvd2VycyEiLCJpbnN0YWdyYW1fZm9sbG93ZXJzIjpbXX0="#);
-        let filejson = &json!({
-            "data": file_contents,
         });
         let res = dispatch(json!([
             "profile:sync:model",
             "add",
             "note",
             notejson,
-            filejson,
         ]));
         let note_id: String = jedi::get(&["id"], &res.d).unwrap();
         if res.e != 0 {

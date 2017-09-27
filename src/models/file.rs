@@ -187,7 +187,7 @@ impl FileData {
             enc
         };
 
-        // encrypt the file using the turtl standard serialization format
+        // decrypt the file using the turtl standard serialization format
         let data = turtl.work.run(move || {
             crypto::decrypt(&note_key, enc)
                 .map_err(|e| From::from(e))
