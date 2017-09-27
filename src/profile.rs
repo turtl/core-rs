@@ -21,6 +21,7 @@ use ::models::protected::{self, Protected};
 use ::models::sync_record::{SyncRecord, SyncAction, SyncType};
 use ::models::storable::Storable;
 use ::sync::sync_model;
+use ::lib_permissions::Permission;
 
 /// A structure holding a collection of objects that represent's a user's
 /// Turtl data profile.
@@ -134,12 +135,14 @@ impl Profile {
             // note that by destroying the spaces, we destroy the profile. this
             // includes keychains, boards, notes, etc (etc meaning "actually,
             // that's it" here).
-            let mut db_guard = turtl.db.write().unwrap();
-            let db = match db_guard.as_mut() {
-                Some(x) => x,
-                None => return TErr!(TError::MissingField(String::from("turtl.db"))),
+            let spaces: Vec<Space> = {
+                let mut db_guard = turtl.db.write().unwrap();
+                let db = match db_guard.as_mut() {
+                    Some(x) => x,
+                    None => return TErr!(TError::MissingField(String::from("turtl.db"))),
+                };
+                db.all::<Space>(Space::tablename())?
             };
-            let spaces: Vec<Space> = db.all(Space::tablename())?;
             let user_id = turtl.user_id()?;
             for space in spaces {
                 // it would be a bad (read: terrible) idea to remove a space
@@ -147,8 +150,16 @@ impl Profile {
                 // end up gumming up the sync system.
                 if space.user_id != user_id { continue; }
 
+                let space_id = space.id_or_else()?;
+
+                // another check to make sure we can delete this space.
+                match Space::permission_check(turtl, &space_id, &Permission::DeleteSpace) {
+                    Ok(_) => {}
+                    Err(_) => { continue }
+                }
+
                 // kewl, this space belongs to the current user. DESTROY IT!
-                sync_model::delete_model::<Space>(turtl, &space.id_or_else()?, false)?;
+                sync_model::delete_model::<Space>(turtl, &space_id, false)?;
             }
         }
 
