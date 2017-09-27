@@ -356,6 +356,16 @@ impl Turtl {
         if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
     }
 
+    /// Returns whether or not the sync system is running
+    pub fn sync_running(&self) -> bool {
+        let guard = self.sync_state.read().unwrap();
+        if guard.is_some() {
+            (guard.as_ref().unwrap().enabled)()
+        } else {
+            false
+        }
+    }
+
     /// Create a new per-user database for the current user.
     pub fn create_user_db(&self) -> TResult<Storage> {
         let db_location = self.get_user_db_location()?;

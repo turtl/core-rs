@@ -95,6 +95,7 @@ pub struct SyncState {
     pub shutdown: Box<Fn() + 'static + Sync + Send>,
     pub pause: Box<Fn() + 'static + Sync + Send>,
     pub resume: Box<Fn() + 'static + Sync + Send>,
+    pub enabled: Box<Fn() -> bool + 'static + Sync + Send>,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects
@@ -292,6 +293,11 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
         let mut guard = config3.write().unwrap();
         guard.enabled = true;
     };
+    let config4 = config.clone();
+    let enabled = move || -> bool {
+        let guard = config4.read().unwrap();
+        guard.enabled
+    };
 
     // uhhh, you have a ffcall. thank you. uhh, hand the phone to me, please.
     // yes, here you go.
@@ -300,6 +306,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
         shutdown: Box::new(shutdown),
         pause: Box::new(pause),
         resume: Box::new(resume),
+        enabled: Box::new(enabled),
     })
 }
 

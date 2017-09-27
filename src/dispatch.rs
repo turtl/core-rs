@@ -95,6 +95,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.sync_resume();
             Ok(jedi::obj())
         }
+        "sync:status" => {
+            Ok(Value::Bool(turtl.sync_running()))
+        }
         "sync:shutdown" => {
             turtl.sync_shutdown(true)?;
             Ok(jedi::obj())
