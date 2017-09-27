@@ -16,7 +16,7 @@ use ::util;
 use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
-use ::profile::{Profile, ImportMode};
+use ::profile::{Profile, Export, ImportMode};
 use ::models::model::Model;
 use ::models::protected::Protected;
 use ::models::user::User;
@@ -270,13 +270,13 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::to_val(&tags)?)
         }
         "profile:export" => {
-            let dump = Profile::export(turtl)?;
-            Ok(dump)
+            let export = Profile::export(turtl)?;
+            Ok(jedi::to_val(&export)?)
         }
         "profile:import" => {
             let mode: ImportMode = jedi::get(&["2"], &data)?;
-            let dump: Value = jedi::get(&["3"], &data)?;
-            Profile::import(turtl, mode, dump)?;
+            let export: Export = jedi::get(&["3"], &data)?;
+            Profile::import(turtl, mode, export)?;
             Ok(jedi::obj())
         }
         "feedback:send" => {
