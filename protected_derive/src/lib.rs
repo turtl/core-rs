@@ -377,6 +377,10 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 self.body = Some(body);
             }
 
+            fn clear_body(&mut self) {
+                self.body = None;
+            }
+
             fn merge_fields(&mut self, data: &::jedi::Value) -> ::error::TResult<()> {
                 #({
                     match ::jedi::get_opt::<::jedi::Value>(&[#public_only_fields_rename2], data) {

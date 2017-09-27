@@ -193,6 +193,9 @@ pub trait Protected: Model + fmt::Debug {
     /// Set the model's body data
     fn set_body(&mut self, body: String);
 
+    /// Clear out the model's body data
+    fn clear_body(&mut self);
+
     /// Merge a Value object into this model.
     fn merge_fields(&mut self, data: &Value) -> TResult<()>;
 
