@@ -42,8 +42,14 @@ pub struct Export {
     files: Vec<FileData>,
 }
 
+/// Holds the result of an import
+#[derive(Serialize, Default)]
+pub struct ImportResult {
+    actions: Vec<SyncRecord>,
+}
+
 /// This lets us know how an import should be processed.
-#[derive(Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum ImportMode {
     /// Only import items missing from the current profile
     #[serde(rename = "restore")]
@@ -85,6 +91,7 @@ impl Profile {
 
     /// Export the current Turtl profile
     pub fn export(turtl: &Turtl) -> TResult<Export> {
+        info!("Profile::export() -- running export");
         let mut export = Export::default();
         export.schema_version = 1;
         let profile_guard = turtl.profile.read().unwrap();
@@ -123,7 +130,19 @@ impl Profile {
     }
 
     /// Import a dump into the current Turtl profile
-    pub fn import(turtl: &Turtl, mode: ImportMode, export: Export) -> TResult<()> {
+    pub fn import(turtl: &Turtl, mode: ImportMode, export: Export) -> TResult<ImportResult> {
+        info!("Profile::import() -- running import (mode: {})", jedi::stringify(&mode)?);
+        // the import result details what changed
+        let mut result = ImportResult::default();
+
+        fn simple_sync_action(id: &String, action: SyncAction, ty: SyncType) -> SyncRecord {
+            let mut sync_record = SyncRecord::default();
+            sync_record.item_id = id.clone();
+            sync_record.action = action;
+            sync_record.ty = ty;
+            sync_record
+        }
+
         if mode == ImportMode::Full {
             // ok, the user has asked us to completely replace their entire
             // profile with the one being imported. kindly oblige them. if we do
@@ -160,6 +179,9 @@ impl Profile {
 
                 // kewl, this space belongs to the current user. DESTROY IT!
                 sync_model::delete_model::<Space>(turtl, &space_id, false)?;
+
+                // mark it, dude.
+                result.actions.push(simple_sync_action(&space_id, SyncAction::Delete, SyncType::Space));
             }
         }
 
@@ -169,29 +191,33 @@ impl Profile {
         // define a function that runs our sync dispatcher for the incoming
         // import models. note that this runs all of our permission checks for
         // us! yay, abstraction.
-        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, models: Vec<T>, ty: SyncType, mut ser: F) -> TResult<()>
+        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, models: Vec<T>, ty: SyncType, mut ser: F, result: &mut ImportResult) -> TResult<()>
             where T: Protected + Storable,
                   F: FnMut(&T) -> TResult<Value>
         {
-            let mut db_guard = turtl.db.write().unwrap();
-            let db = match db_guard.as_mut() {
-                Some(x) => x,
-                None => return TErr!(TError::MissingField(String::from("turtl.db"))),
-            };
             for model in models {
                 let id = model.id_or_else()?;
-                let exists = db.get::<T>(T::tablename(), &id)?.is_some();
+                let exists = {
+                    let mut db_guard = turtl.db.write().unwrap();
+                    let db = match db_guard.as_mut() {
+                        Some(x) => x,
+                        None => return TErr!(TError::MissingField(String::from("turtl.db"))),
+                    };
+                    db.get::<T>(T::tablename(), &id)?.is_some()
+                };
                 let mut sync_record = SyncRecord::default();
                 sync_record.ty = ty.clone();
                 sync_record.data = Some(ser(&model)?);
                 if exists {
-                    // if the space already exists and we're only loading missing
-                    // items, skip importing this space
+                    // if the model already exists and we're only loading
+                    // missing items, skip importing this space
                     if mode == &ImportMode::Restore { continue; }
                     sync_record.action = SyncAction::Edit;
                 } else {
                     sync_record.action = SyncAction::Add;
                 }
+                info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
+                result.actions.push(simple_sync_action(&id, sync_record.action.clone(), sync_record.ty.clone()));
                 sync_model::dispatch(turtl, sync_record)?;
             }
             Ok(())
@@ -201,17 +227,17 @@ impl Profile {
         for file in files {
             file_idx.insert(file.id_or_else()?, file);
         }
-        saver(turtl, &mode, spaces, SyncType::Space, |x| { x.data() })?;
-        saver(turtl, &mode, boards, SyncType::Board, |x| { x.data() })?;
+        saver(turtl, &mode, spaces, SyncType::Space, |x| { x.data() }, &mut result)?;
+        saver(turtl, &mode, boards, SyncType::Board, |x| { x.data() }, &mut result)?;
         saver(turtl, &mode, notes, SyncType::Note, |x| {
             let mut data = x.data()?;
             let note_id = x.id_or_else()?;
             if let Some(filedata) = file_idx.remove(&note_id) {
-                jedi::set(&["file", "filedata", "data"], &mut data, &filedata)?;
+                jedi::set(&["file", "filedata"], &mut data, &json!({"data": filedata}))?;
             }
             Ok(data)
-        })?;
-        Ok(())
+        }, &mut result)?;
+        Ok(result)
     }
 }
 

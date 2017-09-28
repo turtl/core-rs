@@ -276,8 +276,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:import" => {
             let mode: ImportMode = jedi::get(&["2"], &data)?;
             let export: Export = jedi::get(&["3"], &data)?;
-            Profile::import(turtl, mode, export)?;
-            Ok(jedi::obj())
+            let result = Profile::import(turtl, mode, export)?;
+            Ok(jedi::to_val(&result)?)
         }
         "feedback:send" => {
             let feedback: Feedback = jedi::get(&["2"], &data)?;
