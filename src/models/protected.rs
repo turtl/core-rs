@@ -356,7 +356,7 @@ pub trait Protected: Model + fmt::Debug {
     /// Given a set of keydata, replace the self.keys object
     fn generate_subkeys(&mut self, keydata: &Vec<KeyRef<Key>>) -> TResult<()> {
         if self.key().is_none() {
-            return Err(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
+            return TErr!(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
         }
         let model_key = self.key().unwrap().clone();
         let mut encrypted: Vec<HashMap<String, String>> = Vec::with_capacity(keydata.len());
