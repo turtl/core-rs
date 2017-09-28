@@ -105,7 +105,6 @@ impl Space {
     /// has the rights to that permission.
     pub fn permission_check(turtl: &Turtl, space_id: &String, permission: &Permission) -> TResult<()> {
         let user_id = turtl.user_id()?;
-        let err = TErr!(TError::PermissionDenied(format!("user {} cannot {:?} on space {}", user_id, permission, space_id)));
         let profile_guard = turtl.profile.read().unwrap();
         let matched = profile_guard.spaces.iter()
             .filter(|space| space.id() == Some(space_id))
@@ -113,12 +112,14 @@ impl Space {
 
         // if no spaces in our profile match the given id, we definitely do not
         // have access
-        if matched.len() == 0 { return err; }
+        if matched.len() == 0 {
+            return TErr!(TError::PermissionDenied(format!("user {} cannot {:?} on space {} (space is missing)", user_id, permission, space_id)));
+        }
 
         let space = matched[0];
         match space.can_i(&user_id, permission)? {
             true => Ok(()),
-            false => err,
+            false => TErr!(TError::PermissionDenied(format!("user {} cannot {:?} on space {}", user_id, permission, space_id))),
         }
     }
 
