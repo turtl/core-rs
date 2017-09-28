@@ -154,14 +154,16 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
 
-        if model.is_new() {
+        if action == SyncAction::Add {
             model.generate_id()?;
             model.generate_key()?;
         } else {
             let got_model = db.get::<T>(model.table(), model.id().unwrap())?;
             match got_model {
                 Some(db_model) => {
-                    let model_data: Value = model.data()?;
+                    let mut model_data: Value = model.data()?;
+                    // users can't directly edit object ownership
+                    jedi::remove(&["user_id"], &mut model_data)?;
                     model.merge_fields(&db_model.data_for_storage()?)?;
                     model.merge_fields(&model_data)?;
                 },
@@ -225,13 +227,15 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     Ok(())
 }
 
-/// Given a set of sync data (an action, an item type,
+/// Given a sync record, dispatch it into the sync system, calling the
+/// appropriate functions and running any permissions checks.
 pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
     let SyncRecord {action, ty, data: modeldata_maybe, ..} = sync_record;
     let modeldata = match modeldata_maybe {
         Some(x) => x,
         None => return TErr!(TError::MissingField(String::from("sync_record.data"))),
     };
+
     match action.clone() {
         SyncAction::Add | SyncAction::Edit => {
             let val = match ty {
@@ -250,6 +254,9 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                             let space_id = model.id().unwrap_or(&fake_id);
                             Space::permission_check(turtl, space_id, &Permission::EditSpace)?;
                         }
+                        &SyncAction::Add => {
+                            model.user_id = turtl.user_id()?;
+                        }
                         _ => {}
                     };
                     save_model(action, turtl, &mut model, false)?
@@ -262,6 +269,9 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                         _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
                     };
                     Space::permission_check(turtl, &model.space_id, &permission)?;
+                    if action == SyncAction::Add {
+                        model.user_id = turtl.user_id()?;
+                    }
                     save_model(action, turtl, &mut model, false)?
                 }
                 SyncType::Note => {
@@ -273,6 +283,9 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                         _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
                     };
                     Space::permission_check(turtl, &note.space_id, &permission)?;
+                    if action == SyncAction::Add {
+                        note.user_id = turtl.user_id()?;
+                    }
                     // always set to false. this is a public field that
                     // we let the server manage for us
                     note.has_file = false;
