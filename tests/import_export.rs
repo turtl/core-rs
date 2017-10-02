@@ -83,7 +83,6 @@ mod tests {
         // goodbyyye, misterrrrrrr aaaandersonnnnn
         dispatch_ass(json!(["user:delete-account"]));
 
-
         let breakdown1 = import_to_breakdown(import1);
         assert_eq!(breakdown1.get(&String::from("space-add")).unwrap_or(&0), &0);
         assert_eq!(breakdown1.get(&String::from("space-edit")).unwrap_or(&0), &0);
@@ -98,5 +97,4 @@ mod tests {
         end(handle);
     }
 }
-
 
