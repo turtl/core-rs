@@ -2,7 +2,7 @@ use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::keychain::{Keychain, KeyRef};
+use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::file::{File, FileData};
 use ::models::sync_record::SyncAction;
 use ::crypto::Key;
@@ -110,13 +110,11 @@ impl Keyfinder for Note {
         }
         match self.get_keys() {
             Some(keys) => for key in keys {
-                match key.get(&String::from("s")) {
-                    Some(id) => space_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Space {
+                    space_ids.push(key.id.clone());
                 }
-                match key.get(&String::from("b")) {
-                    Some(id) => board_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Board {
+                    board_ids.push(key.id.clone());
                 }
             },
             None => {},
@@ -152,7 +150,7 @@ impl Keyfinder for Note {
             if space.id() == Some(&self.space_id) && space.key().is_some() {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
-                    ty: String::from("s"),
+                    ty: KeyType::Space,
                     k: space.key().unwrap().clone(),
                 });
             }
@@ -164,7 +162,7 @@ impl Keyfinder for Note {
                     if board.id() == Some(board_id) && board.key().is_some() {
                         refs.push(KeyRef {
                             id: board_id.clone(),
-                            ty: String::from("b"),
+                            ty: KeyType::Board,
                             k: board.key().unwrap().clone(),
                         });
                     }

@@ -4,7 +4,6 @@
 
 use ::std::sync::{Arc, RwLock, Mutex};
 use ::std::ops::Drop;
-use ::std::collections::HashMap;
 use ::std::fs;
 use ::regex::Regex;
 use ::num_cpus;
@@ -23,7 +22,7 @@ use ::models::user::{self, User};
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::invite::Invite;
-use ::models::keychain::{self, KeyRef, KeychainEntry};
+use ::models::keychain::KeychainEntry;
 use ::models::note::Note;
 use ::models::file::FileData;
 use ::messaging::{self, Messenger, Response};
@@ -442,19 +441,6 @@ impl Turtl {
         // is a much more versatile way of decrypting data.
         let mut search = model.get_key_search(self)?;
 
-        // grab the model.keys collection.
-        let encrypted_keys: Vec<HashMap<String, String>> = match model.get_keys() {
-            Some(x) => x.clone(),
-            None => Vec::new(),
-        };
-
-        // turn model.keys into a KeyRef collection, and filter out crappy
-        // entries
-        let encrypted_keys: Vec<KeyRef<String>> = encrypted_keys.into_iter()
-            .map(|entry| keychain::keyref_from_encrypted(&entry))
-            .filter(|x| x.k != "")
-            .collect::<Vec<_>>();
-
         // push the user's key into our search, if it's available
         {
             let user_guard = self.user.read().unwrap();
@@ -464,6 +450,12 @@ impl Turtl {
                 drop(user_guard);
                 search.upsert_key(self, &id, &key, &String::from("user"))?;
             }
+        }
+
+        let def = Vec::new();
+        let mut encrypted_keys = Vec::new();
+        for enckey in model.get_keys().unwrap_or(&def) {
+            encrypted_keys.push(enckey.clone());
         }
 
         // let the hunt begin! basically, we loop over each model.keys entry and
@@ -484,7 +476,8 @@ impl Turtl {
         // keychain *and* in the model's search keychain. if we find a match, we
         // can use the board's key, "696969", to decrypt the model's key entry
         // "b50942fe" into the model's actual key.
-        for keyref in &encrypted_keys {
+        // grab the model.keys collection.
+        for keyref in encrypted_keys {
             let ref encrypted_key = keyref.k;
             let ref object_id = keyref.id;
 

@@ -1,5 +1,5 @@
 use ::std::collections::HashMap;
-
+use ::serde::{ser, de};
 use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::models::model::Model;
@@ -7,58 +7,93 @@ use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::SyncAction;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
+use ::jedi::{self, Value};
+
+/// An enum used to 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum KeyType {
+    #[serde(rename = "s")]
+    Space,
+    #[serde(rename = "b")]
+    Board,
+    #[serde(rename = "u")]
+    User,
+}
+
+impl KeyType {
+    pub fn from_string(s: String) -> TResult<Self> {
+        let val = Value::String(s);
+        Ok(jedi::from_val(val)?)
+    }
+}
 
 /// Used as an easy object to reference other keys
-pub struct KeyRef<T> {
+#[derive(Clone)]
+pub struct KeyRef<T: Clone> {
     /// The object id this key is for
     pub id: String,
-    /// The object type (b = board, u = user, p = persona)
-    pub ty: String,
+    /// The object type (s = space, u = user)
+    pub ty: KeyType,
     /// encrypted key (Base64-encoded)
     pub k: T,
 }
 
-impl<T: Default> KeyRef<T> {
-    /// Create a new key search entry
-    pub fn new(id: String, ty: String, k: T) -> KeyRef<T> {
+impl<T: Default + Clone> KeyRef<T> {
+    /// Create a new keyref
+    pub fn new(id: String, ty: KeyType, k: T) -> Self {
         KeyRef {
             id: id,
             ty: ty,
             k: k,
         }
     }
+}
 
-    /// Create a new EMPTY key search entry
-    pub fn empty() -> KeyRef<T> {
-        KeyRef {
-            id: String::from(""),
-            ty: String::from(""),
-            k: Default::default(),
-        }
+impl ser::Serialize for KeyRef<String> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: ser::Serializer
+    {
+        let mut hash: HashMap<String, String> = HashMap::with_capacity(2);
+        let type_str = match jedi::to_val(&self.ty) {
+            Ok(x) => {
+                match x {
+                    Value::String(x) => x,
+                    _ => return Err(ser::Error::custom(format!("KeyRef.serialize() -- error stringifying `ty` field"))),
+                }
+            },
+            Err(_) => return Err(ser::Error::custom(format!("KeyRef.serialize() -- error stringifying `ty` field"))),
+        };
+        hash.insert(type_str, self.id.clone());
+        hash.insert(String::from("k"), self.k.clone());
+        hash.serialize(serializer)
     }
 }
 
-/// Takes some key data from a protected model and turns it into a
-/// KeyRef
-pub fn keyref_from_encrypted(keydata: &HashMap<String, String>) -> KeyRef<String> {
-    let key = match keydata.get(&String::from("k")) {
-        Some(x) => x.clone(),
-        None => return KeyRef::empty(),
-    };
-
-    match keydata.get(&String::from("b")) {
-        Some(x) => return KeyRef::new(x.clone(), String::from("b"), key),
-        None => {},
+impl<'de> de::Deserialize<'de> for KeyRef<String> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: de::Deserializer<'de>
+    {
+        de::Deserialize::deserialize(deserializer)
+            .and_then(|mut x: HashMap<String, String>| {
+                let key = match x.remove(&String::from("k")) {
+                    Some(x) => x,
+                    None => return Err(de::Error::invalid_value(de::Unexpected::Map, &"KeyRef.deserialize() -- missing `k` field")),
+                };
+                let mut keyref: KeyRef<String> = KeyRef::new(String::from(""), KeyType::User, key);
+                let typekey = match x.keys().next() {
+                    Some(k) => k.clone(),
+                    None => return Err(de::Error::invalid_value(de::Unexpected::Map, &"KeyRef.deserialize() -- missing type field")),
+                };
+                let ty: KeyType = match KeyType::from_string(typekey.clone()) {
+                    Ok(x) => x,
+                    Err(_) => return Err(de::Error::invalid_value(de::Unexpected::Str(&typekey.as_str()), &"KeyRef.deserialize() -- bad field")),
+                };
+                let id = x.remove(&typekey).unwrap();
+                keyref.id = id;
+                keyref.ty = ty;
+                Ok(keyref)
+            })
     }
-    match keydata.get(&String::from("s")) {
-        Some(x) => return KeyRef::new(x.clone(), String::from("s"), key),
-        None => {},
-    }
-    match keydata.get(&String::from("u")) {
-        Some(x) => return KeyRef::new(x.clone(), String::from("u"), key),
-        None => {},
-    }
-    KeyRef::empty()
 }
 
 protected! {

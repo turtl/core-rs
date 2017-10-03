@@ -5,7 +5,7 @@ use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
-use ::models::keychain::{Keychain, KeyRef};
+use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
@@ -81,9 +81,8 @@ impl Keyfinder for Board {
         space_ids.push(self.space_id.clone());
         match self.keys.as_ref() {
             Some(keys) => for key in keys {
-                match key.get(&String::from("s")) {
-                    Some(id) => space_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Space {
+                    space_ids.push(key.id.clone());
                 }
             },
             None => {},
@@ -109,7 +108,7 @@ impl Keyfinder for Board {
             if space.id() == Some(&self.space_id) && space.key().is_some() {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
-                    ty: String::from("s"),
+                    ty: KeyType::Space,
                     k: space.key().unwrap().clone(),
                 });
             }
