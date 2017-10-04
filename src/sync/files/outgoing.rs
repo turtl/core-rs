@@ -1,4 +1,4 @@
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, Mutex};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::sync::incoming::SyncIncoming;
@@ -22,12 +22,12 @@ pub struct FileSyncOutgoing {
 
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling for file records that need uploading.
-    db: Arc<RwLock<Option<Storage>>>,
+    db: Arc<Mutex<Option<Storage>>>,
 }
 
 impl FileSyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> Self {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> Self {
         FileSyncOutgoing {
             config: config,
             api: api,

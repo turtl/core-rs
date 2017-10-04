@@ -40,7 +40,7 @@ impl Board {
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
 
         let note_ids = {
-            let db_guard = lockw!(turtl.db);
+            let db_guard = lock!(turtl.db);
             let notes: Vec<Note> = match *db_guard {
                 Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
                 None => vec![],
@@ -61,7 +61,7 @@ impl Board {
 
     /// Given a Turtl/board_id, grab that boards's space_id (if it exists)
     pub fn get_space_id(turtl: &Turtl, board_id: &String) -> Option<String> {
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         match db_guard.as_mut() {
             Some(db) => {
                 match db.get::<Self>(Self::tablename(), board_id) {
@@ -136,7 +136,7 @@ impl MemorySaver for Board {
                 let board_id = self.id().unwrap();
 
                 let notes: Vec<Note> = {
-                    let db_guard = lockw!(turtl.db);
+                    let db_guard = lock!(turtl.db);
                     match *db_guard {
                         Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
                         None => vec![],

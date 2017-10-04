@@ -22,7 +22,7 @@ pub mod files;
 pub mod sync_model;
 
 use ::std::thread;
-use ::std::sync::{Arc, RwLock, mpsc};
+use ::std::sync::{Arc, RwLock, Mutex, mpsc};
 use ::config;
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
@@ -217,7 +217,7 @@ pub trait Syncer {
 /// thread needs its own connection. We don't have the ability to create the
 /// connections in this scope (no access to Turtl by design) so we need to
 /// just have them passed in.
-pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> TResult<SyncState> {
+pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
         let mut config_guard = lockw!(config);
@@ -314,7 +314,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
 mod tests {
     use super::*;
 
-    use ::std::sync::{Arc, RwLock};
+    use ::std::sync::{Arc, RwLock, Mutex};
 
     use ::jedi::{self, Value};
     use ::storage::Storage;
@@ -341,7 +341,7 @@ mod tests {
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
-        let db = Arc::new(RwLock::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
+        let db = Arc::new(Mutex::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
         let mut state = start(sync_config, api, db).unwrap();
         (state.shutdown)();
         loop {

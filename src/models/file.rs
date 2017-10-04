@@ -233,7 +233,7 @@ impl FileData {
         // phew, now that all went smoothly, create a sync record for the saved
         // file (which will let the sync system know to upload our heroic file)
         let create_sync = move || -> TResult<()> {
-            let mut db_guard = lockw!(turtl.db);
+            let mut db_guard = lock!(turtl.db);
             let db = match db_guard.as_mut() {
                 Some(x) => x,
                 None => return TErr!(TError::MissingField(format!("Turtl.db"))),
@@ -312,7 +312,7 @@ mod tests {
         // see if the file contents match after decryption
         assert_eq!(String::from_utf8(loaded).unwrap(), r#"{"age":42,"dislikes":"slappy","likes":"slippy","lives":{"city":"santa cruz brahhhh"},"name":"flippy"}"#);
 
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         let db = db_guard.as_mut().unwrap();
         file.db_delete(db, None).unwrap();
 

@@ -86,7 +86,7 @@ impl Note {
 
     /// Given a Turtl/note_id, grab that note's space_id (if it exists)
     pub fn get_space_id(turtl: &Turtl, note_id: &String) -> Option<String> {
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         match db_guard.as_mut() {
             Some(db) => {
                 match db.get::<Self>(Self::tablename(), note_id) {

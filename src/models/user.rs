@@ -268,7 +268,7 @@ impl User {
         let res: PWChangeResponse = turtl.api.put(&url[..], ApiReq::new().data(auth_change))?;
         match res.sync_ids.as_ref() {
             Some(ids) => {
-                let mut db_guard = lockw!(turtl.db);
+                let mut db_guard = lock!(turtl.db);
                 match db_guard.as_mut() {
                     Some(db) => SyncIncoming::ignore_on_next(db, ids)?,
                     None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -285,7 +285,7 @@ impl User {
         // save the user's new key into the keychain entries
         {
             let mut profile_guard = lockw!(turtl.profile);
-            let mut db_guard = lockw!(turtl.db);
+            let mut db_guard = lock!(turtl.db);
             let db = match (*db_guard).as_mut() {
                 Some(x) => x,
                 None => return TErr!(TError::MissingField(format!("Turtl.db"))),

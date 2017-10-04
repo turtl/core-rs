@@ -75,7 +75,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: Arc<RwLock<Option<Storage>>>,
+    pub db: Arc<Mutex<Option<Storage>>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (invites come to mind). Use sparingly.
@@ -115,7 +115,7 @@ impl Turtl {
             msg: Messenger::new(),
             work: Thredder::new("work", num_workers as u32),
             kv: kv,
-            db: Arc::new(RwLock::new(None)),
+            db: Arc::new(Mutex::new(None)),
             search: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
@@ -219,7 +219,7 @@ impl Turtl {
         User::login(self, username, password, version)?;
         self.set_user_id();
         let db = self.create_user_db()?;
-        let mut db_guard = lockw!(self.db);
+        let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
         Ok(())
@@ -230,7 +230,7 @@ impl Turtl {
         User::join(self, username, password)?;
         self.set_user_id();
         let db = self.create_user_db()?;
-        let mut db_guard = lockw!(self.db);
+        let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
         User::post_join(self)?;
@@ -246,7 +246,7 @@ impl Turtl {
         self.sync_shutdown(false)?;
         self.clear_user_id();
         User::logout(self)?;
-        let mut db_guard = lockw!(self.db);
+        let mut db_guard = lock!(self.db);
         *db_guard = None;
         self.setup_user();
         let mut connguard = lockw!(self.connected);
@@ -533,7 +533,7 @@ impl Turtl {
     /// Meaning, we decrypt the keychain, spaces, and boards and store them
     /// in-memory in our `turtl.profile` object.
     pub fn load_profile(&self) -> TResult<()> {
-        let db_guard = lockw!(self.db);
+        let db_guard = lock!(self.db);
         if db_guard.is_none() {
             return TErr!(TError::MissingField(String::from("Turtl.db")));
         }
@@ -581,7 +581,7 @@ impl Turtl {
 
     /// Load/deserialize a set of notes by id.
     pub fn load_notes(&self, note_ids: &Vec<String>) -> TResult<Vec<Note>> {
-        let db_guard = lockw!(self.db);
+        let db_guard = lock!(self.db);
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -596,7 +596,7 @@ impl Turtl {
     /// and free them. The idea is we can get a set of note IDs from a search,
     /// but we're not holding all our notes decrypted in memory at all times.
     pub fn index_notes(&self) -> TResult<()> {
-        let db_guard = lockw!(self.db);
+        let db_guard = lock!(self.db);
         if db_guard.is_none() {
             return TErr!(TError::MissingData(String::from("Turtl.db")));
         }
@@ -703,7 +703,7 @@ impl Drop for Turtl {
 pub mod tests {
     use super::*;
 
-    use ::std::sync::RwLock;
+    use ::std::sync::{RwLock, Mutex};
 
     use ::jedi;
 
@@ -741,7 +741,7 @@ pub mod tests {
             *user_guard = user;
             drop(user_guard);
             let db = turtl.create_user_db().unwrap();
-            let mut db_guard = lockw!(turtl.db);
+            let mut db_guard = lock!(turtl.db);
             *db_guard = Some(db);
             drop(db_guard);
             turtl.set_user_id();
@@ -849,7 +849,7 @@ pub mod tests {
             for board in &boards { db.save(board).unwrap(); }
             for note in &notes { db.save(note).unwrap(); }
         }
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         turtl.load_profile().unwrap();
         let profile_guard = lockr!(turtl.profile);
@@ -905,7 +905,7 @@ pub mod tests {
         }
 
         let db = turtl.create_user_db().unwrap();
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         let mut space: Space = jedi::parse(&String::from(r#"{
             "user_id":69,
@@ -962,7 +962,7 @@ pub mod tests {
         }
 
         let db = turtl.create_user_db().unwrap();
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         let mut space: Space = jedi::from_val(json!({
             "user_id":69,
@@ -972,7 +972,7 @@ pub mod tests {
         sync_model::save_model(SyncAction::Add, &turtl, &mut space, false).unwrap();
 
         // load our outgoing sync records and verify them
-        let db_guard = lockr!(turtl.db);
+        let db_guard = lock!(turtl.db);
         let db = db_guard.as_ref().unwrap();
         let syncs: Vec<SyncRecord> = db.all("sync").unwrap();
         assert_eq!(syncs.len(), 2);

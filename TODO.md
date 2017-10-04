@@ -1,10 +1,6 @@
 v0.7:
 - import/export
-  - when an item is not an edit, regenerate its key and change all references
-    to the old id to the new one in the ensuing import
-    - space_id
-    - board_id
-    - keys?? should be fine since it's re-genned on each edit
+  - find out deadlock
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
@@ -46,7 +42,6 @@ later:
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
 - investigate more stateless way of syncing files?
-- convert Turtl.db to use Mutex instead of RwLock
 - move Turtl.find_model_key(s) et al to protected model (or wherever
   appropriate)
   - profile loading

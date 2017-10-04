@@ -75,7 +75,7 @@ impl MemorySaver for Space {
                 }
 
                 let notes: Vec<Note> = {
-                    let db_guard = lockw!(turtl.db);
+                    let db_guard = lock!(turtl.db);
                     match *db_guard {
                         Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
                         None => vec![],

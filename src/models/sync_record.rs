@@ -159,7 +159,7 @@ impl SyncRecord {
     /// own personal amusement (but allows enumerating an interface for
     /// unfreezing or deleting bad sync records).
     pub fn get_all_pending(turtl: &Turtl) -> TResult<Vec<SyncRecord>> {
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         let db = match db_guard.as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -193,7 +193,7 @@ impl SyncRecord {
     /// Static method that tells the sync system to unfreeze a sync item so it
     /// gets queued to be included in the next outgoing sync.
     pub fn kick_frozen_sync(turtl: &Turtl, sync_id: &String) -> TResult<()> {
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         let db = match db_guard.as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -212,7 +212,7 @@ impl SyncRecord {
     /// Public/static method for deleting a sync record (probably initiated from
     /// the UI).
     pub fn delete_sync_item(turtl: &Turtl, sync_id: &String) -> TResult<()> {
-        let mut db_guard = lockw!(turtl.db);
+        let mut db_guard = lock!(turtl.db);
         let db = match db_guard.as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
