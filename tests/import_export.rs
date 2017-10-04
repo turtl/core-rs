@@ -4,7 +4,6 @@ include!("./lib/util.rs");
 mod tests {
     use super::*;
 
-    use ::std::collections::HashMap;
     use ::config;
 
     #[test]
@@ -57,14 +56,51 @@ mod tests {
             actions: Vec<SyncRecord>,
         }
 
+        #[derive(Default)]
+        struct Breakdown {
+            space_add: i32,
+            space_edit: i32,
+            space_delete: i32,
+            board_add: i32,
+            board_edit: i32,
+            board_delete: i32,
+            note_add: i32,
+            note_edit: i32,
+            note_delete: i32,
+        }
+
         // convert an import value result into a {type-action: count, ...} hash
-        fn import_to_breakdown(import: Value) -> HashMap<String, i32> {
+        fn import_to_breakdown(import: Value) -> Breakdown {
             let result: ImportResult = jedi::from_val(import).unwrap();
-            let mut breakdown: HashMap<String, i32> = HashMap::new();
+            let mut breakdown = Breakdown::default();
             for rec in &result.actions {
-                let key = format!("{}-{}", rec.ty, rec.action);
-                let counter = breakdown.entry(key).or_insert(0);
-                *counter += 1;
+                match rec.ty.as_ref() {
+                    "space" => {
+                        match rec.action.as_ref() {
+                            "add" => { breakdown.space_add += 1; }
+                            "edit" => { breakdown.space_edit += 1; }
+                            "delete" => { breakdown.space_delete += 1; }
+                            _ => {}
+                        }
+                    }
+                    "board" => {
+                        match rec.action.as_ref() {
+                            "add" => { breakdown.board_add += 1; }
+                            "edit" => { breakdown.board_edit += 1; }
+                            "delete" => { breakdown.board_delete += 1; }
+                            _ => {}
+                        }
+                    }
+                    "note" => {
+                        match rec.action.as_ref() {
+                            "add" => { breakdown.note_add += 1; }
+                            "edit" => { breakdown.note_edit += 1; }
+                            "delete" => { breakdown.note_delete += 1; }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
             }
             breakdown
         }
@@ -72,27 +108,31 @@ mod tests {
         // let's just load all of our results beforehand, so we can delete our
         // temp user before all of our asserts failwhale.
         let profile0 = dispatch_ass(json!(["profile:load"]));
+        println!("* import 1");
         let import1 = dispatch_ass(json!(["profile:import", "restore", export]));
         let profile1 = dispatch_ass(json!(["profile:load"]));
+        println!("* import 2");
         let import2 = dispatch_ass(json!(["profile:import", "restore", export]));
         let profile2 = dispatch_ass(json!(["profile:load"]));
+        println!("* import 3");
         let import3 = dispatch_ass(json!(["profile:import", "replace", export]));
         let profile3 = dispatch_ass(json!(["profile:load"]));
+        println!("* import 4");
         let import4 = dispatch_ass(json!(["profile:import", "full", export]));
         let profile4 = dispatch_ass(json!(["profile:load"]));
         // goodbyyye, misterrrrrrr aaaandersonnnnn
         dispatch_ass(json!(["user:delete-account"]));
 
         let breakdown1 = import_to_breakdown(import1);
-        assert_eq!(breakdown1.get(&String::from("space-add")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("space-edit")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("space-delete")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("board-add")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("board-edit")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("board-delete")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("note-add")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("note-edit")).unwrap_or(&0), &0);
-        assert_eq!(breakdown1.get(&String::from("note-delete")).unwrap_or(&0), &0);
+        assert_eq!(breakdown1.space_add, 0);
+        assert_eq!(breakdown1.space_edit, 0);
+        assert_eq!(breakdown1.space_delete, 0);
+        assert_eq!(breakdown1.board_add, 0);
+        assert_eq!(breakdown1.board_edit, 0);
+        assert_eq!(breakdown1.board_delete, 0);
+        assert_eq!(breakdown1.note_add, 0);
+        assert_eq!(breakdown1.note_edit, 0);
+        assert_eq!(breakdown1.note_delete, 0);
 
         end(handle);
     }

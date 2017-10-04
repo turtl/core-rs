@@ -10,7 +10,7 @@ use ::std::collections::HashMap;
 use ::turtl::Turtl;
 use ::error::{TResult, TError};
 use ::jedi::{self, Value};
-use ::models::model::Model;
+use ::models::model::{self, Model};
 use ::models::keychain::Keychain;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -105,11 +105,19 @@ impl Profile {
             for model in models {
                 let mut newmodel = model.clone()?;
                 newmodel.clear_body();
+                newmodel.set_keys(Vec::new());
                 res.push(newmodel);
             }
             Ok(res)
         }
-        export.spaces = cloner(&profile_guard.spaces)?;
+        export.spaces = cloner(&profile_guard.spaces)?
+            .into_iter()
+            .map(|mut x| {
+                x.members = Vec::new();
+                x.invites = Vec::new();
+                x
+            })
+            .collect::<Vec<_>>();
         export.boards = cloner(&profile_guard.boards)?;
         let mut notes_encrypted = db.all(Note::tablename())?;
         turtl.find_models_keys(&mut notes_encrypted)?;
@@ -129,7 +137,15 @@ impl Profile {
         Ok(export)
     }
 
-    /// Import a dump into the current Turtl profile
+    /// Import a dump into the current Turtl profile.
+    ///
+    /// If an item is added (as opposed to editing an existing model), it's
+    /// important to note that the model's ID is regenerated before saving and
+    /// its old id is added to a hash that maps old id -> new id. Then any model
+    /// that references the old id will have that reference updated to the new
+    /// id. This can be done in one pass since the references are hierarchical,
+    /// luckily. Also, we don't have to update key references because those are
+    /// fully regenerated on each save >=]
     pub fn import(turtl: &Turtl, mode: ImportMode, export: Export) -> TResult<ImportResult> {
         info!("Profile::import() -- running import (mode: {})", jedi::stringify(&mode)?);
         // the import result details what changed
@@ -191,12 +207,12 @@ impl Profile {
         // define a function that runs our sync dispatcher for the incoming
         // import models. note that this runs all of our permission checks for
         // us! yay, abstraction.
-        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, models: Vec<T>, ty: SyncType, mut ser: F, result: &mut ImportResult) -> TResult<()>
+        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, models: Vec<T>, ty: SyncType, mut ser: F, id_change_map: &mut HashMap<String, String>, result: &mut ImportResult) -> TResult<()>
             where T: Protected + Storable,
-                  F: FnMut(&T) -> TResult<Value>
+                  F: FnMut(&T, &mut HashMap<String, String>) -> TResult<Value>
         {
-            for model in models {
-                let id = model.id_or_else()?;
+            for mut model in models {
+                let mut id = model.id_or_else()?;
                 let exists = {
                     let mut db_guard = turtl.db.write().unwrap();
                     let db = match db_guard.as_mut() {
@@ -207,13 +223,24 @@ impl Profile {
                 };
                 let mut sync_record = SyncRecord::default();
                 sync_record.ty = ty.clone();
-                sync_record.data = Some(ser(&model)?);
+                sync_record.data = Some(ser(&model, id_change_map)?);
                 if exists {
                     // if the model already exists and we're only loading
                     // missing items, skip importing this space
                     if mode == &ImportMode::Restore { continue; }
                     sync_record.action = SyncAction::Edit;
                 } else {
+                    // if this is an add (the model doesn't exist locally) then
+                    // generate a new id for the model, and map the old one to
+                    // the new one so models that come after this one can ref
+                    // the correct id.
+                    let new_id = model::cid()?;
+                    id_change_map.insert(id.clone(), new_id.clone());
+                    if let Some(modeldata) = sync_record.data.as_mut() {
+                        jedi::set(&["id"], modeldata, &new_id)?;
+                    }
+                    model.set_id(new_id.clone());
+                    id = new_id;
                     sync_record.action = SyncAction::Add;
                 }
                 info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
@@ -223,20 +250,51 @@ impl Profile {
             Ok(())
         }
 
+        let mut id_change_map: HashMap<String, String> = HashMap::new();
         let mut file_idx: HashMap<String, FileData> = HashMap::new();
         for file in files {
             file_idx.insert(file.id_or_else()?, file);
         }
-        saver(turtl, &mode, spaces, SyncType::Space, |x| { x.data() }, &mut result)?;
-        saver(turtl, &mode, boards, SyncType::Board, |x| { x.data() }, &mut result)?;
-        saver(turtl, &mode, notes, SyncType::Note, |x| {
+
+        /// Check if we have replaced an old id with a newly generated one and,
+        /// if so, switches that id out in the data at the given key.
+        fn switch_id_if_needed(id_change_map: &mut HashMap<String, String>, data: &mut Value, key: &str) -> TResult<()> {
+            match jedi::get_opt::<String>(&[key], &data) {
+                Some(old_id) => {
+                    // grab the new id (if it exists) otherwise the old id
+                    // instead
+                    let new_id = id_change_map.get(&old_id)
+                        .map(|x| x.clone())
+                        .unwrap_or(old_id);
+                    // set the new id back into the data
+                    jedi::set(&[key], data, &new_id)?;
+                }
+                None => {}
+            }
+            Ok(())
+        }
+
+        saver(turtl, &mode, spaces, SyncType::Space, |x, _| { x.data() }, &mut id_change_map, &mut result)?;
+        saver(turtl, &mode, boards, SyncType::Board, |x, id_change_map| {
             let mut data = x.data()?;
+            switch_id_if_needed(id_change_map, &mut data, "space_id")?;
+            Ok(data)
+        }, &mut id_change_map, &mut result)?;
+        saver(turtl, &mode, notes, SyncType::Note, |x, id_change_map| {
+            let mut data = x.data()?;
+            switch_id_if_needed(id_change_map, &mut data, "space_id")?;
+            switch_id_if_needed(id_change_map, &mut data, "board_id")?;
+            // it's important to note: at this point, the note's id has not been
+            // changed/added to id_change_map, so we don't need to check it
+            // against id_change_map when grabbing the note id
             let note_id = x.id_or_else()?;
             if let Some(filedata) = file_idx.remove(&note_id) {
+                // NOTE: no need to set/remove `file.id` here since it will be
+                // set when the note is saved.
                 jedi::set(&["file", "filedata"], &mut data, &json!({"data": filedata}))?;
             }
             Ok(data)
-        }, &mut result)?;
+        }, &mut id_change_map, &mut result)?;
         Ok(result)
     }
 }

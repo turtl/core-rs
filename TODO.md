@@ -1,4 +1,10 @@
 v0.7:
+- import/export
+  - when an item is not an edit, regenerate its key and change all references
+    to the old id to the new one in the ensuing import
+    - space_id
+    - board_id
+    - keys?? should be fine since it's re-genned on each edit
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not
@@ -8,7 +14,6 @@ v0.7:
 	- create a default space "Personal" or some shit
 	- move all boards into the new space
 	- move all notes into the new space
-- import/export
 - integration tests
   - sync:pause
   - sync:resume

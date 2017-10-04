@@ -166,6 +166,12 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
                     jedi::remove(&["user_id"], &mut model_data)?;
                     model.merge_fields(&db_model.data_for_storage()?)?;
                     model.merge_fields(&model_data)?;
+                    match db_model.get_keys() {
+                        Some(keys) => {
+                            model.set_keys(keys.clone());
+                        }
+                        None => {}
+                    }
                 },
                 None => (),
             }
@@ -231,7 +237,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
 /// appropriate functions and running any permissions checks.
 pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
     let SyncRecord {action, ty, data: modeldata_maybe, ..} = sync_record;
-    let modeldata = match modeldata_maybe {
+    let mut modeldata = match modeldata_maybe {
         Some(x) => x,
         None => return TErr!(TError::MissingField(String::from("sync_record.data"))),
     };
@@ -276,6 +282,10 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                 }
                 SyncType::Note => {
                     let filemebbe: Option<FileData> = jedi::get_opt(&["file", "filedata"], &modeldata);
+                    match jedi::remove(&["file", "filedata"], &mut modeldata) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
                     let mut note: Note = jedi::from_val(modeldata)?;
                     let permission = match &action {
                         &SyncAction::Add => Permission::AddNote,
