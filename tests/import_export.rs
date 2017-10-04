@@ -69,6 +69,12 @@ mod tests {
             note_delete: i32,
         }
 
+        #[derive(Deserialize)]
+        struct Profile {
+            spaces: Vec<Value>,
+            boards: Vec<Value>,
+        }
+
         // convert an import value result into a {type-action: count, ...} hash
         fn import_to_breakdown(import: Value) -> Breakdown {
             let result: ImportResult = jedi::from_val(import).unwrap();
@@ -107,33 +113,58 @@ mod tests {
 
         // let's just load all of our results beforehand, so we can delete our
         // temp user before all of our asserts failwhale.
-        let profile0 = dispatch_ass(json!(["profile:load"]));
-        println!("* import 1");
-        let import1 = dispatch_ass(json!(["profile:import", "restore", export]));
-        let profile1 = dispatch_ass(json!(["profile:load"]));
-        println!("* import 2");
+        let profile0: Profile = jedi::from_val(dispatch_ass(json!(["profile:load"]))).unwrap();
+        let import1 = dispatch_ass(json!(["profile:import", "full", export]));
+        let profile1: Profile = jedi::from_val(dispatch_ass(json!(["profile:load"]))).unwrap();
+        let export = dispatch_ass(json!(["profile:export"]));
         let import2 = dispatch_ass(json!(["profile:import", "restore", export]));
-        let profile2 = dispatch_ass(json!(["profile:load"]));
-        println!("* import 3");
+        let profile2: Profile = jedi::from_val(dispatch_ass(json!(["profile:load"]))).unwrap();
         let import3 = dispatch_ass(json!(["profile:import", "replace", export]));
-        let profile3 = dispatch_ass(json!(["profile:load"]));
-        println!("* import 4");
-        let import4 = dispatch_ass(json!(["profile:import", "full", export]));
-        let profile4 = dispatch_ass(json!(["profile:load"]));
+        let profile3: Profile = jedi::from_val(dispatch_ass(json!(["profile:load"]))).unwrap();
         // goodbyyye, misterrrrrrr aaaandersonnnnn
         dispatch_ass(json!(["user:delete-account"]));
 
+        assert_eq!(profile0.spaces.len(), 3);
+        assert_eq!(profile0.boards.len(), 3);
+
         let breakdown1 = import_to_breakdown(import1);
-        assert_eq!(breakdown1.space_add, 0);
+        assert_eq!(breakdown1.space_add, 3);
         assert_eq!(breakdown1.space_edit, 0);
-        assert_eq!(breakdown1.space_delete, 0);
-        assert_eq!(breakdown1.board_add, 0);
+        assert_eq!(breakdown1.space_delete, 3);
+        assert_eq!(breakdown1.board_add, 3);
         assert_eq!(breakdown1.board_edit, 0);
         assert_eq!(breakdown1.board_delete, 0);
-        assert_eq!(breakdown1.note_add, 0);
+        assert_eq!(breakdown1.note_add, 5);
         assert_eq!(breakdown1.note_edit, 0);
         assert_eq!(breakdown1.note_delete, 0);
+        assert_eq!(profile1.spaces.len(), 3);
+        assert_eq!(profile1.boards.len(), 3);
 
+        let breakdown2 = import_to_breakdown(import2);
+        assert_eq!(breakdown2.space_add, 0);
+        assert_eq!(breakdown2.space_edit, 0);
+        assert_eq!(breakdown2.space_delete, 0);
+        assert_eq!(breakdown2.board_add, 0);
+        assert_eq!(breakdown2.board_edit, 0);
+        assert_eq!(breakdown2.board_delete, 0);
+        assert_eq!(breakdown2.note_add, 0);
+        assert_eq!(breakdown2.note_edit, 0);
+        assert_eq!(breakdown2.note_delete, 0);
+        assert_eq!(profile2.spaces.len(), 3);
+        assert_eq!(profile2.boards.len(), 3);
+
+        let breakdown3 = import_to_breakdown(import3);
+        assert_eq!(breakdown3.space_add, 0);
+        assert_eq!(breakdown3.space_edit, 3);
+        assert_eq!(breakdown3.space_delete, 0);
+        assert_eq!(breakdown3.board_add, 0);
+        assert_eq!(breakdown3.board_edit, 3);
+        assert_eq!(breakdown3.board_delete, 0);
+        assert_eq!(breakdown3.note_add, 0);
+        assert_eq!(breakdown3.note_edit, 5);
+        assert_eq!(breakdown3.note_delete, 0);
+        assert_eq!(profile3.spaces.len(), 3);
+        assert_eq!(profile3.boards.len(), 3);
         end(handle);
     }
 }
