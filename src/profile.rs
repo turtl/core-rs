@@ -22,6 +22,8 @@ use ::models::sync_record::{SyncRecord, SyncAction, SyncType};
 use ::models::storable::Storable;
 use ::sync::sync_model;
 use ::lib_permissions::Permission;
+use ::config;
+use ::crypto;
 
 /// A structure holding a collection of objects that represent's a user's
 /// Turtl data profile.
@@ -147,7 +149,11 @@ impl Profile {
     /// luckily. Also, we don't have to update key references because those are
     /// fully regenerated on each save >=]
     pub fn import(turtl: &Turtl, mode: ImportMode, export: Export) -> TResult<ImportResult> {
-        info!("Profile::import() -- running import (mode: {})", jedi::stringify(&mode)?);
+        let client_id = {
+            let key = format!("{}/{}", config::get::<String>(&["api", "endpoint"])?, turtl.user_id()?);
+            crypto::to_hex(&crypto::sha256(key.as_bytes())?)?
+        };
+        info!("Profile::import() -- running import (mode: {}, cid: {})", jedi::stringify(&mode)?, client_id);
         // the import result details what changed
         let mut result = ImportResult::default();
 
@@ -207,20 +213,31 @@ impl Profile {
         // define a function that runs our sync dispatcher for the incoming
         // import models. note that this runs all of our permission checks for
         // us! yay, abstraction.
-        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, models: Vec<T>, ty: SyncType, mut ser: F, id_change_map: &mut HashMap<String, String>, result: &mut ImportResult) -> TResult<()>
+        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, client_id: &String, models: Vec<T>, ty: SyncType, mut ser: F, id_change_map: &mut HashMap<String, String>, result: &mut ImportResult) -> TResult<()>
             where T: Protected + Storable,
                   F: FnMut(&T, &mut HashMap<String, String>) -> TResult<Value>
         {
             for mut model in models {
-                let mut id = model.id_or_else()?;
-                let exists = {
+                let model_id = model.id_or_else()?;
+                let new_id = model::cid_w_client_id(&model_id, &client_id)?;
+                let (id, exists) = {
                     let mut db_guard = lock!(turtl.db);
                     let db = match db_guard.as_mut() {
                         Some(x) => x,
                         None => return TErr!(TError::MissingField(String::from("turtl.db"))),
                     };
-                    db.get::<T>(T::tablename(), &id)?.is_some()
+                    if db.get::<T>(T::tablename(), &model_id)?.is_some() {
+                        (model_id.clone(), true)
+                    } else if db.get::<T>(T::tablename(), &new_id)?.is_some() {
+                        (new_id.clone(), true)
+                    } else {
+                        (new_id.clone(), false)
+                    }
                 };
+                model.set_id(id.clone());
+                if id == new_id {
+                    id_change_map.insert(model_id.clone(), new_id.clone());
+                }
                 let mut sync_record = SyncRecord::default();
                 sync_record.ty = ty.clone();
                 sync_record.data = Some(ser(&model, id_change_map)?);
@@ -230,17 +247,6 @@ impl Profile {
                     if mode == &ImportMode::Restore { continue; }
                     sync_record.action = SyncAction::Edit;
                 } else {
-                    // if this is an add (the model doesn't exist locally) then
-                    // generate a new id for the model, and map the old one to
-                    // the new one so models that come after this one can ref
-                    // the correct id.
-                    let new_id = model::cid()?;
-                    id_change_map.insert(id.clone(), new_id.clone());
-                    if let Some(modeldata) = sync_record.data.as_mut() {
-                        jedi::set(&["id"], modeldata, &new_id)?;
-                    }
-                    model.set_id(new_id.clone());
-                    id = new_id;
                     sync_record.action = SyncAction::Add;
                 }
                 info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
@@ -274,13 +280,13 @@ impl Profile {
             Ok(())
         }
 
-        saver(turtl, &mode, spaces, SyncType::Space, |x, _| { x.data() }, &mut id_change_map, &mut result)?;
-        saver(turtl, &mode, boards, SyncType::Board, |x, id_change_map| {
+        saver(turtl, &mode, &client_id, spaces, SyncType::Space, |x, _| { x.data() }, &mut id_change_map, &mut result)?;
+        saver(turtl, &mode, &client_id, boards, SyncType::Board, |x, id_change_map| {
             let mut data = x.data()?;
             switch_id_if_needed(id_change_map, &mut data, "space_id")?;
             Ok(data)
         }, &mut id_change_map, &mut result)?;
-        saver(turtl, &mode, notes, SyncType::Note, |x, id_change_map| {
+        saver(turtl, &mode, &client_id, notes, SyncType::Note, |x, id_change_map| {
             let mut data = x.data()?;
             switch_id_if_needed(id_change_map, &mut data, "space_id")?;
             switch_id_if_needed(id_change_map, &mut data, "board_id")?;

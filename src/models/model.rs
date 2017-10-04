@@ -11,7 +11,7 @@ use ::time;
 use ::serde::ser::Serialize;
 use ::serde::de::DeserializeOwned;
 use ::jedi::{self, Value};
-
+use ::crypto;
 use ::error::{TError, TResult};
 use ::util::event::Emitter;
 
@@ -85,6 +85,16 @@ pub fn cid() -> TResult<String> {
     cid.push_str(&client_id[..]);
     cid.push_str(&counter_str[..]);
     Ok(cid)
+}
+
+/// Given a cid and a client id, replace the cid's client id with the given one.
+pub fn cid_w_client_id(cid: &String, client_id: &String) -> TResult<String> {
+    let mut cid_bytes = crypto::from_hex(cid)?;
+    let client_id_bytes = crypto::from_hex(client_id)?;
+    for i in 0..32 {
+        cid_bytes[i + 6] = client_id_bytes[i];
+    }
+    Ok(crypto::to_hex(&cid_bytes)?)
 }
 
 /// Parse a unix timestamp out of a model id
