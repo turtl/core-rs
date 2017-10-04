@@ -1,6 +1,6 @@
 v0.7:
 - import/export
-  - find out deadlock
+  - integration tests
 - migration crate
   - move old crypto, old user keygen/authgen to migration crate
   - check_account() -- checks old login on old server, signals "valid" or not

@@ -66,12 +66,17 @@ impl MemorySaver for Space {
                 profile_guard.spaces.push(self);
             }
             SyncAction::Delete => {
-                let mut profile_guard = lockw!(turtl.profile);
-                let space_id = self.id().unwrap();
-                for board in &profile_guard.boards {
-                    if &board.space_id == space_id {
-                        sync_model::delete_model::<Board>(turtl, board.id().unwrap(), true)?;
+                let space_id = self.id_or_else()?;
+                let boards: Vec<Board> = {
+                    let db_guard = lock!(turtl.db);
+                    match *db_guard {
+                        Some(ref db) => db.find("boards", "space_id", &vec![space_id.clone()])?,
+                        None => vec![],
                     }
+                };
+                for board in boards {
+                    let board_id = board.id_or_else()?;
+                    sync_model::delete_model::<Board>(turtl, &board_id, true)?;
                 }
 
                 let notes: Vec<Note> = {
@@ -82,16 +87,11 @@ impl MemorySaver for Space {
                     }
                 };
                 for note in notes {
-                    let note_id = match note.id() {
-                        Some(x) => x,
-                        None => {
-                            warn!("Space.delete_from_mem() -- got a note from the local DB with empty `id` field");
-                            continue;
-                        }
-                    };
+                    let note_id = note.id_or_else()?;
                     sync_model::delete_model::<Note>(turtl, &note_id, true)?;
                 }
                 // remove the space from memory
+                let mut profile_guard = lockw!(turtl.profile);
                 profile_guard.spaces.retain(|s| s.id() != Some(&space_id));
             }
             _ => {}
