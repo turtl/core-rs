@@ -12,7 +12,7 @@ pub struct Feedback {
 impl Feedback {
     /// Send feedback back. BO!
     pub fn send(&self, turtl: &Turtl) -> TResult<()> {
-        let user_guard = turtl.user.read().unwrap();
+        let user_guard = lockr!(turtl.user);
         if !user_guard.logged_in {
             // nice try
             return TErr!(TError::Msg(String::from("can't send feedback, not logged in")));

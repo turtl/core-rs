@@ -63,7 +63,7 @@ impl MemorySaver for Invite {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 for invite in &mut profile_guard.invites {
                     if invite.id() == self.id() {
                         invite.merge_fields(&self.data()?)?;
@@ -74,7 +74,7 @@ impl MemorySaver for Invite {
                 profile_guard.invites.push(self);
             }
             SyncAction::Delete => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 let invite_id = self.id().unwrap();
                 // remove the invite from memory
                 profile_guard.invites.retain(|s| s.id() != Some(&invite_id));
@@ -198,7 +198,7 @@ impl Invite {
     /// invite that was sent to them.
     pub fn delete_user_invite(turtl: &Turtl, invite_id: &String) -> TResult<()> {
         {
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let invite = match Profile::finder(&mut profile_guard.invites, invite_id) {
                 Some(i) => i,
                 None => return TErr!(TError::MissingData(format!("invite doesn't exist: {}", invite_id))),

@@ -61,7 +61,7 @@ impl FileSyncOutgoing {
         let note_id = &sync.item_id;
         let user_id = {
             let local_config = self.get_config();
-            let guard = local_config.read().unwrap();
+            let guard = lockr!(local_config);
             match guard.user_id.as_ref() {
                 Some(x) => x.clone(),
                 None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),

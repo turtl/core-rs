@@ -94,8 +94,8 @@ impl Profile {
         info!("Profile::export() -- running export");
         let mut export = Export::default();
         export.schema_version = 1;
-        let profile_guard = turtl.profile.read().unwrap();
-        let mut db_guard = turtl.db.write().unwrap();
+        let profile_guard = lockr!(turtl.profile);
+        let mut db_guard = lockw!(turtl.db);
         let db = match db_guard.as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("turtl.db"))),
@@ -171,7 +171,7 @@ impl Profile {
             // includes keychains, boards, notes, etc (etc meaning "actually,
             // that's it" here).
             let spaces: Vec<Space> = {
-                let mut db_guard = turtl.db.write().unwrap();
+                let mut db_guard = lockw!(turtl.db);
                 let db = match db_guard.as_mut() {
                     Some(x) => x,
                     None => return TErr!(TError::MissingField(String::from("turtl.db"))),
@@ -214,7 +214,7 @@ impl Profile {
             for mut model in models {
                 let mut id = model.id_or_else()?;
                 let exists = {
-                    let mut db_guard = turtl.db.write().unwrap();
+                    let mut db_guard = lockw!(turtl.db);
                     let db = match db_guard.as_mut() {
                         Some(x) => x,
                         None => return TErr!(TError::MissingField(String::from("turtl.db"))),

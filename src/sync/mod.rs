@@ -125,7 +125,7 @@ pub trait Syncer {
     /// Check to see if we should quit the thread
     fn should_quit(&self) -> bool {
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         guard.quit.clone()
     }
 
@@ -143,14 +143,14 @@ pub trait Syncer {
             Err(_) => false,
         };
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         guard.enabled.clone() && config_enabled
     }
 
     /// Get our sync_id key (for our k/v store)
     fn sync_key(&self) -> TResult<String> {
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         let user_id = match guard.user_id.as_ref() {
             Some(x) => x,
@@ -220,7 +220,7 @@ pub trait Syncer {
 pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
-        let mut config_guard = config.write().unwrap();
+        let mut config_guard = lockw!(config);
         (*config_guard).enabled = true;
         (*config_guard).quit = false;
     }
@@ -279,23 +279,23 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
     // that handles the state for us via functions.
     let config1 = config.clone();
     let shutdown = move || {
-        let mut guard = config1.write().unwrap();
+        let mut guard = lockw!(config1);
         guard.enabled = false;
         guard.quit = true;
     };
     let config2 = config.clone();
     let pause = move || {
-        let mut guard = config2.write().unwrap();
+        let mut guard = lockw!(config2);
         guard.enabled = false;
     };
     let config3 = config.clone();
     let resume = move || {
-        let mut guard = config3.write().unwrap();
+        let mut guard = lockw!(config3);
         guard.enabled = true;
     };
     let config4 = config.clone();
     let enabled = move || -> bool {
-        let guard = config4.read().unwrap();
+        let guard = lockr!(config4);
         guard.enabled
     };
 

@@ -175,7 +175,7 @@ mod tests {
         sync3.frozen = true;
 
         {
-            let mut db_guard = db.write().unwrap();
+            let mut db_guard = lockw!(db);
             let dbo = db_guard.as_mut().unwrap();
             dbo.save(&sync1).unwrap();
             dbo.save(&sync2).unwrap();

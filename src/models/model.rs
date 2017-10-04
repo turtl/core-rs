@@ -57,14 +57,14 @@ macro_rules! model_getter {
 
 /// Set the model system's client id
 pub fn get_client_id() -> Option<String> {
-    let guard = (*CLIENT_ID).read().unwrap();
+    let guard = lockr!((*CLIENT_ID));
     (*guard).clone()
 }
 
 /// Set the model system's client id
 pub fn set_client_id(id: String) -> TResult<()> {
     debug!("model -- set_client_id(): {}", id);
-    let mut guard = (*CLIENT_ID).write().unwrap();
+    let mut guard = lockw!((*CLIENT_ID));
     *guard = Some(id);
     Ok(())
 }
@@ -75,7 +75,7 @@ pub fn cid() -> TResult<String> {
         Some(ref x) => x.clone(),
         None => return TErr!(TError::MissingData(format!("CLIENT_ID missing"))),
     };
-    let mut counter_guard = (*CID_COUNTER).write().unwrap();
+    let mut counter_guard = lockw!((*CID_COUNTER));
     let counter: u32 = counter_guard.clone();
     (*counter_guard) += 1;
     let now = time::get_time();

@@ -3,7 +3,7 @@ macro_rules! with_db {
     ($dbvar:ident, $dbobj:expr, $( $rest:tt )*) => {
         {
             // TODO: gensym anyone?
-            let mut db_guard__ = $dbobj.write().unwrap();
+            let mut db_guard__ = lockw!($dbobj);
             match db_guard__.as_mut() {
                 Some($dbvar) => {
                     $( $rest )*

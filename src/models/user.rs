@@ -129,7 +129,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     turtl.api.set_auth(username.clone(), auth.clone())?;
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
 
-    let mut user_guard_w = turtl.user.write().unwrap();
+    let mut user_guard_w = lockw!(turtl.user);
     let id_err = TErr!(TError::BadValue(format!("auth was successful, but API returned strange id object: {:?}", user_id)));
     let user_id = match user_id {
         Value::Number(x) => {
@@ -146,7 +146,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     user_guard_w.do_login(key, auth);
     drop(user_guard_w);
     let userdata = turtl.api.get(url.as_str(), ApiReq::new())?;
-    let mut user_guard = turtl.user.write().unwrap();
+    let mut user_guard = lockw!(turtl.user);
     user_guard.merge_fields(&userdata)?;
     user_guard.trigger("login", &jedi::obj());
     debug!("user::do_login() -- auth success, logged in");
@@ -204,14 +204,14 @@ impl User {
         let joindata = turtl.api.post("/users", req)?;
         let user_id: String = jedi::get(&["id"], &joindata)?;
         let user_id: String = user_id.to_string();
-        let mut user_guard_w = turtl.user.write().unwrap();
+        let mut user_guard_w = lockw!(turtl.user);
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
         user_guard_w.id = Some(user_id);
         user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
         user_guard_w.do_login(key, auth);
         drop(user_guard_w);
 
-        let user_guard_r = turtl.user.read().unwrap();
+        let user_guard_r = lockr!(turtl.user);
         user_guard_r.trigger("login", &jedi::obj());
         drop(user_guard_r);
         debug!("user::join() -- auth success, joined and logged in");
@@ -242,7 +242,7 @@ impl User {
         let new_userdata = Protected::serialize(&mut new_user)?;
 
         let encrypted_keychain = {
-            let profile_guard = turtl.profile.read().unwrap();
+            let profile_guard = lockr!(turtl.profile);
             let mut new_keys = Vec::with_capacity(profile_guard.keychain.entries.len());
             for entry in &profile_guard.keychain.entries {
                 let mut new_entry = entry.clone()?;
@@ -268,7 +268,7 @@ impl User {
         let res: PWChangeResponse = turtl.api.put(&url[..], ApiReq::new().data(auth_change))?;
         match res.sync_ids.as_ref() {
             Some(ids) => {
-                let mut db_guard = turtl.db.write().unwrap();
+                let mut db_guard = lockw!(turtl.db);
                 match db_guard.as_mut() {
                     Some(db) => SyncIncoming::ignore_on_next(db, ids)?,
                     None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -284,8 +284,8 @@ impl User {
 
         // save the user's new key into the keychain entries
         {
-            let mut profile_guard = turtl.profile.write().unwrap();
-            let mut db_guard = turtl.db.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
+            let mut db_guard = lockw!(turtl.db);
             let db = match (*db_guard).as_mut() {
                 Some(x) => x,
                 None => return TErr!(TError::MissingField(format!("Turtl.db"))),
@@ -311,7 +311,7 @@ impl User {
     /// Once the user has joined, we set up a default profile for them.
     pub fn post_join(turtl: &Turtl) -> TResult<()> {
         let user_id = {
-            let user_guard = turtl.user.read().unwrap();
+            let user_guard = lockr!(turtl.user);
             user_guard.id_or_else()?
         };
 
@@ -343,7 +343,7 @@ impl User {
         save_board(turtl, &user_id, &personal_space_id, "Photos")?;
         save_board(turtl, &user_id, &personal_space_id, "Passwords")?;
 
-        let mut user_guard_w = turtl.user.write().unwrap();
+        let mut user_guard_w = lockw!(turtl.user);
         user_guard_w.set_setting(turtl, "default_space", &personal_space_id)?;
         drop(user_guard_w);
 
@@ -352,13 +352,13 @@ impl User {
 
     /// Static method to log a user out
     pub fn logout(turtl: &Turtl) -> TResult<()> {
-        let mut user_guard = turtl.user.write().unwrap();
+        let mut user_guard = lockw!(turtl.user);
         if !user_guard.logged_in {
             return Ok(());
         }
         user_guard.do_logout();
         drop(user_guard);
-        let user_guard = turtl.user.read().unwrap();
+        let user_guard = lockr!(turtl.user);
         user_guard.trigger("logout", &jedi::obj());
         turtl.api.clear_auth();
         Ok(())
@@ -367,7 +367,7 @@ impl User {
     /// Delete the current user
     pub fn delete_account(turtl: &Turtl) -> TResult<()> {
         let id = {
-            let user_guard = turtl.user.read().unwrap();
+            let user_guard = lockr!(turtl.user);
             user_guard.id_or_else()?
         };
         turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;

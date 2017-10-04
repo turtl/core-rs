@@ -148,7 +148,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
-        let db_guard = turtl.db.write().unwrap();
+        let db_guard = lockw!(turtl.db);
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
@@ -193,7 +193,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
 
     {
         let user_id = turtl.user_id()?;
-        let mut db_guard = turtl.db.write().unwrap();
+        let mut db_guard = lockw!(turtl.db);
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
@@ -222,7 +222,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
 
     {
         let user_id = turtl.user_id()?;
-        let mut db_guard = turtl.db.write().unwrap();
+        let mut db_guard = lockw!(turtl.db);
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
@@ -319,7 +319,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
             fn get_model<T>(turtl: &Turtl, id: &String) -> TResult<T>
                 where T: Protected + Storable
             {
-                let mut db_guard = turtl.db.write().unwrap();
+                let mut db_guard = lockw!(turtl.db);
                 let db = match db_guard.as_mut() {
                     Some(x) => x,
                     None => return TErr!(TError::MissingField(format!("turtl is missing `db` object"))),
@@ -366,7 +366,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     };
                     Space::permission_check(turtl, &from_space_id, &Permission::DeleteBoard)?;
                     Space::permission_check(turtl, &to_space_id, &Permission::AddBoard)?;
-                    let mut profile_guard = turtl.profile.write().unwrap();
+                    let mut profile_guard = lockw!(turtl.profile);
                     let boards = &mut profile_guard.boards;
                     let board = match Profile::finder(boards, &item_id) {
                         Some(m) => m,

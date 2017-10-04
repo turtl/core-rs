@@ -70,7 +70,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::to_val(&user)?)
         }
         "app:connected" => {
-            let connguard = turtl.connected.read().unwrap();
+            let connguard = lockr!(turtl.connected);
             let connected: bool = *connguard;
             drop(connguard);
             Ok(Value::Bool(connected))
@@ -127,8 +127,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::obj())
         }
         "profile:load" => {
-            let user_guard = turtl.user.read().unwrap();
-            let profile_guard = turtl.profile.read().unwrap();
+            let user_guard = lockr!(turtl.user);
+            let profile_guard = lockr!(turtl.profile);
             let profile_data = json!({
                 "user": &user_guard.as_ref(),
                 "spaces": &profile_guard.spaces,
@@ -154,7 +154,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:set-owner" => {
             let space_id = jedi::get(&["2"], &data)?;
             let user_id = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -164,7 +164,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:edit-member" => {
             let mut member: SpaceMember = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", member.space_id))),
@@ -175,7 +175,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:delete-member" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let user_id: String = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -185,7 +185,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:leave" => {
             let space_id: String = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -195,7 +195,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:send-invite" => {
             let req: InviteRequest = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &req.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", req.space_id))),
@@ -211,7 +211,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:edit-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", invite.space_id))),
@@ -222,7 +222,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:delete-invite" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let invite_id: String = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -242,7 +242,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:find-notes" => {
             let qry: Query = jedi::get(&["2"], &data)?;
-            let search_guard = turtl.search.read().unwrap();
+            let search_guard = lockr!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
@@ -261,7 +261,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let space_id: String = jedi::get(&["2"], &data)?;
             let boards: Vec<String> = jedi::get(&["3"], &data)?;
             let limit: i32 = jedi::get(&["4"], &data)?;
-            let search_guard = turtl.search.read().unwrap();
+            let search_guard = lockr!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
@@ -307,14 +307,14 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
     match cmd.as_ref() {
         "sync:connected" => {
             let yesno: bool = jedi::from_val(data)?;
-            let mut connguard = turtl.connected.write().unwrap();
+            let mut connguard = lockw!(turtl.connected);
             *connguard = yesno;
         }
         "sync:incoming" => {
             sync::incoming::process_incoming_sync(turtl)?;
         }
         "user:edit" => {
-            let mut user_guard = turtl.user.write().unwrap();
+            let mut user_guard = lockw!(turtl.user);
             user_guard.merge_fields(&data)?;
         }
         "user:change-password:logout" => {

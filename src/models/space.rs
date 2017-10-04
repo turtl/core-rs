@@ -55,7 +55,7 @@ impl MemorySaver for Space {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 for space in &mut profile_guard.spaces {
                     if space.id() == self.id() {
                         space.merge_fields(&self.data()?)?;
@@ -66,7 +66,7 @@ impl MemorySaver for Space {
                 profile_guard.spaces.push(self);
             }
             SyncAction::Delete => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 let space_id = self.id().unwrap();
                 for board in &profile_guard.boards {
                     if &board.space_id == space_id {
@@ -75,7 +75,7 @@ impl MemorySaver for Space {
                 }
 
                 let notes: Vec<Note> = {
-                    let db_guard = turtl.db.read().unwrap();
+                    let db_guard = lockw!(turtl.db);
                     match *db_guard {
                         Some(ref db) => db.find("notes", "space_id", &vec![space_id.clone()])?,
                         None => vec![],
@@ -105,7 +105,7 @@ impl Space {
     /// has the rights to that permission.
     pub fn permission_check(turtl: &Turtl, space_id: &String, permission: &Permission) -> TResult<()> {
         let user_id = turtl.user_id()?;
-        let profile_guard = turtl.profile.read().unwrap();
+        let profile_guard = lockr!(turtl.profile);
         let matched = profile_guard.spaces.iter()
             .filter(|space| space.id() == Some(space_id))
             .collect::<Vec<_>>();
@@ -263,7 +263,7 @@ impl Space {
     pub fn send_invite(&mut self, turtl: &Turtl, invite_request: InviteRequest) -> TResult<()> {
         turtl.assert_connected()?;
         let (user_id, username) = {
-            let user_guard = turtl.user.read().unwrap();
+            let user_guard = lockr!(turtl.user);
             let user_id = user_guard.id_or_else()?;
             (user_id, user_guard.username.clone())
         };
@@ -291,7 +291,7 @@ impl Space {
         model_getter!(get_field, "Space.accept_invite()");
         let invite_id = get_field!(invite, id);
         {
-            let user_guard = turtl.user.read().unwrap();
+            let user_guard = lockr!(turtl.user);
             let pubkey = match user_guard.pubkey.as_ref() {
                 Some(k) => k,
                 None => return TErr!(TError::MissingField(String::from("User.pubkey"))),
@@ -347,7 +347,7 @@ impl Space {
     pub fn delete_invite(&mut self, turtl: &Turtl, invite_id: &String) -> TResult<()> {
         turtl.assert_connected()?;
         let username = {
-            let user_guard = turtl.user.read().unwrap();
+            let user_guard = lockr!(turtl.user);
             user_guard.username.clone()
         };
         {
