@@ -39,8 +39,6 @@ struct SyncRecord {
 struct SyncResponse {
     #[serde(default)]
     records: Vec<SyncRecord>,
-    #[serde(default)]
-    sync_id: String,
 }
 
 fn get_profile(auth: &String) -> MResult<Vec<SyncRecord>> {
@@ -51,7 +49,7 @@ fn get_profile(auth: &String) -> MResult<Vec<SyncRecord>> {
     Ok(records)
 }
 
-fn decrypt_profile(profile: Vec<SyncRecord>) -> MResult<()> {
+fn decrypt_profile(key: &Key, profile: Vec<SyncRecord>) -> MResult<()> {
     Ok(())
 }
 
@@ -103,9 +101,9 @@ pub struct MigrateResult {
 }
 
 /// Migrate a v6 account to a v7 account. We do this by creating sync items
-pub fn migrate(v6_auth: &String) -> MResult<MigrateResult> {
-    let profile = get_profile(v6_auth)?;
-    let decrypted = decrypt_profile(profile)?;
+pub fn migrate(v6_login: Login) -> MResult<MigrateResult> {
+    let profile = get_profile(&v6_login.auth)?;
+    let decrypted = decrypt_profile(&v6_login.key, profile)?;
     Ok(MigrateResult {
         spaces: Vec::new(),
         boards: Vec::new(),
