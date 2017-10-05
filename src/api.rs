@@ -51,7 +51,6 @@ impl ApiReq {
     }
 
     /// Set a header
-    #[allow(dead_code)]
     pub fn header<'a>(mut self, name: &'static str, val: &String) -> Self {
         self.headers.set_raw(name, vec![Vec::from(val.as_bytes())]);
         self
@@ -231,13 +230,11 @@ impl Api {
     }
 
     /// Convenience function for api.call(PUT)
-    #[allow(dead_code)]
     pub fn put<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Put, resource, builder)
     }
 
     /// Convenience function for api.call(DELETE)
-    #[allow(dead_code)]
     pub fn delete<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
         self.call(Method::Delete, resource, builder)
     }
