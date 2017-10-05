@@ -20,13 +20,9 @@
 //! models so they don't go around spraying their private fields into debug
 //! logs.
 
-use ::std::collections::{HashMap};
 use ::std::fmt;
-
 use ::futures::{future, Future};
-
 use ::jedi::{self, Value, Map as JsonMap};
-
 use ::error::{TResult, TError, TFutureResult};
 use ::turtl::Turtl;
 use ::models::model::Model;
@@ -182,16 +178,19 @@ pub trait Protected: Model + fmt::Debug {
     fn generate_key(&mut self) -> TResult<&Key>;
 
     /// Get the model's body data
-    fn get_keys<'a>(&'a self) -> Option<&'a Vec<HashMap<String, String>>>;
+    fn get_keys<'a>(&'a self) -> Option<&'a Vec<KeyRef<String>>>;
 
     /// Set the keys for this model
-    fn set_keys(&mut self, keydata: Vec<HashMap<String, String>>);
+    fn set_keys(&mut self, keydata: Vec<KeyRef<String>>);
 
     /// Get the model's body data
     fn get_body<'a>(&'a self) -> Option<&'a String>;
 
     /// Set the model's body data
     fn set_body(&mut self, body: String);
+
+    /// Clear out the model's body data
+    fn clear_body(&mut self);
 
     /// Merge a Value object into this model.
     fn merge_fields(&mut self, data: &Value) -> TResult<()>;
@@ -353,16 +352,13 @@ pub trait Protected: Model + fmt::Debug {
     /// Given a set of keydata, replace the self.keys object
     fn generate_subkeys(&mut self, keydata: &Vec<KeyRef<Key>>) -> TResult<()> {
         if self.key().is_none() {
-            return Err(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
+            return TErr!(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
         }
         let model_key = self.key().unwrap().clone();
-        let mut encrypted: Vec<HashMap<String, String>> = Vec::with_capacity(keydata.len());
+        let mut encrypted: Vec<KeyRef<String>> = Vec::with_capacity(keydata.len());
         for key in keydata {
             let enc = encrypt_key(&key.k, model_key.clone())?;
-            let mut hash: HashMap<String, String> = HashMap::with_capacity(2);
-            hash.insert(key.ty.clone(), key.id.clone());
-            hash.insert(String::from("k"), enc);
-            encrypted.push(hash);
+            encrypted.push(KeyRef::new(key.id.clone(), key.ty.clone(), enc));
         }
         self.set_keys(encrypted);
         Ok(())
@@ -395,7 +391,7 @@ macro_rules! protected {
 
                 #[serde(skip_serializing_if = "Option::is_none")]
                 #[protected_field(public)]
-                keys: Option<Vec<::std::collections::HashMap<String, String>>>,
+                keys: Option<Vec<::models::keychain::KeyRef<String>>>,
                 #[protected_field(public)]
                 body: Option<String>, 
 
@@ -411,7 +407,7 @@ mod tests {
     use ::jedi;
     use ::crypto::{self, Key};
     use ::models::model::Model;
-    use ::models::keychain::KeyRef;
+    use ::models::keychain::{KeyRef, KeyType};
     use ::models::note::Note;
 
     protected! {
@@ -590,8 +586,8 @@ mod tests {
         let mut subkeys: Vec<KeyRef<Key>> = Vec::new();
         let key1 = Key::new(crypto::from_base64(&String::from("n1OBWSG3LqwqoL/Oo8nyUPJp8fl/8Wig6kWpS45YW1U=")).unwrap());
         let key2 = Key::new(crypto::from_base64(&String::from("mbYnVxRr4wJ+Zh0tK96rM9dqveW5efJligps4IHoVW4=")).unwrap());
-        subkeys.push(KeyRef::new(String::from("6969"), String::from("b"), key1));
-        subkeys.push(KeyRef::new(String::from("1234"), String::from("b"), key2));
+        subkeys.push(KeyRef::new(String::from("6969"), KeyType::Board, key1));
+        subkeys.push(KeyRef::new(String::from("1234"), KeyType::Board, key2));
         dog.generate_subkeys(&subkeys).unwrap();
         // not the best test, but whatever. i suppose i could write a base64
         // regex. feeling lazy tonight.

@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate quick_error;
 extern crate serde;
+#[macro_use]
 extern crate serde_json;
 extern crate serde_yaml;
 
@@ -64,18 +65,6 @@ macro_rules! from_err {
 from_err!(::std::io::Error);
 from_err!(SerdeJsonError);
 from_err!(SerdeYamlError);
-
-/// Define a macro that makes it easy to wrap the Value type into a newtype
-/// struct. This makes it so you can have a local type you can define impls for
-/// but will (de)serialize just as a Value would.
-#[macro_export]
-macro_rules! jedi_value_wrapper {
-    ($name:ident) => {
-        #[derive(Debug)]
-        #[derive(Serialize, Deserialize)]
-        pub struct $name(::serde_json::Value);
-    }
-}
 
 /// Parse a JSON string and return a Result<Value>
 pub fn parse<T: DeserializeOwned>(string: &String) -> JResult<T> {
@@ -217,7 +206,6 @@ pub fn get_opt<T: DeserializeOwned>(keys: &[&str], value: &Value) -> Option<T> {
     }
 }
 
-#[allow(dead_code)]
 /// Set a field into a mutable JSON Value
 pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResult<()> {
     if keys.len() == 0 {
@@ -242,6 +230,39 @@ pub fn set<T: Serialize>(keys: &[&str], container: &mut Value, to: &T) -> JResul
             Ok(())
         },
         _ => Err(JSONError::DeadEnd),
+    }
+}
+
+/// Remove a value from a JSON object.
+pub fn remove(keys: &[&str], container: &mut Value) -> JResult<()> {
+    let keys = Vec::from(keys);
+    let butlast = &keys[0..(keys.len() - 1)];
+    match walk_mut(butlast, container) {
+        Ok(val) => {
+            let key = String::from(keys[keys.len() - 1]);
+            match val {
+                &mut Value::Object(ref mut x) => {
+                    x.remove(&key);
+                    Ok(())
+                }
+                &mut Value::Array(ref mut x) => {
+                    let idx: usize = match key.parse() {
+                        Ok(i) => i,
+                        Err(_) => return Err(JSONError::InvalidKey(key)),
+                    };
+                    if x.len() > idx {
+                        x.remove(idx);
+                    }
+                    Ok(())
+                }
+                _ => {
+                    Ok(())
+                }
+            }
+        }
+        Err(_) => {
+            Ok(())
+        }
     }
 }
 
@@ -287,10 +308,21 @@ mod tests {
     }
 
     #[test]
-    fn newtype() {
-        jedi_value_wrapper!(MyVal);
-        let data: MyVal = parse(&String::from(r#"{"name":"ALEX JONES","occupation":"SCREAMING ALL THE TIME"}"#)).unwrap();
-        assert_eq!(get::<String>(&["name"], data.as_val()).unwrap(), String::from("ALEX JONES"));
+    fn removes_stuff() {
+        let mut obj = json!({
+            "type": "dog",
+            "deets": {
+                "name": "wookie",
+                "noise": "NARRyarryghgahhgg",
+            },
+            "friends": ["timmy", "lucy"],
+        });
+        remove(&["deets", "noise"], &mut obj).unwrap();
+        assert_eq!(stringify(&obj).unwrap(), r#"{"deets":{"name":"wookie"},"friends":["timmy","lucy"],"type":"dog"}"#);
+        remove(&["deets"], &mut obj).unwrap();
+        assert_eq!(stringify(&obj).unwrap(), r#"{"friends":["timmy","lucy"],"type":"dog"}"#);
+        remove(&["friends", "0"], &mut obj).unwrap();
+        assert_eq!(stringify(&obj).unwrap(), r#"{"friends":["lucy"],"type":"dog"}"#);
     }
 }
 

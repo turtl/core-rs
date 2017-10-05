@@ -32,7 +32,7 @@ pub fn db_location(db_name: &String) -> TResult<String> {
 
 /// Make sure we have a client ID, and sync it with the model system
 pub fn setup_client_id(storage: Arc<RwLock<Storage>>) -> TResult<()> {
-    let storage_guard = storage.read().unwrap();
+    let storage_guard = lockr!(storage);
     let conn = &storage_guard.conn;
     let dumpy = &storage_guard.dumpy;
     let id = match dumpy.kv_get(conn, "client_id")? {

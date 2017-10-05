@@ -355,14 +355,11 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 Ok(self.key().unwrap())
             }
 
-            fn get_keys<'a>(&'a self) -> Option<&'a Vec<::std::collections::HashMap<String, String>>> {
-                match self.keys {
-                    Some(ref x) => Some(x),
-                    None => None,
-                }
+            fn get_keys<'a>(&'a self) -> Option<&'a Vec<::models::keychain::KeyRef<String>>> {
+                self.keys.as_ref()
             }
 
-            fn set_keys(&mut self, keydata: Vec<::std::collections::HashMap<String, String>>) {
+            fn set_keys(&mut self, keydata: Vec<::models::keychain::KeyRef<String>>) {
                 self.keys = Some(keydata);
             }
 
@@ -375,6 +372,10 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
 
             fn set_body(&mut self, body: String) {
                 self.body = Some(body);
+            }
+
+            fn clear_body(&mut self) {
+                self.body = None;
             }
 
             fn merge_fields(&mut self, data: &::jedi::Value) -> ::error::TResult<()> {

@@ -1,4 +1,4 @@
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, Mutex};
 
 use ::jedi;
 
@@ -35,12 +35,12 @@ pub struct SyncOutgoing {
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling the "outgoing" table for local changes that need to be
     /// synced to our heroic API.
-    db: Arc<RwLock<Option<Storage>>>,
+    db: Arc<Mutex<Option<Storage>>>,
 }
 
 impl SyncOutgoing {
     /// Create a new outgoing syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> SyncOutgoing {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> SyncOutgoing {
         SyncOutgoing {
             config: config,
             api: api,
@@ -77,7 +77,11 @@ impl SyncOutgoing {
     /// sync items that might need inspection/alerting.
     fn handle_sync_failures(&self, fail: &Vec<SyncRecord>) -> TResult<()> {
         for failure in fail {
-            warn!("SyncOutgoing.handle_sync_failures() -- failwhale: {:?}/{:?}", failure.ty, failure.action);
+            let errmsg = match failure.error.as_ref() {
+                Some(err) => err.msg.clone(),
+                None => String::from("<blank error>"),
+            };
+            warn!("SyncOutgoing.handle_sync_failures() -- failwhale: {:?}/{:?}: {}", failure.ty, failure.action, errmsg);
             with_db!{ db, self.db,
                 SyncRecord::handle_failed_sync(db, failure)?;
             }
@@ -150,7 +154,7 @@ impl Syncer for SyncOutgoing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::std::sync::{Arc, RwLock};
+    use ::std::sync::{Arc, RwLock, Mutex};
     use ::models::sync_record::SyncRecord;
     use ::jedi;
     use ::schema;
@@ -163,7 +167,7 @@ mod tests {
         let api = Arc::new(Api::new());
         let dumpy_schema = schema::get_schema();
         let db = Storage::new(&String::from(":memory:"), dumpy_schema).unwrap();
-        let db = Arc::new(RwLock::new(Some(db)));
+        let db = Arc::new(Mutex::new(Some(db)));
 
         let sync1: SyncRecord = jedi::from_val(json!({"id": "1", "action": "add", "item_id": "69", "user_id": 12, "type": "note"})).unwrap();
         let sync2: SyncRecord = jedi::from_val(json!({"id": "2", "action": "add", "item_id": "69", "user_id": 12, "type": "note"})).unwrap();
@@ -171,7 +175,7 @@ mod tests {
         sync3.frozen = true;
 
         {
-            let mut db_guard = db.write().unwrap();
+            let mut db_guard = lock!(db);
             let dbo = db_guard.as_mut().unwrap();
             dbo.save(&sync1).unwrap();
             dbo.save(&sync2).unwrap();

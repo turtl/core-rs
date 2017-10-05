@@ -22,7 +22,7 @@ pub mod files;
 pub mod sync_model;
 
 use ::std::thread;
-use ::std::sync::{Arc, RwLock, mpsc};
+use ::std::sync::{Arc, RwLock, Mutex, mpsc};
 use ::config;
 use ::sync::outgoing::SyncOutgoing;
 use ::sync::incoming::SyncIncoming;
@@ -95,6 +95,7 @@ pub struct SyncState {
     pub shutdown: Box<Fn() + 'static + Sync + Send>,
     pub pause: Box<Fn() + 'static + Sync + Send>,
     pub resume: Box<Fn() + 'static + Sync + Send>,
+    pub enabled: Box<Fn() -> bool + 'static + Sync + Send>,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects
@@ -124,7 +125,7 @@ pub trait Syncer {
     /// Check to see if we should quit the thread
     fn should_quit(&self) -> bool {
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         guard.quit.clone()
     }
 
@@ -142,14 +143,14 @@ pub trait Syncer {
             Err(_) => false,
         };
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         guard.enabled.clone() && config_enabled
     }
 
     /// Get our sync_id key (for our k/v store)
     fn sync_key(&self) -> TResult<String> {
         let local_config = self.get_config();
-        let guard = local_config.read().unwrap();
+        let guard = lockr!(local_config);
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         let user_id = match guard.user_id.as_ref() {
             Some(x) => x,
@@ -216,10 +217,10 @@ pub trait Syncer {
 /// thread needs its own connection. We don't have the ability to create the
 /// connections in this scope (no access to Turtl by design) so we need to
 /// just have them passed in.
-pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> TResult<SyncState> {
+pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> TResult<SyncState> {
     // enable syncing (set phasers to stun)
     {
-        let mut config_guard = config.write().unwrap();
+        let mut config_guard = lockw!(config);
         (*config_guard).enabled = true;
         (*config_guard).quit = false;
     }
@@ -278,19 +279,24 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
     // that handles the state for us via functions.
     let config1 = config.clone();
     let shutdown = move || {
-        let mut guard = config1.write().unwrap();
+        let mut guard = lockw!(config1);
         guard.enabled = false;
         guard.quit = true;
     };
     let config2 = config.clone();
     let pause = move || {
-        let mut guard = config2.write().unwrap();
+        let mut guard = lockw!(config2);
         guard.enabled = false;
     };
     let config3 = config.clone();
     let resume = move || {
-        let mut guard = config3.write().unwrap();
+        let mut guard = lockw!(config3);
         guard.enabled = true;
+    };
+    let config4 = config.clone();
+    let enabled = move || -> bool {
+        let guard = lockr!(config4);
+        guard.enabled
     };
 
     // uhhh, you have a ffcall. thank you. uhh, hand the phone to me, please.
@@ -300,6 +306,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
         shutdown: Box::new(shutdown),
         pause: Box::new(pause),
         resume: Box::new(resume),
+        enabled: Box::new(enabled),
     })
 }
 
@@ -307,7 +314,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Opti
 mod tests {
     use super::*;
 
-    use ::std::sync::{Arc, RwLock};
+    use ::std::sync::{Arc, RwLock, Mutex};
 
     use ::jedi::{self, Value};
     use ::storage::Storage;
@@ -334,7 +341,7 @@ mod tests {
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
-        let db = Arc::new(RwLock::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
+        let db = Arc::new(Mutex::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
         let mut state = start(sync_config, api, db).unwrap();
         (state.shutdown)();
         loop {

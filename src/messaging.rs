@@ -229,7 +229,7 @@ mod tests {
     /// given a thread-safe bool, return a copy of the bool
     fn grab_locked_bool(val: &Arc<Mutex<bool>>) -> bool {
         let clone = val.clone();
-        let guard = clone.lock().unwrap();
+        let guard = lock!(clone);
         let copy = (*guard).clone();
         copy
     }
@@ -251,7 +251,7 @@ mod tests {
 
             let res = match message.as_ref() {
                 "ping" => {
-                    let mut pong = pongref.lock().unwrap();
+                    let mut pong = lock!(pongref);
                     *pong = true;
                     messenger.send(String::from("pong")).unwrap();
                     Ok(())
@@ -262,7 +262,7 @@ mod tests {
             match res {
                 Ok(_) => (),
                 Err(_) => {
-                    let mut panic = panicref.lock().unwrap();
+                    let mut panic = lock!(panicref);
                     *panic = true;
                 }
             }

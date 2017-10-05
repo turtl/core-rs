@@ -58,7 +58,7 @@ pub trait Emitter {
         // *replace* existing bindings.
         self.unbind(event_name, cb.name.as_str());
         let bindings = self.bindings();
-        let mut guard = bindings.write().unwrap();
+        let mut guard = lockw!(bindings);
         let events = guard.entry(String::from(event_name))
             .or_insert(Vec::with_capacity(3));
         events.push(cb);
@@ -91,7 +91,7 @@ pub trait Emitter {
     /// Unbind an event/listener from thie emitter.
     fn unbind(&self, event_name: &str, bind_name: &str) -> bool {
         let bindings = self.bindings();
-        let mut guard = bindings.write().unwrap();
+        let mut guard = lockw!(bindings);
         match guard.get_mut(event_name) {
             Some(x) => {
                 let mut removed = false;
@@ -111,7 +111,7 @@ pub trait Emitter {
     /// `data` passed as the only argument.
     fn trigger(&self, event_name: &str, data: &Value) -> () {
         let bindings = self.bindings();
-        let rguard = bindings.read().unwrap();
+        let rguard = lockr!(bindings);
         let mut removes: Vec<usize> = Vec::new();
         match rguard.get(event_name) {
             Some(x) => {
@@ -196,20 +196,20 @@ mod tests {
             let data = data.clone();
             let cb = move |x: &Value| {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
-                data.write().unwrap()[0] += 1;
+                lockw!(data)[0] += 1;
             };
             let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind("fire", cb, "test:fire");
             //emitter.bind("omg", cb, "test:test");
 
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("hellp", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(lockr!(rdata)[0], 2);
         }
     }
 
@@ -222,19 +222,19 @@ mod tests {
             let data = data.clone();
             let cb = move |x: &Value| {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
-                data.write().unwrap()[0] += 1;
+                lockw!(data)[0] += 1;
             };
             let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind_once("fire", cb, "test:fire");
 
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("hellp", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
         }
     }
 
@@ -247,16 +247,16 @@ mod tests {
             let data1 = data.clone();
             let emitter = EventEmitter::new();
             emitter.bind("fire", move |_| {
-                data1.write().unwrap()[0] += 1;
+                lockw!(data1)[0] += 1;
             }, "omglolwtf");
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
             // replace with cb that does nothing. NO-THING.
             emitter.bind("fire", move |_| { }, "omglolwtf");
             emitter.trigger("fire", &jval);
             // should still be 1
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
         }
     }
 
@@ -269,22 +269,22 @@ mod tests {
             let data = data.clone();
             let cb = move |x: &Value| {
                 assert_eq!(jedi::stringify(x).unwrap(), r#"{"name":"larry"}"#);
-                data.write().unwrap()[0] += 1;
+                lockw!(data)[0] += 1;
             };
             let emitter = EventEmitter::new();
             //let data = data.clone();
             emitter.bind("fire", cb, "test:fire");
 
-            assert_eq!(rdata.read().unwrap()[0], 0);
+            assert_eq!(lockr!(rdata)[0], 0);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 1);
+            assert_eq!(lockr!(rdata)[0], 1);
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(lockr!(rdata)[0], 2);
 
             emitter.unbind("fire", "test:fire");
 
             emitter.trigger("fire", &jval);
-            assert_eq!(rdata.read().unwrap()[0], 2);
+            assert_eq!(lockr!(rdata)[0], 2);
         }
     }
 }

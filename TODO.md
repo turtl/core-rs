@@ -7,7 +7,21 @@ v0.7:
 	- create a default space "Personal" or some shit
 	- move all boards into the new space
 	- move all notes into the new space
-- import/export
+- integration tests
+  - sync:pause
+  - sync:resume
+  - sync:get-pending
+  - sync:unfreeze-item
+  - sync:delete-item
+  - profile:find-notes
+  - profile:get-file
+  - profile:get-tags
+  - profile:sync:model
+    - edit a note with a file (without re-uploading file, ie just edit title)
+      - does the file still remain?
+      - does the sync system break in any way?
+    - move space
+  - feedback:send??
 - premium
 
 later:
@@ -25,9 +39,11 @@ later:
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
 - investigate more stateless way of syncing files?
-- convert Turtl.db to use Mutex instead of RwLock
 - move Turtl.find_model_key(s) et al to protected model (or wherever
   appropriate)
+  - profile loading
+  - messaging
+  - key management
 - rename KEychainEntry.type\_ to ty
 - file writing locally: use buffers/locks:
   {

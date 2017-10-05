@@ -5,6 +5,32 @@ use ::std::io;
 use ::std::fs;
 use ::std::path::Path;
 
+macro_rules! do_lock {
+    ($lock:expr) => {{
+        $lock.unwrap()
+    }}
+}
+
+/// A macro that wraps locking mutexes. Really handy for debugging deadlocks.
+#[macro_export]
+macro_rules! lock {
+    ($lockable:expr) => { do_lock!($lockable.lock()) }
+}
+
+/// A macro that wraps read-locking RwLocks. Really handy for debugging
+/// deadlocks.
+#[macro_export]
+macro_rules! lockr {
+    ($lockable:expr) => { do_lock!($lockable.read()) }
+}
+
+/// A macro that wraps write-locking RwLocks. Really handy for debugging
+/// deadlocks.
+#[macro_export]
+macro_rules! lockw {
+    ($lockable:expr) => { do_lock!($lockable.write()) }
+}
+
 pub mod logger;
 pub mod event;
 pub mod thredder;

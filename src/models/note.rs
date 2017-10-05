@@ -2,12 +2,13 @@ use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::keychain::{Keychain, KeyRef};
+use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::file::{File, FileData};
 use ::models::sync_record::SyncAction;
 use ::crypto::Key;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::std::fs;
+use ::models::storable::Storable;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -82,6 +83,20 @@ impl Note {
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
         Ok(())
     }
+
+    /// Given a Turtl/note_id, grab that note's space_id (if it exists)
+    pub fn get_space_id(turtl: &Turtl, note_id: &String) -> Option<String> {
+        let mut db_guard = lock!(turtl.db);
+        match db_guard.as_mut() {
+            Some(db) => {
+                match db.get::<Self>(Self::tablename(), note_id) {
+                    Ok(x) => x.map(|i| i.space_id.clone()),
+                    Err(_) => None,
+                }
+            },
+            None => None,
+        }
+    }
 }
 
 impl Keyfinder for Note {
@@ -95,13 +110,11 @@ impl Keyfinder for Note {
         }
         match self.get_keys() {
             Some(keys) => for key in keys {
-                match key.get(&String::from("s")) {
-                    Some(id) => space_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Space {
+                    space_ids.push(key.id.clone());
                 }
-                match key.get(&String::from("b")) {
-                    Some(id) => board_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Board {
+                    board_ids.push(key.id.clone());
                 }
             },
             None => {},
@@ -109,7 +122,7 @@ impl Keyfinder for Note {
 
         if space_ids.len() > 0 {
             let ty = String::from("space");
-            let profile_guard = turtl.profile.read().unwrap();
+            let profile_guard = lockr!(turtl.profile);
             for space in &profile_guard.spaces {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
@@ -119,7 +132,7 @@ impl Keyfinder for Note {
         }
         if board_ids.len() > 0 {
             let ty = String::from("board");
-            let profile_guard = turtl.profile.read().unwrap();
+            let profile_guard = lockr!(turtl.profile);
             for board in &profile_guard.boards {
                 if board.id().is_none() || board.key().is_none() { continue; }
                 let board_id = board.id().unwrap();
@@ -132,12 +145,12 @@ impl Keyfinder for Note {
 
     fn get_keyrefs(&self, turtl: &Turtl) -> TResult<Vec<KeyRef<Key>>> {
         let mut refs: Vec<KeyRef<Key>> = Vec::new();
-        let profile_guard = turtl.profile.read().unwrap();
+        let profile_guard = lockr!(turtl.profile);
         for space in &profile_guard.spaces {
             if space.id() == Some(&self.space_id) && space.key().is_some() {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
-                    ty: String::from("s"),
+                    ty: KeyType::Space,
                     k: space.key().unwrap().clone(),
                 });
             }
@@ -149,7 +162,7 @@ impl Keyfinder for Note {
                     if board.id() == Some(board_id) && board.key().is_some() {
                         refs.push(KeyRef {
                             id: board_id.clone(),
-                            ty: String::from("b"),
+                            ty: KeyType::Board,
                             k: board.key().unwrap().clone(),
                         });
                     }
@@ -174,7 +187,7 @@ impl MemorySaver for Note {
                 let notes = turtl.load_notes(&vec![note_id])?;
                 if notes.len() == 0 { return Ok(()); }
                 let note = &notes[0];
-                let mut search_guard = turtl.search.write().unwrap();
+                let mut search_guard = lockw!(turtl.search);
                 match search_guard.as_mut() {
                     Some(ref mut search) => {
                         search.reindex_note(note)?;
@@ -184,7 +197,7 @@ impl MemorySaver for Note {
                 }
             }
             SyncAction::Delete => {
-                let mut search_guard = turtl.search.write().unwrap();
+                let mut search_guard = lockw!(turtl.search);
                 match search_guard.as_mut() {
                     Some(ref mut search) => search.unindex_note(&self)?,
                     // i COULD throw an error here. i'm choosing not to...

@@ -1,4 +1,4 @@
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, Mutex};
 use ::std::io::ErrorKind;
 use ::jedi::{self, Value};
 use ::error::{TResult, TError};
@@ -48,7 +48,7 @@ struct Handlers {
 pub fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &str) {
     match jedi::get_opt::<Vec<i64>>(&["sync_ids"], val_with_sync_ids) {
         Some(x) => {
-            let mut db_guard = turtl.db.write().unwrap();
+            let mut db_guard = lock!(turtl.db);
             if db_guard.is_some() {
                 match SyncIncoming::ignore_on_next(db_guard.as_mut().unwrap(), &x) {
                     Ok(..) => {},
@@ -72,7 +72,7 @@ pub struct SyncIncoming {
 
     /// Holds our user-specific db. This is mainly for persisting k/v data (such
     /// as our last sync_id).
-    db: Arc<RwLock<Option<Storage>>>,
+    db: Arc<Mutex<Option<Storage>>>,
 
     /// For each type we get back from an outgoing poll, defines a collection
     /// that is able to handle that incoming item (for instance a "note" coming
@@ -82,7 +82,7 @@ pub struct SyncIncoming {
 
 impl SyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> SyncIncoming {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> SyncIncoming {
         let handlers = Handlers {
             user: models::user::User::new(),
             keychain: models::keychain::KeychainEntry::new(),
@@ -235,7 +235,7 @@ impl SyncIncoming {
         // at this particular juncture.
         let sync_incoming_queue = {
             let conf = self.get_config();
-            let sync_config_guard = conf.read().unwrap();
+            let sync_config_guard = lockr!(conf);
             sync_config_guard.incoming_sync.clone()
         };
         // queue em
@@ -297,7 +297,7 @@ impl Syncer for SyncIncoming {
     fn init(&self) -> TResult<()> {
         let sync_id = with_db!{ db, self.db, db.kv_get("sync_id") }?;
         let skip_init = {
-            let config_guard = self.config.read().unwrap();
+            let config_guard = lockr!(self.config);
             config_guard.skip_api_init
         };
         let res = if !skip_init {
@@ -332,7 +332,7 @@ impl Syncer for SyncIncoming {
 /// incoming syncs.
 pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
     let sync_incoming_queue = {
-        let sync_config_guard = turtl.sync_config.read().unwrap();
+        let sync_config_guard = lockr!(turtl.sync_config);
         sync_config_guard.incoming_sync.clone()
     };
     loop {

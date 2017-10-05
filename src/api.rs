@@ -103,21 +103,21 @@ impl Api {
     pub fn set_auth(&self, username: String, auth: String) -> TResult<()> {
         let auth_str = format!("{}:{}", username, auth);
         let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
-        let ref mut config_guard = self.config.write().unwrap();
+        let ref mut config_guard = lockw!(self.config);
         config_guard.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())
     }
 
     /// Clear out the API auth
     pub fn clear_auth(&self) {
-        let ref mut config_guard = self.config.write().unwrap();
+        let ref mut config_guard = lockw!(self.config);
         config_guard.auth = None;
     }
 
     /// Write our auth headers into a header collection
     pub fn set_auth_headers(&self, headers: &mut Headers) {
         let auth = {
-            let ref guard = self.config.read().unwrap();
+            let ref guard = lockr!(self.config);
             guard.auth.clone()
         };
         match auth {

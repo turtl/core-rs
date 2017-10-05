@@ -2,4 +2,6 @@ vars.mk
 target
 config.yaml
 sess.vim
+*.exe
+*.stackdump
 

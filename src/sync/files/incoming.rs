@@ -1,4 +1,4 @@
-use ::std::sync::{Arc, RwLock};
+use ::std::sync::{Arc, RwLock, Mutex};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
@@ -23,12 +23,12 @@ pub struct FileSyncIncoming {
 
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling for file records that need downloading.
-    db: Arc<RwLock<Option<Storage>>>,
+    db: Arc<Mutex<Option<Storage>>>,
 }
 
 impl FileSyncIncoming {
     /// Create a new incoming syncer
-    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<RwLock<Option<Storage>>>) -> Self {
+    pub fn new(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Option<Storage>>>) -> Self {
         FileSyncIncoming {
             config: config,
             api: api,
@@ -59,7 +59,7 @@ impl FileSyncIncoming {
         let note_id = &sync.item_id;
         let user_id = {
             let local_config = self.get_config();
-            let guard = local_config.read().unwrap();
+            let guard = lockr!(local_config);
             match guard.user_id.as_ref() {
                 Some(x) => x.clone(),
                 None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),

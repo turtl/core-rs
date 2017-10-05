@@ -4,7 +4,6 @@
 
 use ::std::sync::{Arc, RwLock, Mutex};
 use ::std::ops::Drop;
-use ::std::collections::HashMap;
 use ::std::fs;
 use ::regex::Regex;
 use ::num_cpus;
@@ -23,7 +22,7 @@ use ::models::user::{self, User};
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::invite::Invite;
-use ::models::keychain::{self, KeyRef, KeychainEntry};
+use ::models::keychain::KeychainEntry;
 use ::models::note::Note;
 use ::models::file::FileData;
 use ::messaging::{self, Messenger, Response};
@@ -76,7 +75,7 @@ pub struct Turtl {
     /// named via a function of the user ID and the server we're talking to,
     /// meaning we can have multiple databases that store different things for
     /// different people depending on server/user.
-    pub db: Arc<RwLock<Option<Storage>>>,
+    pub db: Arc<Mutex<Option<Storage>>>,
     /// Our external API object. Note that most things API-related go through
     /// the Sync system, but there are a handful of operations that Sync doesn't
     /// handle that need API access (invites come to mind). Use sparingly.
@@ -116,7 +115,7 @@ impl Turtl {
             msg: Messenger::new(),
             work: Thredder::new("work", num_workers as u32),
             kv: kv,
-            db: Arc::new(RwLock::new(None)),
+            db: Arc::new(Mutex::new(None)),
             search: RwLock::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
@@ -163,7 +162,7 @@ impl Turtl {
 
     /// Set up the user object
     fn setup_user(&self) {
-        let mut user_guard = self.user.write().unwrap();
+        let mut user_guard = lockw!(self.user);
         *user_guard = User::default();
         user_guard.bind("login", |obj| {
             match messaging::ui_event("user:login", obj) {
@@ -181,13 +180,13 @@ impl Turtl {
 
     /// If the `turtl.user` object has a valid ID, set it into `turtl.user_id`
     fn set_user_id(&self) {
-        let user_guard = self.user.read().unwrap();
+        let user_guard = lockr!(self.user);
         match user_guard.id() {
             Some(id) => {
-                let mut isengard = self.user_id.write().unwrap();
+                let mut isengard = lockw!(self.user_id);
                 *isengard = Some(id.clone());
 
-                let mut sync_config_guard = self.sync_config.write().unwrap();
+                let mut sync_config_guard = lockw!(self.sync_config);
                 sync_config_guard.user_id = Some(id.clone());
                 drop(sync_config_guard);
             }
@@ -197,17 +196,17 @@ impl Turtl {
 
     /// Clear out `turtl.user_id` to be None
     fn clear_user_id(&self) {
-        let mut isengard = self.user_id.write().unwrap();
+        let mut isengard = lockw!(self.user_id);
         *isengard = None;
 
-        let mut sync_config_guard = self.sync_config.write().unwrap();
+        let mut sync_config_guard = lockw!(self.sync_config);
         sync_config_guard.user_id = None;
         drop(sync_config_guard);
     }
 
     /// Grab the current user id OR ELSE
     pub fn user_id(&self) -> TResult<String> {
-        let isengard = self.user_id.read().unwrap();
+        let isengard = lockr!(self.user_id);
         match isengard.as_ref() {
             Some(x) => Ok(x.clone()),
             None => return TErr!(TError::MissingField(String::from("Turtl.user_id"))),
@@ -220,7 +219,7 @@ impl Turtl {
         User::login(self, username, password, version)?;
         self.set_user_id();
         let db = self.create_user_db()?;
-        let mut db_guard = self.db.write().unwrap();
+        let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
         Ok(())
@@ -231,7 +230,7 @@ impl Turtl {
         User::join(self, username, password)?;
         self.set_user_id();
         let db = self.create_user_db()?;
-        let mut db_guard = self.db.write().unwrap();
+        let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
         User::post_join(self)?;
@@ -241,16 +240,16 @@ impl Turtl {
     /// Log a user out
     pub fn logout(&self) -> TResult<()> {
         {
-            let mut profile_guard = self.profile.write().unwrap();
+            let mut profile_guard = lockw!(self.profile);
             profile_guard.wipe();
         }
         self.sync_shutdown(false)?;
         self.clear_user_id();
         User::logout(self)?;
-        let mut db_guard = self.db.write().unwrap();
+        let mut db_guard = lock!(self.db);
         *db_guard = None;
         self.setup_user();
-        let mut connguard = self.connected.write().unwrap();
+        let mut connguard = lockw!(self.connected);
         *connguard = false;
         Ok(())
     }
@@ -258,7 +257,7 @@ impl Turtl {
     /// Change the current user's username/password
     pub fn change_user_password(&self, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
         self.assert_connected()?;
-        let mut user_guard = self.user.write().unwrap();
+        let mut user_guard = lockw!(self.user);
         user_guard.change_password(self, current_username, current_password, new_username, new_password)?;
         drop(user_guard);
         self.logout()?;
@@ -275,7 +274,7 @@ impl Turtl {
 
     /// Returns an Err value if we aren't connected.
     pub fn assert_connected(&self) -> TResult<()> {
-        if !(*self.connected.read().unwrap()) {
+        if !(*lockr!(self.connected)) {
             TErr!(TError::ConnectionRequired)
         } else {
             Ok(())
@@ -291,7 +290,7 @@ impl Turtl {
         // start the sync, and save the resulting state into Turtl
         let sync_state = sync::start(self.sync_config.clone(), self.api.clone(), self.db.clone())?;
         {
-            let mut state_guard = self.sync_state.write().unwrap();
+            let mut state_guard = lockw!(self.sync_state);
             *state_guard = Some(sync_state);
         }
 
@@ -305,7 +304,7 @@ impl Turtl {
         // MemorySaver on the incoming syncs we just created while doing our
         // sync init.
         {
-            let sync_config_guard = self.sync_config.read().unwrap();
+            let sync_config_guard = lockr!(self.sync_config);
             loop {
                 if sync_config_guard.incoming_sync.try_pop().is_none() { break; }
             }
@@ -318,7 +317,7 @@ impl Turtl {
 
     /// Shut down the sync system
     pub fn sync_shutdown(&self, join: bool) -> TResult<()> {
-        let mut guard = self.sync_state.write().unwrap();
+        let mut guard = lockw!(self.sync_state);
         if guard.is_none() { return Ok(()); }
         {
             let state = guard.as_mut().unwrap();
@@ -339,21 +338,31 @@ impl Turtl {
         *guard = None;
 
         // set connected to false on sync shutdown
-        let mut connguard = self.connected.write().unwrap();
+        let mut connguard = lockw!(self.connected);
         *connguard = false;
         Ok(())
     }
 
     /// Pause the sync system (if active)
     pub fn sync_pause(&self) {
-        let guard = self.sync_state.read().unwrap();
+        let guard = lockr!(self.sync_state);
         if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
     }
 
     /// Resume the sync system (if active)
     pub fn sync_resume(&self) {
-        let guard = self.sync_state.read().unwrap();
+        let guard = lockr!(self.sync_state);
         if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
+    }
+
+    /// Returns whether or not the sync system is running
+    pub fn sync_running(&self) -> bool {
+        let guard = lockr!(self.sync_state);
+        if guard.is_some() {
+            (guard.as_ref().unwrap().enabled)()
+        } else {
+            false
+        }
     }
 
     /// Create a new per-user database for the current user.
@@ -367,7 +376,7 @@ impl Turtl {
     /// the current logged-in user.
     pub fn get_user_db_location(&self) -> TResult<String> {
         let user_id = {
-            let user_guard = self.user.read().unwrap();
+            let user_guard = lockr!(self.user);
             user_guard.id_or_else()?
         };
 
@@ -403,14 +412,14 @@ impl Turtl {
         // skip the song and dance of searching and just set it in here.
         if model.model_type() == "keychain" {
             let user_key = {
-                let user_guard = self.user.read().unwrap();
+                let user_guard = lockr!(self.user);
                 user_guard.key_or_else()?
             };
             return found_key(model, user_key);
         }
 
         // fyi ders, this read lock is going to be open until we return
-        let profile_guard = self.profile.read().unwrap();
+        let profile_guard = lockr!(self.profile);
         let ref keychain = profile_guard.keychain;
 
         // check the keychain right off the bat. it's quick and easy, and most
@@ -432,28 +441,21 @@ impl Turtl {
         // is a much more versatile way of decrypting data.
         let mut search = model.get_key_search(self)?;
 
-        // grab the model.keys collection.
-        let encrypted_keys: Vec<HashMap<String, String>> = match model.get_keys() {
-            Some(x) => x.clone(),
-            None => Vec::new(),
-        };
-
-        // turn model.keys into a KeyRef collection, and filter out crappy
-        // entries
-        let encrypted_keys: Vec<KeyRef<String>> = encrypted_keys.into_iter()
-            .map(|entry| keychain::keyref_from_encrypted(&entry))
-            .filter(|x| x.k != "")
-            .collect::<Vec<_>>();
-
         // push the user's key into our search, if it's available
         {
-            let user_guard = self.user.read().unwrap();
+            let user_guard = lockr!(self.user);
             if user_guard.id().is_some() && user_guard.key().is_some() {
                 let id = user_guard.id().unwrap().clone();
                 let key = user_guard.key().unwrap().clone();
                 drop(user_guard);
                 search.upsert_key(self, &id, &key, &String::from("user"))?;
             }
+        }
+
+        let def = Vec::new();
+        let mut encrypted_keys = Vec::new();
+        for enckey in model.get_keys().unwrap_or(&def) {
+            encrypted_keys.push(enckey.clone());
         }
 
         // let the hunt begin! basically, we loop over each model.keys entry and
@@ -474,7 +476,8 @@ impl Turtl {
         // keychain *and* in the model's search keychain. if we find a match, we
         // can use the board's key, "696969", to decrypt the model's key entry
         // "b50942fe" into the model's actual key.
-        for keyref in &encrypted_keys {
+        // grab the model.keys collection.
+        for keyref in encrypted_keys {
             let ref encrypted_key = keyref.k;
             let ref object_id = keyref.id;
 
@@ -530,7 +533,7 @@ impl Turtl {
     /// Meaning, we decrypt the keychain, spaces, and boards and store them
     /// in-memory in our `turtl.profile` object.
     pub fn load_profile(&self) -> TResult<()> {
-        let db_guard = self.db.write().unwrap();
+        let db_guard = lock!(self.db);
         if db_guard.is_none() {
             return TErr!(TError::MissingField(String::from("Turtl.db")));
         }
@@ -543,7 +546,7 @@ impl Turtl {
         // decrypt the keychain
         self.find_models_keys(&mut keychain)?;
         let keychain: Vec<KeychainEntry> = protected::map_deserialize(self, keychain)?;
-        let mut profile_guard = self.profile.write().unwrap();
+        let mut profile_guard = lockw!(self.profile);
         profile_guard.keychain.entries = keychain;
         drop(profile_guard);
 
@@ -551,7 +554,7 @@ impl Turtl {
         self.find_models_keys(&mut spaces)?;
         let spaces: Vec<Space> = protected::map_deserialize(self, spaces)?;
         // set the spaces into the profile
-        let mut profile_guard = self.profile.write().unwrap();
+        let mut profile_guard = lockw!(self.profile);
         profile_guard.spaces = spaces;
         drop(profile_guard);
 
@@ -559,17 +562,17 @@ impl Turtl {
         self.find_models_keys(&mut boards)?;
         let boards: Vec<Board> = protected::map_deserialize(self, boards)?;
         // set the boards into the profile
-        let mut profile_guard = self.profile.write().unwrap();
+        let mut profile_guard = lockw!(self.profile);
         profile_guard.boards = boards;
         drop(profile_guard);
 
         // invites are NOT decrypted. they are stored as-is.
         // set the invites into the profile
-        let mut profile_guard = self.profile.write().unwrap();
+        let mut profile_guard = lockw!(self.profile);
         profile_guard.invites = invites;
         drop(profile_guard);
 
-        let mut user_guard = self.user.write().unwrap();
+        let mut user_guard = lockw!(self.user);
         user_guard.deserialize()?;
 
         self.events.trigger("profile:loaded", &jedi::obj());
@@ -578,7 +581,7 @@ impl Turtl {
 
     /// Load/deserialize a set of notes by id.
     pub fn load_notes(&self, note_ids: &Vec<String>) -> TResult<Vec<Note>> {
-        let db_guard = self.db.read().unwrap();
+        let db_guard = lock!(self.db);
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
@@ -593,7 +596,7 @@ impl Turtl {
     /// and free them. The idea is we can get a set of note IDs from a search,
     /// but we're not holding all our notes decrypted in memory at all times.
     pub fn index_notes(&self) -> TResult<()> {
-        let db_guard = self.db.write().unwrap();
+        let db_guard = lock!(self.db);
         if db_guard.is_none() {
             return TErr!(TError::MissingData(String::from("Turtl.db")));
         }
@@ -613,7 +616,7 @@ impl Turtl {
                 Err(e) => error!("turtl.index_notes() -- problem indexing note {:?}: {}", note.id(), e),
             }
         }
-        let mut search_guard = self.search.write().unwrap();
+        let mut search_guard = lockw!(self.search);
         *search_guard = Some(search);
         Ok(())
     }
@@ -624,7 +627,7 @@ impl Turtl {
         self.sync_shutdown(true)?;
         self.logout()?;
 
-        let mut kv_guard = self.kv.write().unwrap();
+        let mut kv_guard = lockw!(self.kv);
         kv_guard.close()?;
         let data_folder = data_folder()?;
         debug!("turtl.wipe_app_data() -- wiping everything in {}", data_folder);
@@ -700,7 +703,7 @@ impl Drop for Turtl {
 pub mod tests {
     use super::*;
 
-    use ::std::sync::RwLock;
+    use ::std::sync::{RwLock, Mutex};
 
     use ::jedi;
 
@@ -734,11 +737,11 @@ pub mod tests {
             let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600}"#)).unwrap();
             let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
             user.do_login(user_key, user_auth);
-            let mut user_guard = turtl.user.write().unwrap();
+            let mut user_guard = lockw!(turtl.user);
             *user_guard = user;
             drop(user_guard);
             let db = turtl.create_user_db().unwrap();
-            let mut db_guard = turtl.db.write().unwrap();
+            let mut db_guard = lock!(turtl.db);
             *db_guard = Some(db);
             drop(db_guard);
             turtl.set_user_id();
@@ -758,7 +761,7 @@ pub mod tests {
         let turtl = with_test(true);
 
         // add the note's key as a direct entry to the keychain
-        let mut profile_guard = turtl.profile.write().unwrap();
+        let mut profile_guard = lockw!(turtl.profile);
         profile_guard.keychain.upsert_key(&turtl, note.id().unwrap(), &note_key, &String::from("note")).unwrap();
         drop(profile_guard);
 
@@ -770,7 +773,7 @@ pub mod tests {
         }
 
         // clear out the keychain, and add the board's key to the keychain
-        let mut profile_guard = turtl.profile.write().unwrap();
+        let mut profile_guard = lockw!(turtl.profile);
         profile_guard.keychain.entries.clear();
         assert_eq!(profile_guard.keychain.entries.len(), 0);
         profile_guard.keychain.upsert_key(&turtl, board.id().unwrap(), &board_key, &String::from("board")).unwrap();
@@ -797,7 +800,7 @@ pub mod tests {
 
         // clear out the keychain. we're going to see if the note's
         // get_key_search() function works for us
-        let mut profile_guard = turtl.profile.write().unwrap();
+        let mut profile_guard = lockw!(turtl.profile);
         profile_guard.keychain.entries.clear();
         // put the board into the profile
         profile_guard.boards.push(board);
@@ -846,10 +849,10 @@ pub mod tests {
             for board in &boards { db.save(board).unwrap(); }
             for note in &notes { db.save(note).unwrap(); }
         }
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         turtl.load_profile().unwrap();
-        let profile_guard = turtl.profile.read().unwrap();
+        let profile_guard = lockr!(turtl.profile);
         assert_eq!(profile_guard.keychain.entries.len(), 8);
         assert_eq!(profile_guard.spaces.len(), 3);
         assert_eq!(profile_guard.boards.len(), 3);
@@ -860,7 +863,7 @@ pub mod tests {
             jedi::parse(&String::from(json)).unwrap()
         }
 
-        let search_guard = turtl.search.read().unwrap();
+        let search_guard = lockr!(turtl.search);
         let search = search_guard.as_ref().unwrap();
 
         // this stuff is mostly covered in the search tests, but let's
@@ -896,13 +899,13 @@ pub mod tests {
         let mut turtl = with_test(false);
         turtl.user = RwLock::new(user);
         {
-            let user_guard = turtl.user.read().unwrap();
-            let mut isengard = turtl.user_id.write().unwrap();
+            let user_guard = lockr!(turtl.user);
+            let mut isengard = lockw!(turtl.user_id);
             *isengard = Some(user_guard.id().unwrap().clone());
         }
 
         let db = turtl.create_user_db().unwrap();
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         let mut space: Space = jedi::parse(&String::from(r#"{
             "user_id":69,
@@ -934,7 +937,7 @@ pub mod tests {
         assert_eq!(notes[0].title, Some(String::from("my fav website LOL")));
 
         sync_model::delete_model::<Space>(&turtl, &space_id, false).unwrap();
-        let profile_guard = turtl.profile.read().unwrap();
+        let profile_guard = lockr!(turtl.profile);
         let notes: Vec<Note> = turtl.load_notes(&vec![id.clone()]).unwrap();
         // we should have 0 spaces after removing the space
         assert_eq!(profile_guard.spaces.len(), 0);
@@ -953,13 +956,13 @@ pub mod tests {
         let mut turtl = with_test(false);
         turtl.user = RwLock::new(user);
         {
-            let user_guard = turtl.user.read().unwrap();
-            let mut isengard = turtl.user_id.write().unwrap();
+            let user_guard = lockr!(turtl.user);
+            let mut isengard = lockw!(turtl.user_id);
             *isengard = Some(user_guard.id().unwrap().clone());
         }
 
         let db = turtl.create_user_db().unwrap();
-        turtl.db = Arc::new(RwLock::new(Some(db)));
+        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         let mut space: Space = jedi::from_val(json!({
             "user_id":69,
@@ -969,7 +972,7 @@ pub mod tests {
         sync_model::save_model(SyncAction::Add, &turtl, &mut space, false).unwrap();
 
         // load our outgoing sync records and verify them
-        let db_guard = turtl.db.read().unwrap();
+        let db_guard = lock!(turtl.db);
         let db = db_guard.as_ref().unwrap();
         let syncs: Vec<SyncRecord> = db.all("sync").unwrap();
         assert_eq!(syncs.len(), 2);

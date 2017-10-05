@@ -187,7 +187,7 @@ impl FileData {
             enc
         };
 
-        // encrypt the file using the turtl standard serialization format
+        // decrypt the file using the turtl standard serialization format
         let data = turtl.work.run(move || {
             crypto::decrypt(&note_key, enc)
                 .map_err(|e| From::from(e))
@@ -233,7 +233,7 @@ impl FileData {
         // phew, now that all went smoothly, create a sync record for the saved
         // file (which will let the sync system know to upload our heroic file)
         let create_sync = move || -> TResult<()> {
-            let mut db_guard = turtl.db.write().unwrap();
+            let mut db_guard = lock!(turtl.db);
             let db = match db_guard.as_mut() {
                 Some(x) => x,
                 None => return TErr!(TError::MissingField(format!("Turtl.db"))),
@@ -283,10 +283,7 @@ mod tests {
     #[test]
     fn can_save_and_load_files() {
         let turtl = ::turtl::tests::with_test(true);
-        let user_id = {
-            let user_guard = turtl.user_id.read().unwrap();
-            user_guard.as_ref().unwrap().clone()
-        };
+        let user_id = turtl.user_id().unwrap();
 
         let mut note: Note = jedi::from_val(json!({
             "space_id": "6969",
@@ -315,7 +312,7 @@ mod tests {
         // see if the file contents match after decryption
         assert_eq!(String::from_utf8(loaded).unwrap(), r#"{"age":42,"dislikes":"slappy","likes":"slippy","lives":{"city":"santa cruz brahhhh"},"name":"flippy"}"#);
 
-        let mut db_guard = turtl.db.write().unwrap();
+        let mut db_guard = lock!(turtl.db);
         let db = db_guard.as_mut().unwrap();
         file.db_delete(db, None).unwrap();
 

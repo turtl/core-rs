@@ -16,13 +16,12 @@ use ::util;
 use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
-use ::profile::Profile;
+use ::profile::{Profile, Export, ImportMode};
 use ::models::model::Model;
 use ::models::protected::Protected;
 use ::models::user::User;
 use ::models::space::Space;
 use ::models::space_member::SpaceMember;
-use ::models::board::Board;
 use ::models::note::Note;
 use ::models::invite::{Invite, InviteRequest};
 use ::models::file::FileData;
@@ -32,8 +31,6 @@ use ::clippo::{self, CustomParser};
 use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
-use ::lib_permissions::Permission;
-use ::models::storable::Storable;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -73,7 +70,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::to_val(&user)?)
         }
         "app:connected" => {
-            let connguard = turtl.connected.read().unwrap();
+            let connguard = lockr!(turtl.connected);
             let connected: bool = *connguard;
             drop(connguard);
             Ok(Value::Bool(connected))
@@ -97,6 +94,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "sync:resume" => {
             turtl.sync_resume();
             Ok(jedi::obj())
+        }
+        "sync:status" => {
+            Ok(Value::Bool(turtl.sync_running()))
         }
         "sync:shutdown" => {
             turtl.sync_shutdown(true)?;
@@ -127,8 +127,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::obj())
         }
         "profile:load" => {
-            let user_guard = turtl.user.read().unwrap();
-            let profile_guard = turtl.profile.read().unwrap();
+            let user_guard = lockr!(turtl.user);
+            let profile_guard = lockr!(turtl.profile);
             let profile_data = json!({
                 "user": &user_guard.as_ref(),
                 "spaces": &profile_guard.spaces,
@@ -143,147 +143,18 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 Err(e) => return TErr!(TError::BadValue(format!("bad sync action: {}", e))),
             };
             let ty: SyncType = jedi::get(&["3"], &data)?;
-
-            match action.clone() {
-                SyncAction::Add | SyncAction::Edit => {
-                    let val = match ty {
-                        SyncType::User => {
-                            if action != SyncAction::Edit {
-                                return TErr!(TError::BadValue(format!("cannot `add` item of type {:?}", ty)));
-                            }
-                            let mut model: User = jedi::get(&["4"], &data)?;
-                            sync_model::save_model(action, turtl, &mut model, false)?
-                        }
-                        SyncType::Space => {
-                            let mut model: Space = jedi::get(&["4"], &data)?;
-                            match &action {
-                                &SyncAction::Edit => {
-                                    let fake_id = String::from("<no id>");
-                                    let space_id = model.id().unwrap_or(&fake_id);
-                                    Space::permission_check(turtl, space_id, &Permission::EditSpace)?;
-                                }
-                                _ => {}
-                            };
-                            sync_model::save_model(action, turtl, &mut model, false)?
-                        }
-                        SyncType::Board => {
-                            let mut model: Board = jedi::get(&["4"], &data)?;
-                            let permission = match &action {
-                                &SyncAction::Add => Permission::AddBoard,
-                                &SyncAction::Edit => Permission::EditBoard,
-                                _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
-                            };
-                            Space::permission_check(turtl, &model.space_id, &permission)?;
-                            sync_model::save_model(action, turtl, &mut model, false)?
-                        }
-                        SyncType::Note => {
-                            let mut note: Note = jedi::get(&["4"], &data)?;
-                            let permission = match &action {
-                                &SyncAction::Add => Permission::AddNote,
-                                &SyncAction::Edit => Permission::EditNote,
-                                _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
-                            };
-                            Space::permission_check(turtl, &note.space_id, &permission)?;
-                            // always set to false. this is a public field that
-                            // we let the server manage for us
-                            note.has_file = false;
-                            let filemebbe: Option<FileData> = jedi::get_opt(&["5"], &data);
-                            let note_data = sync_model::save_model(action, turtl, &mut note, false)?;
-                            match filemebbe {
-                                Some(mut file) => {
-                                    file.save(turtl, &mut note)?;
-                                }
-                                None => {}
-                            }
-                            note_data
-                        }
-                        _ => {
-                            return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
-                        }
-                    };
-                    Ok(val)
-                }
-                SyncAction::Delete => {
-                    let id: String = jedi::get(&["4", "id"], &data)?;
-                    fn get_model<T>(turtl: &Turtl, id: &String) -> TResult<T>
-                        where T: Protected + Storable
-                    {
-                        let mut db_guard = turtl.db.write().unwrap();
-                        let db = match db_guard.as_mut() {
-                            Some(x) => x,
-                            None => return TErr!(TError::MissingField(format!("turtl is missing `db` object"))),
-                        };
-                        match db.get::<T>(T::tablename(), id)? {
-                            Some(x) => Ok(x),
-                            None => return TErr!(TError::NotFound(format!("that {} model wasn't found", T::tablename()))),
-                        }
-                    }
-                    match ty {
-                        SyncType::Space => {
-                            Space::permission_check(turtl, &id, &Permission::DeleteSpace)?;
-                            sync_model::delete_model::<Space>(turtl, &id, false)?;
-                        }
-                        SyncType::Board => {
-                            let model = get_model::<Board>(turtl, &id)?;
-                            Space::permission_check(turtl, &model.space_id, &Permission::DeleteBoard)?;
-                            sync_model::delete_model::<Board>(turtl, &id, false)?;
-                        }
-                        SyncType::Note => {
-                            let model = get_model::<Note>(turtl, &id)?;
-                            Space::permission_check(turtl, &model.space_id, &Permission::DeleteNote)?;
-                            sync_model::delete_model::<Note>(turtl, &id, false)?;
-                        }
-                        SyncType::File => {
-                            let model = get_model::<Note>(turtl, &id)?;
-                            Space::permission_check(turtl, &model.space_id, &Permission::EditNote)?;
-                            sync_model::delete_model::<FileData>(turtl, &id, false)?;
-                        }
-                        _ => {
-                            return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
-                        }
-                    }
-                    Ok(jedi::obj())
-                }
-                SyncAction::MoveSpace => {
-                    let item_id = jedi::get(&["4", "id"], &data)?;
-                    let space_id = jedi::get(&["4", "space_id"], &data)?;
-                    match ty {
-                        SyncType::Board => {
-                            Space::permission_check(turtl, &space_id, &Permission::DeleteBoard)?;
-                            Space::permission_check(turtl, &space_id, &Permission::AddBoard)?;
-                            let mut profile_guard = turtl.profile.write().unwrap();
-                            let boards = &mut profile_guard.boards;
-                            let board = match Profile::finder(boards, &item_id) {
-                                Some(m) => m,
-                                None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
-                            };
-                            board.move_spaces(turtl, space_id)?;
-                        }
-                        SyncType::Note => {
-                            Space::permission_check(turtl, &space_id, &Permission::DeleteNote)?;
-                            Space::permission_check(turtl, &space_id, &Permission::AddNote)?;
-                            let mut notes = turtl.load_notes(&vec![item_id.clone()])?;
-                            if notes.len() == 0 {
-                                return TErr!(TError::MissingData(format!("trouble grabbing Note {}", item_id)));
-                            }
-                            let note = &mut notes[0];
-                            note.move_spaces(turtl, space_id)?;
-                        }
-                        _ => {
-                            return TErr!(TError::BadValue(format!("cannot {:?} item of type {:?}", action, ty)));
-                        }
-                    }
-                    Ok(jedi::obj())
-                }
-                _ => {
-                    TErr!(TError::BadValue(format!("unimplemented sync action {:?}", action)))
-                }
-            }
+            let modeldata: Value = jedi::get(&["4"], &data)?;
+            // construct a sync record and hand to our sync dispatcher
+            let mut sync_record = SyncRecord::default();
+            sync_record.action = action;
+            sync_record.ty = ty;
+            sync_record.data = Some(modeldata);
+            sync_model::dispatch(turtl, sync_record)
         }
         "profile:space:set-owner" => {
             let space_id = jedi::get(&["2"], &data)?;
             let user_id = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -293,7 +164,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:edit-member" => {
             let mut member: SpaceMember = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", member.space_id))),
@@ -304,7 +175,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:delete-member" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let user_id: String = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -314,7 +185,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:leave" => {
             let space_id: String = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -324,7 +195,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:send-invite" => {
             let req: InviteRequest = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &req.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", req.space_id))),
@@ -340,7 +211,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:space:edit-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", invite.space_id))),
@@ -351,7 +222,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:delete-invite" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let invite_id: String = jedi::get(&["3"], &data)?;
-            let mut profile_guard = turtl.profile.write().unwrap();
+            let mut profile_guard = lockw!(turtl.profile);
             let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
@@ -371,7 +242,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "profile:find-notes" => {
             let qry: Query = jedi::get(&["2"], &data)?;
-            let search_guard = turtl.search.read().unwrap();
+            let search_guard = lockr!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
@@ -390,13 +261,23 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let space_id: String = jedi::get(&["2"], &data)?;
             let boards: Vec<String> = jedi::get(&["3"], &data)?;
             let limit: i32 = jedi::get(&["4"], &data)?;
-            let search_guard = turtl.search.read().unwrap();
+            let search_guard = lockr!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
             let search = search_guard.as_ref().unwrap();
             let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
             Ok(jedi::to_val(&tags)?)
+        }
+        "profile:export" => {
+            let export = Profile::export(turtl)?;
+            Ok(jedi::to_val(&export)?)
+        }
+        "profile:import" => {
+            let mode: ImportMode = jedi::get(&["2"], &data)?;
+            let export: Export = jedi::get(&["3"], &data)?;
+            let result = Profile::import(turtl, mode, export)?;
+            Ok(jedi::to_val(&result)?)
         }
         "feedback:send" => {
             let feedback: Feedback = jedi::get(&["2"], &data)?;
@@ -426,14 +307,14 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
     match cmd.as_ref() {
         "sync:connected" => {
             let yesno: bool = jedi::from_val(data)?;
-            let mut connguard = turtl.connected.write().unwrap();
+            let mut connguard = lockw!(turtl.connected);
             *connguard = yesno;
         }
         "sync:incoming" => {
             sync::incoming::process_incoming_sync(turtl)?;
         }
         "user:edit" => {
-            let mut user_guard = turtl.user.write().unwrap();
+            let mut user_guard = lockw!(turtl.user);
             user_guard.merge_fields(&data)?;
         }
         "user:change-password:logout" => {

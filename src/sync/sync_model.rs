@@ -12,6 +12,13 @@ use ::models::protected::{Protected, Keyfinder};
 use ::models::keychain;
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::storable::Storable;
+use ::models::user::User;
+use ::models::space::Space;
+use ::models::board::Board;
+use ::models::note::Note;
+use ::models::file::FileData;
+use ::profile::Profile;
+use ::lib_permissions::Permission;
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
 use ::std::mem;
@@ -137,27 +144,34 @@ pub trait MemorySaver: Protected {
 }
 
 /// Serialize this model and save it to the local db
-///
 pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
     where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
 {
     {
-        let db_guard = turtl.db.write().unwrap();
+        let db_guard = lock!(turtl.db);
         let db = match (*db_guard).as_ref() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
         };
 
-        if model.is_new() {
+        if action == SyncAction::Add {
             model.generate_id()?;
             model.generate_key()?;
         } else {
             let got_model = db.get::<T>(model.table(), model.id().unwrap())?;
             match got_model {
                 Some(db_model) => {
-                    let model_data: Value = model.data()?;
+                    let mut model_data: Value = model.data()?;
+                    // users can't directly edit object ownership
+                    jedi::remove(&["user_id"], &mut model_data)?;
                     model.merge_fields(&db_model.data_for_storage()?)?;
                     model.merge_fields(&model_data)?;
+                    match db_model.get_keys() {
+                        Some(keys) => {
+                            model.set_keys(keys.clone());
+                        }
+                        None => {}
+                    }
                 },
                 None => (),
             }
@@ -179,7 +193,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
 
     {
         let user_id = turtl.user_id()?;
-        let mut db_guard = turtl.db.write().unwrap();
+        let mut db_guard = lock!(turtl.db);
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
@@ -208,7 +222,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
 
     {
         let user_id = turtl.user_id()?;
-        let mut db_guard = turtl.db.write().unwrap();
+        let mut db_guard = lock!(turtl.db);
         let db = match (*db_guard).as_mut() {
             Some(x) => x,
             None => return TErr!(TError::MissingField(format!("Turtl.db ({})", model.model_type()))),
@@ -217,5 +231,172 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     }
     model.run_mem_update(turtl, SyncAction::Delete)?;
     Ok(())
+}
+
+/// Given a sync record, dispatch it into the sync system, calling the
+/// appropriate functions and running any permissions checks.
+pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
+    let SyncRecord {action, ty, data: modeldata_maybe, ..} = sync_record;
+    let mut modeldata = match modeldata_maybe {
+        Some(x) => x,
+        None => return TErr!(TError::MissingField(String::from("sync_record.data"))),
+    };
+
+    match action.clone() {
+        SyncAction::Add | SyncAction::Edit => {
+            let val = match ty {
+                SyncType::User => {
+                    if action != SyncAction::Edit {
+                        return TErr!(TError::BadValue(format!("cannot `add` item of type {:?}", ty)));
+                    }
+                    let mut model: User = jedi::from_val(modeldata)?;
+                    save_model(action, turtl, &mut model, false)?
+                }
+                SyncType::Space => {
+                    let mut model: Space = jedi::from_val(modeldata)?;
+                    match &action {
+                        &SyncAction::Edit => {
+                            let fake_id = String::from("<no id>");
+                            let space_id = model.id().unwrap_or(&fake_id);
+                            Space::permission_check(turtl, space_id, &Permission::EditSpace)?;
+                        }
+                        &SyncAction::Add => {
+                            model.user_id = turtl.user_id()?;
+                        }
+                        _ => {}
+                    };
+                    save_model(action, turtl, &mut model, false)?
+                }
+                SyncType::Board => {
+                    let mut model: Board = jedi::from_val(modeldata)?;
+                    let permission = match &action {
+                        &SyncAction::Add => Permission::AddBoard,
+                        &SyncAction::Edit => Permission::EditBoard,
+                        _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
+                    };
+                    Space::permission_check(turtl, &model.space_id, &permission)?;
+                    if action == SyncAction::Add {
+                        model.user_id = turtl.user_id()?;
+                    }
+                    save_model(action, turtl, &mut model, false)?
+                }
+                SyncType::Note => {
+                    let filemebbe: Option<FileData> = jedi::get_opt(&["file", "filedata"], &modeldata);
+                    match jedi::remove(&["file", "filedata"], &mut modeldata) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                    let mut note: Note = jedi::from_val(modeldata)?;
+                    let permission = match &action {
+                        &SyncAction::Add => Permission::AddNote,
+                        &SyncAction::Edit => Permission::EditNote,
+                        _ => return TErr!(TError::BadValue(format!("couldn't find permission for {:?}/{:?}", ty, action))),
+                    };
+                    Space::permission_check(turtl, &note.space_id, &permission)?;
+                    if action == SyncAction::Add {
+                        note.user_id = turtl.user_id()?;
+                    }
+                    // always set to false. this is a public field that
+                    // we let the server manage for us
+                    note.has_file = false;
+                    let note_data = save_model(action, turtl, &mut note, false)?;
+                    match filemebbe {
+                        Some(mut file) => {
+                            file.save(turtl, &mut note)?;
+                        }
+                        None => {}
+                    }
+                    note_data
+                }
+                _ => {
+                    return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
+                }
+            };
+            Ok(val)
+        }
+        SyncAction::Delete => {
+            let id: String = jedi::get(&["id"], &modeldata)?;
+            fn get_model<T>(turtl: &Turtl, id: &String) -> TResult<T>
+                where T: Protected + Storable
+            {
+                let mut db_guard = lock!(turtl.db);
+                let db = match db_guard.as_mut() {
+                    Some(x) => x,
+                    None => return TErr!(TError::MissingField(format!("turtl is missing `db` object"))),
+                };
+                match db.get::<T>(T::tablename(), id)? {
+                    Some(x) => Ok(x),
+                    None => return TErr!(TError::NotFound(format!("that {} model wasn't found", T::tablename()))),
+                }
+            }
+            match ty {
+                SyncType::Space => {
+                    Space::permission_check(turtl, &id, &Permission::DeleteSpace)?;
+                    delete_model::<Space>(turtl, &id, false)?;
+                }
+                SyncType::Board => {
+                    let model = get_model::<Board>(turtl, &id)?;
+                    Space::permission_check(turtl, &model.space_id, &Permission::DeleteBoard)?;
+                    delete_model::<Board>(turtl, &id, false)?;
+                }
+                SyncType::Note => {
+                    let model = get_model::<Note>(turtl, &id)?;
+                    Space::permission_check(turtl, &model.space_id, &Permission::DeleteNote)?;
+                    delete_model::<Note>(turtl, &id, false)?;
+                }
+                SyncType::File => {
+                    let model = get_model::<Note>(turtl, &id)?;
+                    Space::permission_check(turtl, &model.space_id, &Permission::EditNote)?;
+                    delete_model::<FileData>(turtl, &id, false)?;
+                }
+                _ => {
+                    return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
+                }
+            }
+            Ok(jedi::obj())
+        }
+        SyncAction::MoveSpace => {
+            let item_id = jedi::get(&["id"], &modeldata)?;
+            let to_space_id = jedi::get(&["space_id"], &modeldata)?;
+            match ty {
+                SyncType::Board => {
+                    let from_space_id = match Board::get_space_id(turtl, &item_id) {
+                        Some(id) => id,
+                        None => return TErr!(TError::MissingData(format!("cannot find space id for board {}", item_id))),
+                    };
+                    Space::permission_check(turtl, &from_space_id, &Permission::DeleteBoard)?;
+                    Space::permission_check(turtl, &to_space_id, &Permission::AddBoard)?;
+                    let mut profile_guard = lockw!(turtl.profile);
+                    let boards = &mut profile_guard.boards;
+                    let board = match Profile::finder(boards, &item_id) {
+                        Some(m) => m,
+                        None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
+                    };
+                    board.move_spaces(turtl, to_space_id)?;
+                }
+                SyncType::Note => {
+                    let from_space_id = match Note::get_space_id(turtl, &item_id) {
+                        Some(id) => id,
+                        None => return TErr!(TError::MissingData(format!("cannot find space id for note {}", item_id))),
+                    };
+                    Space::permission_check(turtl, &from_space_id, &Permission::DeleteNote)?;
+                    Space::permission_check(turtl, &to_space_id, &Permission::AddNote)?;
+                    let mut notes = turtl.load_notes(&vec![item_id.clone()])?;
+                    if notes.len() == 0 {
+                        return TErr!(TError::MissingData(format!("trouble grabbing Note {}", item_id)));
+                    }
+                    let note = &mut notes[0];
+                    note.move_spaces(turtl, to_space_id)?;
+                }
+                _ => {
+                    return TErr!(TError::BadValue(format!("cannot {:?} item of type {:?}", action, ty)));
+                }
+            }
+            Ok(jedi::obj())
+        }
+        _ => {
+            TErr!(TError::BadValue(format!("unimplemented sync action {:?}", action)))
+        }
+    }
 }
 

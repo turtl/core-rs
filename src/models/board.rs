@@ -5,10 +5,11 @@ use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
-use ::models::keychain::{Keychain, KeyRef};
+use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::sync_record::SyncAction;
 use ::turtl::Turtl;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
+use ::models::storable::Storable;
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -39,7 +40,7 @@ impl Board {
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
 
         let note_ids = {
-            let db_guard = turtl.db.write().unwrap();
+            let db_guard = lock!(turtl.db);
             let notes: Vec<Note> = match *db_guard {
                 Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
                 None => vec![],
@@ -57,6 +58,20 @@ impl Board {
 
         Ok(())
     }
+
+    /// Given a Turtl/board_id, grab that boards's space_id (if it exists)
+    pub fn get_space_id(turtl: &Turtl, board_id: &String) -> Option<String> {
+        let mut db_guard = lock!(turtl.db);
+        match db_guard.as_mut() {
+            Some(db) => {
+                match db.get::<Self>(Self::tablename(), board_id) {
+                    Ok(x) => x.map(|i| i.space_id.clone()),
+                    Err(_) => None,
+                }
+            },
+            None => None,
+        }
+    }
 }
 
 impl Keyfinder for Board {
@@ -66,9 +81,8 @@ impl Keyfinder for Board {
         space_ids.push(self.space_id.clone());
         match self.keys.as_ref() {
             Some(keys) => for key in keys {
-                match key.get(&String::from("s")) {
-                    Some(id) => space_ids.push(id.clone()),
-                    None => {},
+                if key.ty == KeyType::Space {
+                    space_ids.push(key.id.clone());
                 }
             },
             None => {},
@@ -76,7 +90,7 @@ impl Keyfinder for Board {
 
         if space_ids.len() > 0 {
             let ty = String::from("space");
-            let profile_guard = turtl.profile.read().unwrap();
+            let profile_guard = lockr!(turtl.profile);
             for space in &profile_guard.spaces {
                 if space.id().is_none() || space.key().is_none() { continue; }
                 let space_id = space.id().unwrap();
@@ -89,12 +103,12 @@ impl Keyfinder for Board {
 
     fn get_keyrefs(&self, turtl: &Turtl) -> TResult<Vec<KeyRef<Key>>> {
         let mut refs: Vec<KeyRef<Key>> = Vec::new();
-        let profile_guard = turtl.profile.read().unwrap();
+        let profile_guard = lockr!(turtl.profile);
         for space in &profile_guard.spaces {
             if space.id() == Some(&self.space_id) && space.key().is_some() {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
-                    ty: String::from("s"),
+                    ty: KeyType::Space,
                     k: space.key().unwrap().clone(),
                 });
             }
@@ -107,7 +121,7 @@ impl MemorySaver for Board {
     fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 for board in &mut profile_guard.boards {
                     if board.id() == self.id() {
                         board.merge_fields(&self.data()?)?;
@@ -118,11 +132,11 @@ impl MemorySaver for Board {
                 profile_guard.boards.push(self);
             }
             SyncAction::Delete => {
-                let mut profile_guard = turtl.profile.write().unwrap();
+                let mut profile_guard = lockw!(turtl.profile);
                 let board_id = self.id().unwrap();
 
                 let notes: Vec<Note> = {
-                    let db_guard = turtl.db.read().unwrap();
+                    let db_guard = lock!(turtl.db);
                     match *db_guard {
                         Some(ref db) => db.find("notes", "board_id", &vec![board_id.clone()])?,
                         None => vec![],
