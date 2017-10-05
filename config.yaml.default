@@ -5,7 +5,10 @@ messaging:
   events: "inproc://turtl-events"
 
 api:
-  endpoint: "https://api.turtlapp.com/v2"
+  endpoint: "https://api.turtlapp.com/v3"
+  v6:
+	endpoint: "https://api.turtlapp.com/v2"
+	enable_migration: false
 
 sync:
   enable_incoming: true
