@@ -44,14 +44,19 @@ quick_error! {
             description("crypto error")
             display("crypto error: {}", err)
         }
+        JSON(err: JSONError) {
+            cause(err)
+            description("JSON error")
+            display("JSON error: {}", err)
+        }
         Io(err: IoError) {
             cause(err)
             description("io error")
             display("io error: {}", err)
         }
-        Api(status: StatusCode) {
+        Api(status: StatusCode, msg: String) {
             description("API error")
-            display("api error: {}", status.canonical_reason().unwrap_or("unknown"))
+            display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
         }
         TryAgain {
             description("try again")
@@ -70,7 +75,7 @@ quick_error! {
 /// much easier by the from_err! macro below, although hand-written conversions
 /// are welcome as well.
 #[macro_export]
-macro_rules! toterr {
+macro_rules! tomerr {
     ($e:expr) => (
         {
             let err: MError = From::from($e);
@@ -95,6 +100,27 @@ impl From<CryptoError> for MError {
         MError::Crypto(err)
     }
 }
+impl From<IoError> for MError {
+    fn from(err: IoError) -> MError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            MError::Io(err)
+        }
+    }
+}
+impl From<JSONError> for MError {
+    fn from(err: JSONError) -> MError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            match err {
+                JSONError::Boxed(x) => MError::Boxed(x),
+                _ => MError::JSON(err),
+            }
+        }
+    }
+}
 impl From<Box<::std::any::Any + Send>> for MError {
     fn from(err: Box<::std::any::Any + Send>) -> MError {
         MError::Msg(format!("{:?}", err))
@@ -103,6 +129,8 @@ impl From<Box<::std::any::Any + Send>> for MError {
 from_err!(::fern::InitError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::std::num::ParseIntError);
+from_err!(::hyper::Error);
+from_err!(::hyper::error::ParseError);
 
 pub type MResult<T> = Result<T, MError>;
 

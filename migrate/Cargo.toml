@@ -20,4 +20,5 @@ quick-error = "1.1.0"
 rust-crypto = "0.2.36"
 rustc-serialize = "0.3.19"
 serde = "1.0.8"
+serde_derive = "1.0.8"
 

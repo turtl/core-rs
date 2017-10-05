@@ -71,9 +71,9 @@ impl ser::Serialize for Key {
     }
 }
 
-impl de::Deserialize for Key {
+impl<'de> de::Deserialize<'de> for Key {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: de::Deserializer
+        where D: de::Deserializer<'de>
     {
         de::Deserialize::deserialize(deserializer)
             .and_then(|x| {
