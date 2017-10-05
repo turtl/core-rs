@@ -125,7 +125,7 @@ impl Api {
 
     /// Build a full URL given a resource
     fn build_url(&self, resource: &str) -> MResult<String> {
-        let endpoint = config::get::<String>(&["api", "endpoint"])?;
+        let endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
         url.push_str(&endpoint[..]);
         url.push_str(resource);
