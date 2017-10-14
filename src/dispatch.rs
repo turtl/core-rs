@@ -155,7 +155,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let space_id = jedi::get(&["2"], &data)?;
             let user_id = jedi::get(&["3"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
@@ -165,7 +165,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:edit-member" => {
             let mut member: SpaceMember = jedi::get(&["2"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &member.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", member.space_id))),
             };
@@ -176,7 +176,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let space_id: String = jedi::get(&["2"], &data)?;
             let user_id: String = jedi::get(&["3"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
@@ -186,7 +186,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:leave" => {
             let space_id: String = jedi::get(&["2"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
@@ -196,7 +196,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:send-invite" => {
             let req: InviteRequest = jedi::get(&["2"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &req.space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &req.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", req.space_id))),
             };
@@ -212,7 +212,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:space:edit-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &invite.space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", invite.space_id))),
             };
@@ -223,7 +223,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let space_id: String = jedi::get(&["2"], &data)?;
             let invite_id: String = jedi::get(&["3"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
-            let mut space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
+            let space = match Profile::finder(&mut profile_guard.spaces, &space_id) {
                 Some(s) => s,
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };

@@ -155,7 +155,7 @@ impl Api {
         request.set_read_timeout(Some(timeout))?;
         {
             // ridiculous. there has to be a better way??
-            let mut reqheaders = request.headers_mut();
+            let reqheaders = request.headers_mut();
             for header in headers.iter() {
                 let name_string = String::from(header.name());
                 reqheaders.set_raw(name_string, vec![Vec::from(header.value_string().as_bytes())]);

@@ -475,7 +475,7 @@ mod tests {
         dog.active = true;
         assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"name":"timmy","size":32,"tags":["canine","3-legged"],"type":"tiny"}"#);
         {
-            let mut tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
+            let tags: &mut Vec<String> = dog.tags.as_mut().unwrap();
             tags.push(String::from("fast"));
         }
         assert_eq!(dog.stringify_unsafe().unwrap(), r#"{"body":null,"name":"timmy","size":32,"tags":["canine","3-legged","fast"],"type":"tiny"}"#);
@@ -570,7 +570,7 @@ mod tests {
         assert_eq!(junkyard2.dog.as_ref().unwrap().size.as_ref().unwrap(), &69);
         junkyard2.set_key(Some(junkyard.key().unwrap().clone()));
         junkyard2.deserialize().unwrap();
-        let mut dog = junkyard2.dog.as_mut().unwrap();
+        let dog = junkyard2.dog.as_mut().unwrap();
         assert_eq!(dog.size.as_ref().unwrap(), &69);
         assert_eq!(dog.name.as_ref().unwrap(), &String::from("Gerard"));
         assert_eq!(dog.type_.as_ref().unwrap(), &String::from("chowchow"));
