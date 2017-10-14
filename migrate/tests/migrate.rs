@@ -17,7 +17,9 @@ mod tests {
         let password = config::get::<String>(&["integration_tests", "v6_login", "password"]).unwrap();
         let login = migrate::check_login(&username, &password).unwrap();
         assert_eq!(login.is_some(), true);
-        let migration = migrate::migrate(login.unwrap()).unwrap();
+        migrate::migrate(login.unwrap(), |ev, args| {
+            println!("migrate: event: {} -- {}", ev, args);
+        }).unwrap();
     }
 }
 
