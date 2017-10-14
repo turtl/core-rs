@@ -129,7 +129,7 @@ impl Turtl {
     /// Create/open a new KV store connection
     pub fn open_kv() -> TResult<Storage> {
         let kv_location = storage::db_location(&String::from("turtl-kv"))?;
-        Ok(Storage::new(&kv_location, jedi::obj())?)
+        Ok(Storage::new(&kv_location, json!({}))?)
     }
 
     /// Send a message to (presumably) our UI.
@@ -575,7 +575,7 @@ impl Turtl {
         let mut user_guard = lockw!(self.user);
         user_guard.deserialize()?;
 
-        self.events.trigger("profile:loaded", &jedi::obj());
+        self.events.trigger("profile:loaded", &json!({}));
         Ok(())
     }
 

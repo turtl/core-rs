@@ -80,7 +80,7 @@ impl MemorySaver for User {
                 turtl.wipe_user_data()?;
             }
             SyncAction::ChangePassword => {
-                messaging::app_event("user:change-password:logout", &jedi::obj())?;
+                messaging::app_event("user:change-password:logout", &json!({}))?;
             }
             _ => {}
         }
@@ -148,7 +148,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     let userdata = turtl.api.get(url.as_str(), ApiReq::new())?;
     let mut user_guard = lockw!(turtl.user);
     user_guard.merge_fields(&userdata)?;
-    user_guard.trigger("login", &jedi::obj());
+    user_guard.trigger("login", &json!({}));
     debug!("user::do_login() -- auth success, logged in");
     Ok(())
 }
@@ -212,7 +212,7 @@ impl User {
         drop(user_guard_w);
 
         let user_guard_r = lockr!(turtl.user);
-        user_guard_r.trigger("login", &jedi::obj());
+        user_guard_r.trigger("login", &json!({}));
         drop(user_guard_r);
         debug!("user::join() -- auth success, joined and logged in");
         Ok(())
@@ -359,7 +359,7 @@ impl User {
         user_guard.do_logout();
         drop(user_guard);
         let user_guard = lockr!(turtl.user);
-        user_guard.trigger("logout", &jedi::obj());
+        user_guard.trigger("logout", &json!({}));
         turtl.api.clear_auth();
         Ok(())
     }

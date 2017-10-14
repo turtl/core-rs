@@ -341,7 +341,7 @@ mod tests {
         sync_config.skip_api_init = true;
         let sync_config = Arc::new(RwLock::new(sync_config));
         let api = Arc::new(Api::new());
-        let db = Arc::new(Mutex::new(Some(Storage::new(&String::from(":memory:"), jedi::obj()).unwrap())));
+        let db = Arc::new(Mutex::new(Some(Storage::new(&String::from(":memory:"), json!({})).unwrap())));
         let mut state = start(sync_config, api, db).unwrap();
         (state.shutdown)();
         loop {

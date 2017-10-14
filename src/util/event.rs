@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn replace() {
         let data = Arc::new(RwLock::new(vec![0]));
-        let jval = jedi::obj();
+        let jval = json!({});
         let rdata = data.clone();
         {
             let data1 = data.clone();

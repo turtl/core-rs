@@ -77,7 +77,7 @@ pub fn init() -> TResult<()> {
 fn process_runtime_config(config_str: String) -> TResult<()> {
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
-        Err(_) => jedi::obj(),
+        Err(_) => json!({}),
     };
     let data_folder: String = match jedi::get(&["data_folder"], &runtime_config) {
         Ok(x) => x,

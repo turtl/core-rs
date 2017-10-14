@@ -353,7 +353,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     return TErr!(TError::BadValue(format!("cannot direct sync an item of type {:?}", ty)));
                 }
             }
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         SyncAction::MoveSpace => {
             let item_id = jedi::get(&["id"], &modeldata)?;
@@ -392,7 +392,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     return TErr!(TError::BadValue(format!("cannot {:?} item of type {:?}", action, ty)));
                 }
             }
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         _ => {
             TErr!(TError::BadValue(format!("unimplemented sync action {:?}", action)))

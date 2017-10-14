@@ -46,7 +46,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let username: String = jedi::get(&["2"], &data)?;
             let password: String = jedi::get(&["3"], &data)?;
             turtl.join(username, password)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "user:can-migrate" => {
             let old_username: String = jedi::get(&["2"], &data)?;
@@ -67,7 +67,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "user:logout" => {
             turtl.logout()?;
             util::sleep(1000);
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "user:change-password" => {
             let current_username: String = jedi::get(&["2"], &data)?;
@@ -75,11 +75,11 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let new_username: String = jedi::get(&["4"], &data)?;
             let new_password: String = jedi::get(&["5"], &data)?;
             turtl.change_user_password(current_username, current_password, new_username, new_password)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "user:delete-account" => {
             turtl.delete_account()?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "user:find-by-email" => {
             let email: String = jedi::get(&["2"], &data)?;
@@ -94,30 +94,30 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "app:wipe-user-data" => {
             turtl.wipe_user_data()?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "app:wipe-app-data" => {
             turtl.wipe_app_data()?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:start" => {
             turtl.sync_start()?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:pause" => {
             turtl.sync_pause();
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:resume" => {
             turtl.sync_resume();
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:status" => {
             Ok(Value::Bool(turtl.sync_running()))
         }
         "sync:shutdown" => {
             turtl.sync_shutdown(true)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:get-pending" => {
             let frozen = SyncRecord::get_all_pending(turtl)?;
@@ -126,22 +126,22 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "sync:unfreeze-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;
             SyncRecord::kick_frozen_sync(turtl, &sync_id)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "sync:delete-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;
             SyncRecord::delete_sync_item(turtl, &sync_id)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "app:api:set-endpoint" => {
             let endpoint: String = jedi::get(&["2"], &data)?;
             config::set(&["api", "endpoint"], &endpoint)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
-            turtl.events.trigger("app:shutdown", &jedi::obj());
-            Ok(jedi::obj())
+            turtl.events.trigger("app:shutdown", &json!({}));
+            Ok(json!({}))
         }
         "profile:load" => {
             let user_guard = lockr!(turtl.user);
@@ -250,7 +250,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "profile:delete-invite" => {
             let invite_id: String = jedi::get(&["2"], &data)?;
             Invite::delete_user_invite(turtl, &invite_id)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "profile:get-notes" => {
             let note_ids = jedi::get(&["2"], &data)?;
@@ -299,7 +299,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "feedback:send" => {
             let feedback: Feedback = jedi::get(&["2"], &data)?;
             feedback.send(turtl)?;
-            Ok(jedi::obj())
+            Ok(json!({}))
         }
         "clip" => {
             let url: String = jedi::get(&["2"], &data)?;
@@ -335,7 +335,7 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
             user_guard.merge_fields(&data)?;
         }
         "user:change-password:logout" => {
-            messaging::ui_event("user:change-password:logout", &jedi::obj())?;
+            messaging::ui_event("user:change-password:logout", &json!({}))?;
             util::sleep(3000);
             turtl.logout()?;
         }
