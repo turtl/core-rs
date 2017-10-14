@@ -31,21 +31,38 @@ use ::clippo::{self, CustomParser};
 use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
+use ::migrate;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
     match cmd.as_ref() {
         "user:login" => {
-            let username = jedi::get(&["2"], &data)?;
-            let password = jedi::get(&["3"], &data)?;
+            let username: String = jedi::get(&["2"], &data)?;
+            let password: String = jedi::get(&["3"], &data)?;
             turtl.login(username, password)?;
             Ok(Value::String(turtl.user_id()?))
         }
         "user:join" => {
-            let username = jedi::get(&["2"], &data)?;
-            let password = jedi::get(&["3"], &data)?;
+            let username: String = jedi::get(&["2"], &data)?;
+            let password: String = jedi::get(&["3"], &data)?;
             turtl.join(username, password)?;
             Ok(jedi::obj())
+        }
+        "user:can-migrate" => {
+            let old_username: String = jedi::get(&["2"], &data)?;
+            let old_password: String = jedi::get(&["3"], &data)?;
+            match migrate::check_login(&old_username, &old_password) {
+                Ok(_) => Ok(json!(true)),
+                Err(_) => Ok(json!(false)),
+            }
+        }
+        "user:join-migrate" => {
+            let old_username: String = jedi::get(&["2"], &data)?;
+            let old_password: String = jedi::get(&["3"], &data)?;
+            let new_username: String = jedi::get(&["4"], &data)?;
+            let new_password: String = jedi::get(&["5"], &data)?;
+            let login = migrate::check_login(&old_username, &old_password)?;
+            Ok(json!({}))
         }
         "user:logout" => {
             turtl.logout()?;
@@ -53,10 +70,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::obj())
         }
         "user:change-password" => {
-            let current_username = jedi::get(&["2"], &data)?;
-            let current_password = jedi::get(&["3"], &data)?;
-            let new_username = jedi::get(&["4"], &data)?;
-            let new_password = jedi::get(&["5"], &data)?;
+            let current_username: String = jedi::get(&["2"], &data)?;
+            let current_password: String = jedi::get(&["3"], &data)?;
+            let new_username: String = jedi::get(&["4"], &data)?;
+            let new_password: String = jedi::get(&["5"], &data)?;
             turtl.change_user_password(current_username, current_password, new_username, new_password)?;
             Ok(jedi::obj())
         }

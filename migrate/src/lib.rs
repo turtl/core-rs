@@ -24,7 +24,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 #[macro_use]
-mod error;
+pub mod error;
 mod api;
 mod crypto;
 mod user;

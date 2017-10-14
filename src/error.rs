@@ -8,6 +8,7 @@ use ::hyper::status::StatusCode;
 use ::jedi::JSONError;
 use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
+use ::migrate::error::MError as MigrateError;
 
 use ::crypto::CryptoError;
 
@@ -74,6 +75,11 @@ quick_error! {
             cause(err)
             description("Clippo error")
             display("Clippo error: {}", err)
+        }
+        Migrate(err: MigrateError) {
+            cause(err)
+            description("migrate error")
+            display("migrate error: {}", err)
         }
         Io(err: IoError) {
             cause(err)
@@ -189,6 +195,15 @@ impl From<ClippoError> for TError {
             panic!("{:?}", err);
         } else {
             TError::Clippo(err)
+        }
+    }
+}
+impl From<MigrateError> for TError {
+    fn from(err: MigrateError) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            TError::Migrate(err)
         }
     }
 }
