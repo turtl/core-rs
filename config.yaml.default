@@ -4,6 +4,9 @@ messaging:
   reqres: "inproc://turtl-req"
   events: "inproc://turtl-events"
 
+# override w/ runtime config!
+data_folder: '/tmp/turtl'
+
 api:
   endpoint: "https://api.turtlapp.com/v3"
   v6:
