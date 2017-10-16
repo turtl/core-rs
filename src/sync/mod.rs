@@ -182,7 +182,7 @@ pub trait Syncer {
             },
         }
         match init_tx.send(init_res) {
-            Err(e) => error!("sync::{}::runner() -- problem sending init signal: {}", self.get_name(), e),
+            Err(e) => warn!("sync::runner() -- {}: problem sending init signal: {}", self.get_name(), e),
             _ => (),
         }
 
@@ -237,6 +237,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
                 // thread back to here (mainly, a "yes init succeeded" or "no,
                 // init failed")
                 let (tx, rx) = mpsc::channel::<TResult<()>>();
+                rx_vec.push((rx, stringify!($synctype)));
                 let config_c = config.clone();
                 let api_c = api.clone();
                 let db_c = db.clone();
@@ -247,7 +248,6 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
                 })?;
                 // push our handle/rx onto their respective holder vecs
                 join_handles.push(handle);
-                rx_vec.push(rx);
             }
         }
     }
@@ -259,9 +259,22 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
     sync_starter!(FileSyncOutgoing::new);
     sync_starter!(FileSyncIncoming::new);
 
+    // seems to make the sync "ready!!" channels not bitch as much. if we don't
+    // have this here, we get a lot of:
+    //
+    //   sync::runner() -- incoming: problem sending init signal: sending on a closed channel
+    // 
+    // this isn't harmful, and the sync system seems to plow forward regardless,
+    // but i'd rather not have stupid errors crop up.
+    //
+    // it's important to note: i do not know WHY this fixes the above warning.
+    // given the nature of rust's mpsc channels, i would think there should be
+    // no need to synchronize/coordinate between the threads.
+    util::sleep(100);
+
     // Wait on an "OK! A++++" Ok(()) signal from the sync thread (sent after it
     // inits successfully) or a "SHITFUCK!" Err() if there was a problem.
-    for rx in rx_vec {
+    for (rx, syncname) in rx_vec {
         match rx.recv() {
             Ok(x) => {
                 match x {
