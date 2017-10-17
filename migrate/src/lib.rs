@@ -58,8 +58,8 @@ pub struct File {
 /// Holds the result of a profile migration.
 #[derive(Default, Debug)]
 pub struct MigrateResult {
-    boards: Vec<Value>,
-    notes: Vec<Value>,
+    pub boards: Vec<Value>,
+    pub notes: Vec<Value>,
 }
 
 /// Holds an encrypted v6 profile
@@ -131,9 +131,10 @@ fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
     }
     let syncdata: SyncResponse = api.get("/sync/full", ApiReq::new().timeout(120))?;
     let SyncResponse { records } = syncdata;
-    evfn("profile-download", &jedi::to_val(&records.len())?);
+    evfn("profile-download", &Value::Null);
     let mut profile = Profile::default();
     let mut files: Vec<String> = Vec::new();
+    let mut num_items = 0;
     for rec in records {
         let SyncRecord { ty, data } = rec;
         if data.is_none() { continue; }
@@ -144,6 +145,7 @@ fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
             }
             "board" => {
                 profile.boards.push(data);
+                num_items += 1;
             }
             "note" => {
                 // if we have a file, push the note id onto the list
@@ -151,14 +153,18 @@ fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
                     Ok(_) => {
                         let id = jedi::get(&["id"], &data)?;
                         files.push(id);
+                        num_items += 1;
                     }
                     Err(_) => {}
                 }
+                num_items += 1;
                 profile.notes.push(data);
             }
             _ => {}
         }
     }
+
+    evfn("profile-items", &jedi::to_val(&num_items)?);
 
     evfn("files-pre-download", &jedi::to_val(&files.len())?);
     let filepath = PathBuf::from(util::file_folder()?);
@@ -327,7 +333,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         profiled.keychain.push(deep_merge(&mut keychain.clone(), &dec)?);
     }
 
-    let mut keys: HashMap<String, Key> = HashMap::new();
+    let mut keysearch: HashMap<String, Key> = HashMap::new();
     // boards can be nested, which means we must do a first pass to grab board
     // keys, then do another pass to use those keys + keychain to decrypt all
     // the boards. if that sounds convoluted, remember i got ~3.5 hours of sleep
@@ -377,7 +383,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
     //     child afterwards. each county must send statistics on who was
     //     sentenced to prison, the term, the crime, and the convict's age,
     //     race, sex/gender, and religion (if any). the idea being that
-    //     transparency will make racially-motivated sentencing harder to hide.
+    //     transparency will make discriminatory sentencing harder to hide.
     //   - mandatory $50 donation to charity any time anyone speaks of lizard
     //     people, chemtrails, or how flooding is caused by homosexuals
     //   - create new corporate entity type, "co-op," and give it extreme tax
@@ -405,9 +411,9 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
-        match find_key(&profiled.keychain, &keys, board) {
+        match find_key(&profiled.keychain, &keysearch, board) {
             Ok(x) => {
-                keys.insert(board_id, x);
+                keysearch.insert(board_id, x);
             }
             Err(_) => {
                 // since this is the first pass, we don't necessary have a
@@ -427,9 +433,9 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
-        match find_key(&profiled.keychain, &keys, board) {
+        match find_key(&profiled.keychain, &keysearch, board) {
             Ok(x) => {
-                keys.insert(board_id.clone(), x.clone());
+                keysearch.insert(board_id.clone(), x.clone());
                 let dec = match decrypt_val(&x, board) {
                     Ok(x) => x,
                     Err(e) => {
@@ -442,6 +448,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                         continue;
                     }
                 };
+                evfn("decrypt-item", &Value::String(String::from("board")));
                 profiled.boards.push(deep_merge(&mut board.clone(), &dec)?);
             }
             Err(e) => {
@@ -469,9 +476,9 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
-        match find_key(&profiled.keychain, &keys, note) {
+        match find_key(&profiled.keychain, &keysearch, note) {
             Ok(note_key) => {
-                keys.insert(note_id.clone(), note_key.clone());
+                keysearch.insert(note_id.clone(), note_key.clone());
                 let dec = match decrypt_val(&note_key, note) {
                     Ok(x) => x,
                     Err(e) => {
@@ -484,6 +491,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                         continue;
                     }
                 };
+                evfn("decrypt-item", &Value::String(String::from("note")));
                 fn get_file(note_id: &String, note_key: &Key, notedata: &Value) -> Option<String> {
                     if jedi::get_opt::<Value>(&["file"], &notedata).is_none() { return None; }
                     let encdata = match load_file(note_id) {
@@ -502,6 +510,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 }
                 let mut merged_note = deep_merge(&mut note.clone(), &dec)?;
                 if let Some(filebase64) = get_file(&note_id, &note_key, note) {
+                    evfn("decrypt-item", &Value::String(String::from("file")));
                     match jedi::set(&["file", "filedata"], &mut merged_note, &json!({"data": filebase64})) {
                         Ok(_) => {},
                         Err(e) => {
