@@ -237,7 +237,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
                 // thread back to here (mainly, a "yes init succeeded" or "no,
                 // init failed")
                 let (tx, rx) = mpsc::channel::<TResult<()>>();
-                rx_vec.push((rx, stringify!($synctype)));
+                rx_vec.push(rx);
                 let config_c = config.clone();
                 let api_c = api.clone();
                 let db_c = db.clone();
@@ -274,7 +274,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
 
     // Wait on an "OK! A++++" Ok(()) signal from the sync thread (sent after it
     // inits successfully) or a "SHITFUCK!" Err() if there was a problem.
-    for (rx, syncname) in rx_vec {
+    for rx in rx_vec {
         match rx.recv() {
             Ok(x) => {
                 match x {

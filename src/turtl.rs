@@ -29,6 +29,7 @@ use ::messaging::{self, Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::search::Search;
 use ::schema;
+use ::migrate::{self, MigrateResult};
 
 pub fn data_folder() -> TResult<String> {
     let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
@@ -225,16 +226,36 @@ impl Turtl {
         Ok(())
     }
 
-    /// Create a new user account
-    pub fn join(&self, username: String, password: String) -> TResult<()> {
+    /// DO Create a new user account
+    fn do_join(&self, username: String, password: String, migrate_data: Option<MigrateResult>) -> TResult<()> {
         User::join(self, username, password)?;
         self.set_user_id();
         let db = self.create_user_db()?;
         let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
-        User::post_join(self)?;
+        User::post_join(self, migrate_data)?;
         Ok(())
+    }
+
+    /// Create a new user account
+    pub fn join(&self, username: String, password: String) -> TResult<()> {
+        self.do_join(username, password, None)
+    }
+
+    /// Create a new user account by migrating from a v0.6 server.
+    pub fn join_migrate(&self, old_username: String, old_password: String, new_username: String, new_password: String) -> TResult<()> {
+        let login = migrate::check_login(&old_username, &old_password)?;
+        let migrate_data = migrate::migrate(login.unwrap(), |ev, args| {
+            debug!("turtl.join_migrate() -- migration event: {}", ev);
+            match messaging::ui_event("migration-event", &json!({"event": ev, "args": args})) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("turtl.join_migrate() -- error sending migration event: {} / {}", ev, e);
+                }
+            }
+        })?;
+        self.do_join(new_username, new_password, Some(migrate_data))
     }
 
     /// Log a user out

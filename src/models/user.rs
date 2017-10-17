@@ -3,11 +3,11 @@ use ::jedi::{self, Value, Serialize};
 use ::error::{TResult, TError};
 use ::crypto::{self, Key};
 use ::api::Status;
-use ::models::model::Model;
+use ::models::model::{self, Model};
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::{SyncAction, SyncRecord};
+use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util;
@@ -15,6 +15,7 @@ use ::util::event::Emitter;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming::SyncIncoming;
 use ::messaging;
+use ::migrate::MigrateResult;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
 
@@ -309,7 +310,7 @@ impl User {
     }
 
     /// Once the user has joined, we set up a default profile for them.
-    pub fn post_join(turtl: &Turtl) -> TResult<()> {
+    pub fn post_join(turtl: &Turtl, migrate_data: Option<MigrateResult>) -> TResult<()> {
         let user_id = {
             let user_guard = lockr!(turtl.user);
             user_guard.id_or_else()?
@@ -342,6 +343,65 @@ impl User {
         save_board(turtl, &user_id, &personal_space_id, "Bookmarks")?;
         save_board(turtl, &user_id, &personal_space_id, "Photos")?;
         save_board(turtl, &user_id, &personal_space_id, "Passwords")?;
+
+        if let Some(migration) = migrate_data {
+            let MigrateResult { boards, notes } = migration;
+            let migrate_space_id = save_space(turtl, &user_id, "Imported", "#b7479b")?;
+
+            let mut id_map: HashMap<String, String> = HashMap::new();
+            let mut title_map: HashMap<String, String> = HashMap::new();
+            for boardval in &boards {
+                let id: String = jedi::get(&["id"], boardval)?;
+                let title: String = jedi::get(&["title"], boardval)?;
+                title_map.insert(id, title);
+            }
+
+            for mut boardval in boards {
+                let new_board_id = model::cid()?;
+                let old_board_id: String = jedi::get(&["id"], &boardval)?;
+                let mut title: String = jedi::get(&["title"], &boardval)?;
+                match jedi::get_opt::<String>(&["parent_id"], &boardval) {
+                    Some(parent_board_id) => {
+                        match title_map.get(&parent_board_id) {
+                            Some(parent_title) => {
+                                title = format!("{}/{}", parent_title, title);
+                            }
+                            None => {}
+                        }
+                    }
+                    None => {}
+                }
+                jedi::set(&["id"], &mut boardval, &new_board_id)?;
+                jedi::set(&["user_id"], &mut boardval, &user_id)?;
+                jedi::set(&["space_id"], &mut boardval, &migrate_space_id)?;
+                jedi::set(&["title"], &mut boardval, &title)?;
+                id_map.insert(old_board_id, new_board_id);
+                let mut board: Board = jedi::from_val(boardval)?;
+                sync_model::save_model(SyncAction::Add, turtl, &mut board, false)?;
+            }
+            for mut noteval in notes {
+                let note_boards: Vec<String> = match jedi::get_opt(&["boards"], &noteval) {
+                    Some(boards) => boards,
+                    None => {
+                        match jedi::get_opt(&["board_id"], &noteval) {
+                            Some(board_id) => vec![board_id],
+                            None => Vec::new(),
+                        }
+                    }
+                };
+                jedi::set(&["user_id"], &mut noteval, &user_id)?;
+                jedi::set(&["space_id"], &mut noteval, &migrate_space_id)?;
+                if note_boards.len() > 0 {
+                    let board_id = &note_boards[0];
+                    jedi::set(&["board_id"], &mut noteval, board_id)?;
+                }
+                let mut sync = SyncRecord::default();
+                sync.action = SyncAction::Add;
+                sync.ty = SyncType::Note;
+                sync.data = Some(noteval);
+                sync_model::dispatch(turtl, sync)?;
+            }
+        }
 
         let mut user_guard_w = lockw!(turtl.user);
         user_guard_w.set_setting(turtl, "default_space", &personal_space_id)?;

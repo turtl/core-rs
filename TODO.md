@@ -1,11 +1,9 @@
 v0.7:
 - migration crate
-  - migrate_account() -- takes older server, old login, new server, new login
-    - download data
-	- decrypt keychain/boards
-	- create a default space "Personal" or some shit
-	- move all boards into the new space
-	- move all notes into the new space
+  - find out why migrating triggers server error (see warn log in tests)
+    - apparently it's intermittent. great.
+  - generate new ids for objects. we can't have the mongodb oids infecting our
+    beautiful new id format
 - integration tests
   - sync:pause
   - sync:resume

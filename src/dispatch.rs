@@ -61,7 +61,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let old_password: String = jedi::get(&["3"], &data)?;
             let new_username: String = jedi::get(&["4"], &data)?;
             let new_password: String = jedi::get(&["5"], &data)?;
-            let login = migrate::check_login(&old_username, &old_password)?;
+            turtl.join_migrate(old_username, old_password, new_username, new_password)?;
             Ok(json!({}))
         }
         "user:logout" => {

@@ -21,8 +21,9 @@ mod tests {
         let new_password = format!("{}_newLOLOL", password);
 
         dispatch_ass(json!(["user:join-migrate", old_username, old_password, "slippyslappy@turtlapp.com", new_password]));
-        //dispatch_ass(json!(["sync:start"]));
-
+        dispatch_ass(json!(["sync:start"]));
+        wait_on("sync:outgoing:complete");
+        dispatch_ass(json!(["user:delete-account"]));
         end(handle);
     }
 }
