@@ -22,6 +22,10 @@ mod tests {
 
         dispatch_ass(json!(["user:join-migrate", old_username, old_password, "slippyslappy@turtlapp.com", new_password]));
         dispatch_ass(json!(["sync:start"]));
+        wait_on("profile:loaded");
+        wait_on("profile:indexed");
+        let profile_res = dispatch(json!(["profile:load"]));
+        let notes = dispatch(json!(["profile:find-notes", {"sort": "id"}]));
         wait_on("sync:outgoing:complete");
         dispatch_ass(json!(["user:delete-account"]));
         end(handle);

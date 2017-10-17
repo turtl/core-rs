@@ -1,9 +1,6 @@
 v0.7:
 - migration crate
-  - find out why migrating triggers server error (see warn log in tests)
-    - apparently it's intermittent. great.
-  - generate new ids for objects. we can't have the mongodb oids infecting our
-    beautiful new id format
+  - exclude shared boards/notes (anything where user_id != me)
 - integration tests
   - sync:pause
   - sync:resume

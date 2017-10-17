@@ -344,12 +344,19 @@ impl User {
         save_board(turtl, &user_id, &personal_space_id, "Photos")?;
         save_board(turtl, &user_id, &personal_space_id, "Passwords")?;
 
+        // the user's default space id. might change if we have import data
+        let mut default_space_id = personal_space_id.clone();
+
         if let Some(migration) = migrate_data {
             let MigrateResult { boards, notes } = migration;
             let migrate_space_id = save_space(turtl, &user_id, "Imported", "#b7479b")?;
+            // if we're importing data, set the space holding the migration data
+            // as the default
+            default_space_id = migrate_space_id.clone();
 
             let mut id_map: HashMap<String, String> = HashMap::new();
             let mut title_map: HashMap<String, String> = HashMap::new();
+            // map old_board_id => title
             for boardval in &boards {
                 let id: String = jedi::get(&["id"], boardval)?;
                 let title: String = jedi::get(&["title"], boardval)?;
@@ -360,6 +367,8 @@ impl User {
                 let new_board_id = model::cid()?;
                 let old_board_id: String = jedi::get(&["id"], &boardval)?;
                 let mut title: String = jedi::get(&["title"], &boardval)?;
+                // if we have a parent id and a title related to that parent
+                // board, prepend the parent's title to this board's title
                 match jedi::get_opt::<String>(&["parent_id"], &boardval) {
                     Some(parent_board_id) => {
                         match title_map.get(&parent_board_id) {
@@ -375,6 +384,7 @@ impl User {
                 jedi::set(&["user_id"], &mut boardval, &user_id)?;
                 jedi::set(&["space_id"], &mut boardval, &migrate_space_id)?;
                 jedi::set(&["title"], &mut boardval, &title)?;
+                // inthert.......
                 id_map.insert(old_board_id, new_board_id);
                 let mut board: Board = jedi::from_val(boardval)?;
                 sync_model::save_model(SyncAction::Add, turtl, &mut board, false)?;
@@ -389,12 +399,24 @@ impl User {
                         }
                     }
                 };
+                let new_note_id = model::cid()?;
+                jedi::set(&["id"], &mut noteval, &new_note_id)?;
                 jedi::set(&["user_id"], &mut noteval, &user_id)?;
                 jedi::set(&["space_id"], &mut noteval, &migrate_space_id)?;
-                if note_boards.len() > 0 {
-                    let board_id = &note_boards[0];
-                    jedi::set(&["board_id"], &mut noteval, board_id)?;
+                // set the first board_id we have a new id for into this note's
+                // board_id field.
+                for board_id in note_boards {
+                    match id_map.get(&board_id) {
+                        Some(new_board_id) => {
+                            jedi::set(&["board_id"], &mut noteval, new_board_id)?;
+                            break;
+                        }
+                        None => {}
+                    }
                 }
+                // NOTE: we use dispatch() instead of save_model() here because
+                // the note might have a `note.file.filedata` object and we want
+                // to save the imported file.
                 let mut sync = SyncRecord::default();
                 sync.action = SyncAction::Add;
                 sync.ty = SyncType::Note;
@@ -404,7 +426,7 @@ impl User {
         }
 
         let mut user_guard_w = lockw!(turtl.user);
-        user_guard_w.set_setting(turtl, "default_space", &personal_space_id)?;
+        user_guard_w.set_setting(turtl, "default_space", &default_space_id)?;
         drop(user_guard_w);
 
         Ok(())
