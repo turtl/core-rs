@@ -1,5 +1,4 @@
 v0.7:
-- dispatch: get note file
 - integration tests
   - sync:pause
   - sync:resume
