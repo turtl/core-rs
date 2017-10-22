@@ -102,7 +102,7 @@ protected! {
     pub struct KeychainEntry {
         #[serde(rename = "type")]
         #[protected_field(public)]
-        pub type_: String,
+        pub ty: String,
         #[protected_field(public)]
         pub item_id: String,
         #[serde(with = "::util::ser::int_converter")]
@@ -128,7 +128,7 @@ impl MemorySaver for KeychainEntry {
                 };
                 // upsert our key
                 let mut profile_guard = lockw!(turtl.profile);
-                profile_guard.keychain.upsert_key(turtl, &self.item_id, key, &self.type_)?;
+                profile_guard.keychain.upsert_key(turtl, &self.item_id, key, &self.ty)?;
             }
             SyncAction::Delete => {
                 let mut profile_guard = lockw!(turtl.profile);
@@ -179,7 +179,7 @@ impl Keychain {
         }
         let mut entry = KeychainEntry::new();
         entry.set_key(Some(user_key.clone()));
-        entry.type_ = ty.clone();
+        entry.ty = ty.clone();
         entry.user_id = user_id.clone();
         entry.item_id = item_id.clone();
         entry.k = Some(key.clone());

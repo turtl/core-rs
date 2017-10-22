@@ -13,14 +13,13 @@ v0.7:
       - does the file still remain?
       - does the sync system break in any way?
     - move space
-  - feedback:send??
 - premium
 
 later:
 - document API
   - dispatch endpoints: expected responses, possible errors
   - ui events that can fire (and associated data)
-- MsgPack for core <--> client comm
+- MsgPack for core <--> ui comm
   - https://github.com/3Hren/msgpack-rust
   - https://github.com/kawanet/msgpack-lite
 - type system enforce crypto
@@ -36,7 +35,6 @@ later:
   - profile loading
   - messaging
   - key management
-- rename KEychainEntry.type\_ to ty
 - file writing locally: use buffers/locks:
   {
       let mut out = File::new("test.out");
