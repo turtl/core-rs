@@ -119,7 +119,7 @@ fn load_file(note_id: &String) -> MResult<Vec<u8>> {
     Ok(contents)
 }
 
-fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
+fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Profile>
     where F: FnMut(&str, &Value)
 {
     let mut api = Api::new();
@@ -139,6 +139,19 @@ fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
         let SyncRecord { ty, data } = rec;
         if data.is_none() { continue; }
         let data = data.unwrap();
+        let rec_user_id: String = match jedi::get(&["user_id"], &data) {
+            Ok(x) => x,
+            Err(_) => {
+                evfn("error", &json!({
+                    "msg": format!("missing user_id field for {}", ty),
+                    "type": "missing_data",
+                }));
+                continue;
+            }
+        };
+        // we only want to include records that belong to us
+        if &rec_user_id != user_id { continue; }
+
         match ty.as_ref() {
             "keychain" => {
                 profile.keychain.push(data);
@@ -197,13 +210,15 @@ fn get_profile<F>(auth: &String, evfn: &mut F) -> MResult<Profile>
 
 /// Holds login info.
 pub struct Login {
+    user_id: String,
     auth: String,
     key: Key,
 }
 
 impl Login {
-    fn new(auth: String, key: Key) -> Self {
+    fn new(user_id: String, auth: String, key: Key) -> Self {
         Login {
+            user_id: user_id,
             auth: auth,
             key: key,
         }
@@ -216,13 +231,13 @@ pub fn check_login(username: &String, password: &String) -> MResult<Option<Login
     let (key1, auth1) = user::generate_auth(username, password, 1)?;
     api.set_auth(auth1.clone())?;
     match api.post::<String>("/auth", ApiReq::new()) {
-        Ok(_) => { return Ok(Some(Login::new(auth1, key1))); }
+        Ok(user_id) => { return Ok(Some(Login::new(user_id, auth1, key1))); }
         Err(_) => {}
     }
     let (key0, auth0) = user::generate_auth(username, password, 0)?;
     api.set_auth(auth0.clone())?;
     match api.post::<String>("/auth", ApiReq::new()) {
-        Ok(_) => { return Ok(Some(Login::new(auth0, key0))); }
+        Ok(user_id) => { return Ok(Some(Login::new(user_id, auth0, key0))); }
         Err(_) => {}
     }
     Ok(None)
@@ -232,7 +247,7 @@ pub fn check_login(username: &String, password: &String) -> MResult<Option<Login
 pub fn migrate<F>(v6_login: Login, mut evfn: F) -> MResult<MigrateResult>
     where F: FnMut(&str, &Value)
 {
-    let profile = get_profile(&v6_login.auth, &mut evfn)?;
+    let profile = get_profile(&v6_login.user_id, &v6_login.auth, &mut evfn)?;
     let decrypted = decrypt_profile(&v6_login.key, profile, &mut evfn)?;
 
     let mut result = MigrateResult::default();

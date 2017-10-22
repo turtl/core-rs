@@ -24,11 +24,31 @@ mod tests {
         dispatch_ass(json!(["sync:start"]));
         wait_on("profile:loaded");
         wait_on("profile:indexed");
-        let profile_res = dispatch(json!(["profile:load"]));
-        let notes = dispatch(json!(["profile:find-notes", {"sort": "id"}]));
+        let profile_data = dispatch_ass(json!(["profile:load"]));
+        #[derive(Deserialize, Clone)]
+        struct Space {
+            id: String,
+            title: String,
+        }
+        #[derive(Deserialize)]
+        struct Profile {
+            spaces: Vec<Space>,
+        }
+        let profile: Profile = jedi::from_val(profile_data).unwrap();
+        let mut migrate_space = None;
+        for space in &profile.spaces {
+            if space.title == "Imported" {
+                migrate_space = Some(space);
+            }
+        }
+        let migrate_space = migrate_space.unwrap();
+        let notes = dispatch_ass(json!(["profile:find-notes", {"space_id": migrate_space.id, "sort": "id"}]));
         wait_on("sync:outgoing:complete");
         dispatch_ass(json!(["user:delete-account"]));
         end(handle);
+
+        let notes: Vec<Value> = jedi::from_val(notes).unwrap();
+        assert!(notes.len() > 0);
     }
 }
 

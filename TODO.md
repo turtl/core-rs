@@ -1,6 +1,5 @@
 v0.7:
-- migration crate
-  - exclude shared boards/notes (anything where user_id != me)
+- dispatch: get note file
 - integration tests
   - sync:pause
   - sync:resume
