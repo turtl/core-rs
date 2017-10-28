@@ -8,8 +8,11 @@ CARGO_BUILD_ARGS :=
 
 all: build
 
+release: CARGO_BUILD_ARGS := $(CARGO_BUILD_ARGS) --release
+release: all
+
 build: 
-	cargo build
+	cargo build $(CARGO_BUILD_ARGS)
 
 test:
 	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture

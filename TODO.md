@@ -16,7 +16,7 @@ v0.7:
 - premium
 
 later:
-- document API
+- document core API
   - dispatch endpoints: expected responses, possible errors
   - ui events that can fire (and associated data)
 - MsgPack for core <--> ui comm
