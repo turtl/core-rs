@@ -1,5 +1,5 @@
 ---
-loglevel: "debug"
+loglevel: "info"
 messaging:
   reqres: "inproc://turtl-req"
   events: "inproc://turtl-events"
@@ -25,4 +25,7 @@ integration_tests:
   login:
     username: slappy@turtlapp.com
     password: turtlesallthewaydown
+  v6_login:
+    username: 'duck duck'
+    password: 'juice'
 
