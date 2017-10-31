@@ -16,8 +16,16 @@ jobs:
 
       - run: git clone https://github.com/turtl/server ../server
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
-      - run: node ../server/create-db-schema.js
-      - run: node ../server/populate-test-data.js
+      - restore_cache:
+          key: server-npm-v1-{{ checksum "../server/package.json" }}
+          key: server-npm-v1-
+      - run: cd ../server && npm install
+      - save_cache:
+          key: server-npm-v1-{{ checksum "../server/package.json" }}
+          paths:
+            - ../server/node_modules
+      - run: node ../server/tools/create-db-schema.js
+      - run: node ../server/tools/populate-test-data.js
       - run:
           command: node ../server/server.js
           background: true
