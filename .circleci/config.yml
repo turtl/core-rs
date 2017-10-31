@@ -24,6 +24,7 @@ jobs:
       - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
       - run: cat config.yaml
 
+      # set up/run server
       - run: git clone https://github.com/turtl/server ../server
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
       - restore_cache:
@@ -65,6 +66,7 @@ jobs:
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.21.0
 
+      # test that shit
       - restore_cache:
           key: core-build-v1-{{ .Revision }}
       - run: make test
