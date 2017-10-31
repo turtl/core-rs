@@ -2,6 +2,10 @@ defaults: &defaults
   working_directory: /tmp/turtl/core
   docker:
     - image: circleci/node:4.8.3
+    - image: circleci/postgres:9.6.2-alpine
+      environment:
+        - POSTGRES_USER=turtl
+        - POSTGRES_DB=turtl
 
 version: 2
 jobs:
@@ -9,6 +13,15 @@ jobs:
     <<: *defaults
     steps:
       - checkout
+
+      - run: git clone https://github.com/turtl/server ../server
+      - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
+      - run: node ../server/create-db-schema.js
+      - run: node ../server/populate-test-data.js
+      - run:
+          command: node ../server/server.js
+          background: true
+      - run: sleep 3
 
       # install our apt deps
       - run: sudo apt-get update
