@@ -71,7 +71,7 @@ jobs:
 
       - restore_cache:
           key: core-build-v1-{{ .Revision }}
-      - run: make test
+      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static test
       - save_cache:
           key: core-build-v1-{{ .Revision }}
           paths:
