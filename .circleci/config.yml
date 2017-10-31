@@ -36,8 +36,8 @@ jobs:
       - run: sudo apt-get install --fix-missing gpgv2 libgpg-error0 libgpg-error-dev libgcrypt20-dev
 
       # install libsodium
-      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.11.tar.gz -O /tmp/libsodium.tar.gz
-      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.11.tar.gz.sig -O /tmp/libsodium.tar.gz.sig
+      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O /tmp/libsodium.tar.gz
+      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O /tmp/libsodium.tar.gz.sig
 
       # verify sodium
       - run: gpg --import libsodium.gpg.pub
