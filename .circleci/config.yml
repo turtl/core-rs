@@ -30,7 +30,6 @@ jobs:
       - run:
           command: node ../server/server.js
           background: true
-      - run: sleep 3
 
       # install our apt deps
       - run: sudo apt-get update
@@ -45,7 +44,7 @@ jobs:
       - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
       - restore_cache:
           key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
-      - run: cd /tmp && tar -xvf ./libsodium.tar.gz && cd libsodium-1.0.15 && ./configure && make
+      - run: cd /tmp && tar -xvf ./libsodium.tar.gz && cd libsodium-1.0.15 && ./configure --enable-shared --enable-static && make
       - save_cache:
           key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
           paths:
