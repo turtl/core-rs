@@ -40,6 +40,7 @@ jobs:
       - run: node ../server/tools/create-db-schema.js
       - run: node ../server/tools/populate-test-data.js
       - run: mkdir -p ../server/plugins
+      - run: mkdir -p ../server/public/uploads
       - run:
           command: node ../server/server.js
           background: true
