@@ -14,7 +14,6 @@ jobs:
     steps:
       - checkout
 
-
       # set up config
       - run: cp config.yaml.default config.yaml
       - run: sed -i 's|data_folder:.*|data_folder: "/tmp/turtl-data"|g' config.yaml
