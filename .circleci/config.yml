@@ -70,10 +70,10 @@ jobs:
       - run: sudo /tmp/rustup.sh --revision=1.21.0
 
       - restore_cache:
-          key: core-build-v1-{{ .Revision }}
+          key: core-build-v1-{{ checksum "Cargo.lock" }}
       - run: make SODIUM_STATIC=static TEST=zizzy test
       - save_cache:
-          key: core-build-v1-{{ .Revision }}
+          key: core-build-v1-{{ checksum "Cargo.lock" }}
           paths:
             - target
       - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static TEST_LOGLEVEL=info test
