@@ -154,7 +154,11 @@ pub fn deserialize(mut serialized: Vec<u8>) -> CResult<CryptoData> {
 
     let nonce_length = serialized[idx] as usize;
     idx += 1;
-    let nonce = Vec::from(&serialized[idx..(idx + nonce_length)]);
+    let nonce_idx = idx + nonce_length;
+    if nonce_idx >= serialized.len() {
+        return Err(CryptoError::BadData(String::from("crypto::deserialize() -- malformed data passed")));
+    }
+    let nonce = Vec::from(&serialized[idx..nonce_idx]);
     idx += nonce_length;
 
     // non-copying conversion into a vec
