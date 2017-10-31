@@ -4,4 +4,5 @@ config.yaml
 sess.vim
 *.exe
 *.stackdump
+*.un~
 
