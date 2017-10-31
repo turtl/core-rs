@@ -21,6 +21,7 @@ jobs:
       - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
       - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
       - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+      - run: cat config.yaml
 
       - run: git clone https://github.com/turtl/server ../server
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
