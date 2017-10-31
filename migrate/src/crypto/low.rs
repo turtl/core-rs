@@ -26,8 +26,9 @@ use ::rust_crypto;
 lazy_static! {
     /// Init the gcrypt lib and store our token
     static ref TOKEN: gcrypt::Token = gcrypt::init(|mut x| {
-        x.enable_secmem(1024 * 1024 * 4).unwrap();
-        x.enable_secure_rndpool();
+        //x.enable_secmem(1024 * 1024 * 1).unwrap();
+        x.disable_secmem();
+        //x.enable_secure_rndpool();
     });
     /// Store our block size. This is mainly used for padding.
     static ref AES_BLOCK_SIZE: usize = gcrypt::cipher::CIPHER_AES256.block_len();
