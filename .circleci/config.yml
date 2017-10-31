@@ -14,6 +14,14 @@ jobs:
     steps:
       - checkout
 
+
+      # set up config
+      - run: cp config.yaml.default config.yaml
+      - run: sed -i "s/slappy@turtlapp.com/${INTEGRATION_TEST_LOGIN}/g" config.yaml
+      - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
+      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+      - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+
       - run: git clone https://github.com/turtl/server ../server
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
       - restore_cache:
