@@ -88,6 +88,12 @@ impl FileSyncIncoming {
                 .request(Method::Get, &file_url[..])
                 .headers(headers)
                 .send()?;
+            let status = res.status_raw().0;
+            if status >= 400 {
+                let mut errstr = String::new();
+                res.read_to_string(&mut errstr)?;
+                return TErr!(TError::Api(res.status.clone(), errstr));
+            }
             // start streaming our API call into the file 4K at a time
             let mut buf = [0; 4096];
             loop {
