@@ -19,7 +19,7 @@ jobs:
       - run: cp config.yaml.default config.yaml
       - run: sed -i "s/slappy\@turtlapp.com/${INTEGRATION_TEST_LOGIN}/g" config.yaml
       - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
-      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_LOGIN}/g" config.yaml
       - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
       - run: cat config.yaml
 
