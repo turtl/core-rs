@@ -9,7 +9,7 @@ defaults: &defaults
 
 version: 2
 jobs:
-  build:
+  test:
     <<: *defaults
     steps:
       - checkout
@@ -39,6 +39,12 @@ jobs:
             - ../server/node_modules
       - run: mkdir -p ../server/plugins
       - run: mkdir -p ../server/public/uploads
+      - run: sleep 5
+      - run: node ../server/tools/create-db-schema.js
+      - run: node ../server/tools/populate-test-data.js
+      - run:
+          command: node ../server/server.js
+          background: true
 
       # install our apt deps
       - run: sudo apt-get update
@@ -64,27 +70,6 @@ jobs:
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.21.0
 
-      # build tests without running any
-      - run: make SODIUM_STATIC=static CARGO_BUILD_ARGS="-p carrier -p jedi -p dumpy -p turtl_core" TEST=zyzzy test
-      - persist_to_workspace:
-          root: /tmp/turtl
-          paths:
-            - server
-            - core
-
-  test:
-    <<: *defaults
-    steps:
-      - attach_workspace:
-          at: /tmp/turtl
-
-      - run: node ../server/tools/create-db-schema.js
-      - run: node ../server/tools/populate-test-data.js
-      - run:
-          command: node ../server/server.js
-          background: true
-      - run: sleep 2
-
       # initially had cache here. doesn't make much difference because rust
       # recompiles everything anyway.
       - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static RUST_BACKTRACE=1 TEST_LOGLEVEL=info CARGO_BUILD_ARGS="-p carrier -p jedi -p dumpy -p turtl_core" test
@@ -93,8 +78,5 @@ workflows:
   version: 2
   build_test_deploy:
     jobs:
-      - build
-      - test:
-          requires:
-            - build
+      - test
 
