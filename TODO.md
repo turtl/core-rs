@@ -19,6 +19,7 @@ later:
 - document core API
   - dispatch endpoints: expected responses, possible errors
   - ui events that can fire (and associated data)
+- upgrade sodiumoxide, re-implement AEAD (ietf) over new version (annoying)
 - MsgPack for core <--> ui comm
   - https://github.com/3Hren/msgpack-rust
   - https://github.com/kawanet/msgpack-lite

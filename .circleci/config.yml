@@ -70,15 +70,9 @@ jobs:
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.21.0
 
-      - restore_cache:
-          key: core-build-v2-{{ checksum "Cargo.lock" }}
-      - run: make SODIUM_STATIC=static TEST=zizzy test
-      - save_cache:
-          key: core-build-v2-{{ checksum "Cargo.lock" }}
-          paths:
-            - target
-            - ~/.cargo
-      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static RUST_BACKTRACE=1 TEST_LOGLEVEL=info test
+      # initially had cache here. doesn't make much difference because rust
+      # recompiles everything anyway.
+      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static RUST_BACKTRACE=1 TEST_LOGLEVEL=info CARGO_BUILD_ARGS="-p carrier -p jedi -p dumpy -p turtl_core" test
 
 workflows:
   version: 2
