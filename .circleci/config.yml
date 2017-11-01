@@ -39,6 +39,7 @@ jobs:
             - ../server/node_modules
       - run: mkdir -p ../server/plugins
       - run: mkdir -p ../server/public/uploads
+      - run: sleep 5
       - run: node ../server/tools/create-db-schema.js
       - run: node ../server/tools/populate-test-data.js
       - run:
@@ -77,7 +78,7 @@ jobs:
           paths:
             - target
             - ~/.cargo
-      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static TEST_LOGLEVEL=info test
+      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static RUST_BACKTRACE=1 TEST_LOGLEVEL=info test
 
 workflows:
   version: 2
