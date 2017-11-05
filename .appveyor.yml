@@ -6,14 +6,14 @@ environment:
   NODEJS_VERSION: "8"
 
 install:
+  - curl -sSf -o rustup-init.exe https://win.rustup.rs
+  - rustup-init.exe -y
+  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;%PATH%;C:\Users\appveyor\.cargo\bin
+  - rustup toolchain install stable-x86_64-pc-windows-gnu --revision=1.21.0
+  - rustup show
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
   - node -e "console.log(process.argv[0], process.arch, process.versions)"
-  - curl -sSf -o rustup-init.exe https://win.rustup.rs
-  - rustup-init.exe -y
-  - rustup toolchain install stable-x86_64-pc-windows-gnu --revision=1.21.0
-  - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
-  - rustup show
 
 build: false
 
