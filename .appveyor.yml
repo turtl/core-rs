@@ -1,12 +1,18 @@
 os: Visual Studio 2015
 
+services:
+  - postgresql96
+
 environment:
   RUST_BACKTRACE: 1
   PLATFORM: x64
   NODEJS_VERSION: "8"
+  PGUSER: "postgres"
+  PGPASSWORD: "Password12!"
 
 install:
-  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;%PATH%;C:\Users\appveyor\.cargo\bin
+  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+  - createdb turtl
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
   - rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
   - rustup toolchain install stable-x86_64-pc-windows-msvc
