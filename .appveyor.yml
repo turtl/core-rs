@@ -7,12 +7,12 @@ environment:
   RUST_BACKTRACE: 1
   PLATFORM: x64
   NODEJS_VERSION: "8"
+  MSYSTEM: "MINGW64"
   PGUSER: "postgres"
   PGPASSWORD: "Password12!"
 
 install:
   - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
-  - createdb turtl
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
   - rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
   - rustup toolchain install stable-x86_64-pc-windows-msvc
@@ -21,6 +21,7 @@ install:
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
   - node -e "console.log(process.argv[0], process.arch, process.versions)"
+  - createdb turtl
 
 build: false
 
