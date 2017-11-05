@@ -8,8 +8,9 @@ environment:
 install:
   - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;%PATH%;C:\Users\appveyor\.cargo\bin
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
-  - rustup-init.exe -y --default-toolchain 1.21.0-gnu
-  - rustup toolchain install 1.21.0-msvc
+  - rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
+  - rustup toolchain install stable-x86_64-pc-windows-msvc
+  - rustup deafult stable-gnu
   - rustup show
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
