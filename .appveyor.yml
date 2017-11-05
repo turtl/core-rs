@@ -1,4 +1,4 @@
-os: MSYS2
+os: Visual Studio 2015
 
 environment:
   RUST_BACKTRACE: 1
