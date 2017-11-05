@@ -95,7 +95,7 @@ impl Profile {
     pub fn export(turtl: &Turtl) -> TResult<Export> {
         info!("Profile::export() -- running export");
         let mut export = Export::default();
-        export.schema_version = 1;
+        export.schema_version = 2;
         let profile_guard = lockr!(turtl.profile);
         let mut db_guard = lock!(turtl.db);
         let db = match db_guard.as_mut() {
