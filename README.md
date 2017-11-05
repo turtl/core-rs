@@ -1,3 +1,5 @@
+<img src="https://circleci.com/gh/turtl/core-rs.png?circle-token=" style="float:right;">
+
 # Turtl core-rs
 
 This is the Rust core for Turtl. It houses the logic for Turtl's main client
