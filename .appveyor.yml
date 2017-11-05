@@ -21,7 +21,12 @@ install:
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
   - node -e "console.log(process.argv[0], process.arch, process.versions)"
-  - bash --login -c "uname -a"
+  - ps: >-
+      bash -c @"
+        set -e
+        exec 0</dev/null 2>&1
+        uname -a
+      "@
   - createdb turtl
 
 build: false
