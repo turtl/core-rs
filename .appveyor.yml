@@ -10,7 +10,8 @@ install:
   - npm config set msvs_version 2015
   - node -e "console.log(process.argv[0], process.arch, process.versions)"
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
-  - rustup-init.exe toolchain install stable-x86_64-pc-windows-gnu --revision=1.21.0
+  - rustup-init.exe -y
+  - rustup toolchain install stable-x86_64-pc-windows-gnu --revision=1.21.0
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
   - rustup show
 
