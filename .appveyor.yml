@@ -24,6 +24,7 @@ install:
       bash -c @"
         set -e
         exec 0</dev/null 2>&1
+        pacman -Sy mingw-w64-x86_64-libgpg-error
         mkdir -p /c/projects/
         cd /c/projects
         wget -q https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
