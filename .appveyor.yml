@@ -20,7 +20,7 @@ install:
   - mkdir c:\lib
   - set PATH=C:\lib;C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
 
-  # compile some gcrypt libs we need
+  # gcrypt/libsodium
   - ps: >-
       bash -c @"
         set -e
@@ -31,10 +31,18 @@ install:
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
         cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
         cp /usr/bin/msys-gcrypt-20.dll /c/lib/libgcrypt.dll
-        echo '---find---'
-        find /usr -name '*gpg-error-config*'
-        which gpg-error-config
-        echo '---done---'
+
+        mkdir /c/src
+        cd /c/src
+        wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O libsodium.tar.gz
+        wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O libsodium.tar.gz.sig
+        gpg --import /c/projects/core-rs/build-tools/libsodium.gpg.pub
+        gpg --verify libsodium.tar.gz.sig libsodium.tar.gz
+        tar -xvf libsodium.tar.gz
+        cd libsodium-1.0.12
+        ./configure --prefix=/usr --includedir=/c/include --libdir=/c/lib --enable-shared --enable-static
+        make
+        make install
       "@
       #  - ps: >-
       #      bash -c @"
@@ -53,7 +61,7 @@ install:
       #        make
       #        make install
       #      "@
-  - gpg-error-config.bat --libs
+
   # install node
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
