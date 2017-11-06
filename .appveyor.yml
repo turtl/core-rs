@@ -49,7 +49,7 @@ install:
       #        make
       #        make install
       #      "@
-
+  - gpg-error-config.bat --libs
   # install node
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
