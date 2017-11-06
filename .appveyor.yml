@@ -19,8 +19,6 @@ install:
   # path setup
   - mkdir c:\lib
   - set PATH=C:\lib;C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
-  - set GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat
-  - set LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat
 
   # compile some gcrypt libs we need
   - ps: >-
@@ -29,7 +27,6 @@ install:
         exec 0</dev/null 2>&1
         cp build-tools/gpg-error-config.bat /c/lib
         cp build-tools/libgcrypt-config.bat /c/lib
-        cat /c/lib/gpg-error-config.bat
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
         cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
@@ -68,12 +65,24 @@ install:
 before_build:
   - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
   - createdb turtl
-  - git checkout 
+  - git checkout https://github.com/turtl/server c:\projects\turtl-server
+  - cd c:\projects\turtl-server
+  - copy config\config.yaml.ci config\config.yaml
+  - npm install
+  - mkdir plugins
+  - mkdir public
+  - mkdir public\uploads
+  - ps: $Server = Start-Process node server.js -PassThru
 
 build: false
 
 test_script:
+  - set GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat
+  - set LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat
   - cargo test --release
+
+on_finish:
+  - ps: Stop-Process -Id $Server.Id
 
 cache:
   - target
