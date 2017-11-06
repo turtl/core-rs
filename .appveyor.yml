@@ -23,11 +23,13 @@ install:
   - ps: >-
       bash -c @"
         set -e
+        pacman -S mingw-w64-x86_64-toolchain
+        pacman -S autoconf make libtool automake
         exec 0</dev/null 2>&1
         mkdir -p /c/projects/
         cd /c/projects
-        wget https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
-        wget https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
+        wget -q https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
+        wget -q https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
         tar -xvf libgpg-error-1.27.tar.bz2 > /dev/null
         tar -xvf libgcrypt-1.8.1.tar.bz2 > /dev/null
         cd libgpg-error-1.27
