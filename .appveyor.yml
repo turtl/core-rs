@@ -17,7 +17,8 @@ environment:
 
 install:
   # path setup
-  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+  - mkdir c:\lib
+  - set PATH=C:\lib;C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
 
   # compile some gcrypt libs we need
   - ps: >-
@@ -26,7 +27,8 @@ install:
         exec 0</dev/null 2>&1
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
-        find /usr -name '*gpg*.dll'
+        cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
+        cp /usr/bin/msys-gcrypt-20.dll /c/lib/libgcrypt.dll
       "@
       #  - ps: >-
       #      bash -c @"
