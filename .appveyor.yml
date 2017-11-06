@@ -28,13 +28,13 @@ install:
         cd /c/projects
         wget https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
         wget https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
-        tar -xvf libgpg-error-1.27.tar.bz2
-        tar -xvf libgcrypt-1.8.1.tar.bz2
-        cd libgpg-error-*
+        tar -xvf libgpg-error-1.27.tar.bz2 > /dev/null
+        tar -xvf libgcrypt-1.8.1.tar.bz2 > /dev/null
+        cd libgpg-error-1.27
         ./configure --prefix=/c/usr/ --libdir=/c/lib --includedir=/c/include
         make
         make install
-        cd ../libgcrypt-*
+        cd ../libgcrypt-1.8.1
         ./configure --prefix=/c/usr --libdir=/c/lib --includedir=/c/include
         make
         make install
