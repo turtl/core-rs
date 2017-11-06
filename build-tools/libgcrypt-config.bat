@@ -1,3 +1,3 @@
 @echo off
-c:/msys64/usr/bin/sh -c "c:/msys64/usr/bin/libgcrypt-config %*"
+c:/msys64/usr/bin/sh -c "c:/msys64/bin/libgcrypt-config %*"
 
