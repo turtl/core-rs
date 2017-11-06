@@ -34,11 +34,11 @@ install:
 
         mkdir /c/src
         cd /c/src
-        wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O libsodium.tar.gz
-        wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O libsodium.tar.gz.sig
+        wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O libsodium.tar.gz
+        wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O libsodium.tar.gz.sig
         gpg --import /c/projects/core-rs/build-tools/libsodium.gpg.pub
         gpg --verify libsodium.tar.gz.sig libsodium.tar.gz
-        tar -xvf libsodium.tar.gz
+        tar -xvf libsodium.tar.gz > /dev/null
         cd libsodium-1.0.12
         ./configure --prefix=/usr --includedir=/c/include --libdir=/c/lib --enable-shared --enable-static
         make
@@ -84,6 +84,8 @@ before_build:
   - mkdir plugins
   - mkdir public
   - mkdir public\uploads
+  - node tools\create-db-schema.js
+  - node tools\populate-test-data.js
   - ps: $Server = Start-Process node server.js -PassThru
 
 build: false
@@ -91,7 +93,7 @@ build: false
 test_script:
   - set GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat
   - set LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat
-  - cargo test --release
+  - bash -c "GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat cargo test --release"
 
 on_finish:
   - ps: Stop-Process -Id $Server.Id
