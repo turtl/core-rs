@@ -19,10 +19,24 @@ install:
   # path setup
   - mkdir c:\lib
   - set PATH=C:\lib;C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+  - set GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat
+  - set LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat
+  - ps: >-
+      bash -c @"
+        cat << EOF > /c/lib/gpg-error-config.bat
+@echo off
+c:/msys2/usr/bin/sh -c "c:/msys2/usr/bin/gpg-error-config %*"
+        EOF
+        cat << EOF > /c/lib/libgcrypt-config.bat
+@echo off
+c:/msys2/usr/bin/sh -c "c:/msys2/usr/bin/libgcrypt-config %*"
+        EOF
+      "@
 
   # compile some gcrypt libs we need
   - ps: >-
       bash -c @"
+        cat /c/lib/gpg-error-config.bat
         set -e
         exec 0</dev/null 2>&1
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
