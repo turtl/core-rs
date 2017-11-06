@@ -31,6 +31,7 @@ install:
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
         cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
         cp /usr/bin/msys-gcrypt-20.dll /c/lib/libgcrypt.dll
+        find /usr -name '*gpg-error-config*'
       "@
       #  - ps: >-
       #      bash -c @"
