@@ -26,6 +26,7 @@ install:
         exec 0</dev/null 2>&1
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
+        find /usr -name '*.dll'
       "@
       #  - ps: >-
       #      bash -c @"
