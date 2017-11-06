@@ -29,8 +29,13 @@ install:
         cp build-tools/libgcrypt-config.bat /c/lib
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
         pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
+        pacman -S --noconfirm mingw-w64-x86_64-sqlite3
         cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
         cp /usr/bin/msys-gcrypt-20.dll /c/lib/libgcrypt.dll
+
+        echo '---'
+        find /usr/bin -name '*sqlite*'
+        echo '>>>'
 
         mkdir /c/src
         cd /c/src
