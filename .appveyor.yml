@@ -25,16 +25,32 @@ install:
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
   - npm config set msvs_version 2015
   - node -e "console.log(process.argv[0], process.arch, process.versions)"
+  - mkdir 
+  - curl -sSf -o 
   - ps: >-
       bash -c @"
         set -e
         exec 0</dev/null 2>&1
-        uname -a
+        mkdir -p /c/projects/
+        cd /c/projects
+        wget https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
+        wget https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
+        tar -xvf libgpg-error-1.27.tar.bz2
+        tar -xvf libgcrypt-1.8.1.tar.bz2
+        cd libgpg-error-*
+        ./configure --prefix=/c/usr/ --libdir=/c/lib --includedir=/c/include
+        make
+        make install
+        cd ../libgcrypt-*
+        ./configure --prefix=/c/usr --libdir=/c/lib --includedir=/c/include
+        make
+        make install
       "@
 
 before_build:
   - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
   - createdb turtl
+  - git checkout 
 
 build: false
 
