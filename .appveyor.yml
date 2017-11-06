@@ -25,21 +25,25 @@ install:
         set -e
         exec 0</dev/null 2>&1
         pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
-        mkdir -p /c/projects/
-        cd /c/projects
-        wget -q https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
-        wget -q https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
-        tar -xvf libgpg-error-1.27.tar.bz2 > /dev/null
-        tar -xvf libgcrypt-1.8.1.tar.bz2 > /dev/null
-        cd libgpg-error-1.27
-        ./configure --prefix=/c/usr/ --libdir=/c/lib --includedir=/c/include
-        make
-        make install
-        cd ../libgcrypt-1.8.1
-        ./configure --prefix=/c/usr --libdir=/c/lib --includedir=/c/include
-        make
-        make install
+        pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
       "@
+      #  - ps: >-
+      #      bash -c @"
+      #        mkdir -p /c/projects/
+      #        cd /c/projects
+      #        wget -q https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
+      #        wget -q https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
+      #        tar -xvf libgpg-error-1.27.tar.bz2 > /dev/null
+      #        tar -xvf libgcrypt-1.8.1.tar.bz2 > /dev/null
+      #        cd libgpg-error-1.27
+      #        ./configure --prefix=/c/usr/ --libdir=/c/lib --includedir=/c/include
+      #        make
+      #        make install
+      #        cd ../libgcrypt-1.8.1
+      #        ./configure --prefix=/c/usr --libdir=/c/lib --includedir=/c/include
+      #        make
+      #        make install
+      #      "@
 
   # install node
   - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
