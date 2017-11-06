@@ -23,7 +23,6 @@ install:
   - ps: >-
       bash -c @"
         set -e
-        pacman -Sy autoconf make libtool automake
         exec 0</dev/null 2>&1
         mkdir -p /c/projects/
         cd /c/projects
