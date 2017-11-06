@@ -16,6 +16,7 @@ environment:
   PGPASSWORD: "Password12!"
 
 install:
+  - createdb turtl
   - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
   - rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
@@ -31,7 +32,6 @@ install:
         exec 0</dev/null 2>&1
         uname -a
       "@
-  - createdb turtl
 
 build: false
 
