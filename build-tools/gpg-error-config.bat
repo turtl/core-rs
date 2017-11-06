@@ -1,3 +1,3 @@
 @echo off
-c:/msys64/usr/bin/sh -c "c:/msys2/usr/bin/gpg-error-config %*"
+c:/msys64/usr/bin/sh -c "c:/msys64/usr/bin/gpg-error-config %*"
 
