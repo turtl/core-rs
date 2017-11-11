@@ -246,6 +246,9 @@ impl Turtl {
     /// Create a new user account by migrating from a v0.6 server.
     pub fn join_migrate(&self, old_username: String, old_password: String, new_username: String, new_password: String) -> TResult<()> {
         let login = migrate::check_login(&old_username, &old_password)?;
+        if login.is_none() {
+            return TErr!(TError::PermissionDenied(String::from("login on old server failed")));
+        }
         let migrate_data = migrate::migrate(login.unwrap(), |ev, args| {
             debug!("turtl.join_migrate() -- migration event: {}", ev);
             match messaging::ui_event("migration-event", &json!({"event": ev, "args": args})) {
