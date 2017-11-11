@@ -4,7 +4,7 @@
 -include vars.mk
 
 CARGO := $(shell which cargo)
-CARGO_BUILD_ARGS :=
+CARGO_BUILD_ARGS ?=
 
 all: build
 
