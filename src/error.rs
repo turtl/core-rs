@@ -3,7 +3,6 @@ use ::std::io::Error as IoError;
 use ::std::convert::From;
 use ::std::sync::Arc;
 
-use ::futures::BoxFuture;
 use ::hyper::status::StatusCode;
 use ::jedi::JSONError;
 use ::dumpy::DError;
@@ -262,6 +261,7 @@ from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 
+pub type BoxFuture<T, E> = Box<::futures::Future<Item = T, Error = E> + Send>;
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
 
@@ -282,7 +282,7 @@ macro_rules! try_or {
 #[macro_export]
 macro_rules! FOk {
     ($ex:expr) => {
-        ::futures::finished($ex).boxed();
+        Box::new(::futures::finished($ex))
     }
 }
 
@@ -290,7 +290,7 @@ macro_rules! FOk {
 #[macro_export]
 macro_rules! FErr {
     ($ex:expr) => {
-        ::futures::failed(From::from($ex)).boxed();
+        Box::new(::futures::failed(From::from($ex)))
     }
 }
 

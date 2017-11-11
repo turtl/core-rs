@@ -68,7 +68,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
     debug!("protected::map_deserialize() -- starting on {} items", vec.len());
     let ref work = turtl.work;
     let futures = vec.into_iter()
-        .map(|mut model| {
+        .map(|mut model| -> TFutureResult<_> {
             // don't bother with models that don't have a key...
             if model.key().is_none() {
                 warn!("map_deserialize: model {:?} has no key", model.id());
@@ -78,7 +78,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
             let model_type = String::from(model.model_type());
             let model_id = model.id().unwrap().clone();
             // run the deserialize, return the result into our future chain
-            work.run_async(move || model_clone.deserialize())
+            let fut = work.run_async(move || model_clone.deserialize())
                 .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
                     ftry!(model.merge_fields(&item_mapped));
                     FOk!(DeserializeResult::Model(model))
@@ -86,8 +86,8 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
                 .or_else(move |e| -> TFutureResult<DeserializeResult<T>> {
                     error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
                     FOk!(DeserializeResult::Failed)
-                })
-                .boxed()
+                });
+            Box::new(fut)
         })
         .collect::<Vec<_>>();
     // wait for all our futures to finish. this will return them in order of

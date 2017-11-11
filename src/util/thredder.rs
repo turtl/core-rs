@@ -31,7 +31,7 @@ impl Thredder {
         where T: Sync + Send + 'static,
               F: FnOnce() -> TResult<T> + Send + 'static
     {
-        self.pool.spawn_fn(run).boxed()
+        Box::new(self.pool.spawn_fn(run))
     }
 
     /// Run an operation on this pool
