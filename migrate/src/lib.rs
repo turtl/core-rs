@@ -225,6 +225,12 @@ impl Login {
     }
 }
 
+impl ::std::fmt::Debug for Login {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "MigrationLogin {} (auth/key hidden)", self.user_id)
+    }
+}
+
 /// Check if an account exists on the old server
 pub fn check_login(username: &String, password: &String) -> MResult<Option<Login>> {
     let mut api = Api::new();
