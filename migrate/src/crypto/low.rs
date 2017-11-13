@@ -26,6 +26,7 @@ use ::rust_crypto::buffer::{ReadBuffer, WriteBuffer};
 use ::rust_crypto::blockmodes::PaddingProcessor;
 use ::rust_crypto::aead::{AeadEncryptor, AeadDecryptor};
 use ::rust_crypto::digest::Digest;
+use ::rust_crypto::mac::Mac;
 
 lazy_static! {
     /// Init the gcrypt lib and store our token
@@ -179,17 +180,29 @@ pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
 /// Given a key (password/secret) and a set of data, run an HMAC-SHA256 and
 /// return the binary result as a u8 vec.
 pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
-    let hashtype = match hasher {
-        Hasher::SHA1 => gcrypt::mac::HMAC_SHA1,
-        Hasher::SHA256 => gcrypt::mac::HMAC_SHA256,
-        Hasher::SHA512 => gcrypt::mac::HMAC_SHA512,
-    };
-    let mut result: Vec<u8> = vec![0; hashtype.mac_len()];
-    let mut maccer = gcrypt::mac::Mac::new(*TOKEN, hashtype, GCRYPT_MAC_FLAGS)?;
-    maccer.set_key(key)?;
-    maccer.write(data)?;
-    maccer.read(&mut result[..])?;
-    Ok(result)
+    match hasher {
+        Hasher::SHA1 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha1::Sha1::new(), key);
+            hmac.input(data);
+            let mut out = vec![0u8; hmac.output_bytes()];
+            hmac.raw_result(out.as_mut_slice());
+            Ok(out)
+        }
+        Hasher::SHA256 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha256::new(), key);
+            hmac.input(data);
+            let mut out = vec![0u8; hmac.output_bytes()];
+            hmac.raw_result(out.as_mut_slice());
+            Ok(out)
+        }
+        Hasher::SHA512 => {
+            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha512::new(), key);
+            hmac.input(data);
+            let mut out = vec![0u8; hmac.output_bytes()];
+            hmac.raw_result(out.as_mut_slice());
+            Ok(out)
+        }
+    }
 }
 
 /// Do a secure comparison of two byte arrays.
