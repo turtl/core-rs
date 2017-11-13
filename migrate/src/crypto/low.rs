@@ -22,6 +22,9 @@ use ::serialize::base64::{self, ToBase64, FromBase64};
 use ::gcrypt;
 use ::gcrypt::rand::Random;
 use ::rust_crypto;
+use ::rust_crypto::buffer::{ReadBuffer, WriteBuffer};
+use ::rust_crypto::blockmodes::PaddingProcessor;
+use ::rust_crypto::aead::{AeadEncryptor, AeadDecryptor};
 
 lazy_static! {
     /// Init the gcrypt lib and store our token
@@ -31,7 +34,8 @@ lazy_static! {
         //x.enable_secure_rndpool();
     });
     /// Store our block size. This is mainly used for padding.
-    static ref AES_BLOCK_SIZE: usize = gcrypt::cipher::CIPHER_AES256.block_len();
+    //static ref AES_BLOCK_SIZE: usize = gcrypt::cipher::CIPHER_AES256.block_len();
+    static ref AES_BLOCK_SIZE: usize = 16;
 }
 /// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;
@@ -62,6 +66,16 @@ quick_error! {
             description("not implemented")
             display("crypto: not implemented: {}", str)
         }
+        RustCrypto(err: rust_crypto::symmetriccipher::SymmetricCipherError) {
+            description("rust crypto error")
+            display("crypto: rust-crypto: {:?}", err)
+        }
+    }
+}
+
+impl From<rust_crypto::symmetriccipher::SymmetricCipherError> for CryptoError {
+    fn from(err: rust_crypto::symmetriccipher::SymmetricCipherError) -> CryptoError {
+        CryptoError::RustCrypto(err)
     }
 }
 
@@ -267,94 +281,109 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
     Ok(result)
 }
 
-/// Pad a byte vector using padding of type PadMode.
-///
-/// Note that most crypto libs either pad for you or assume you have done your
-/// own padding, so we implement ours here. Also note that this is only actually
-/// used in a handful of places where later crypto primitives (AES-GCM, for
-/// instance) can't be used due to backwards compat issues.
-fn pad(data: &mut Vec<u8>, pad_mode: PadMode) {
-    let blocksize: usize = *AES_BLOCK_SIZE;
-    let mut pad_len = blocksize - (data.len() % blocksize);
-    if pad_len == 0 { pad_len = blocksize; }
-
-    for i in 0..pad_len {
-        let val: u8 = match pad_mode {
-            // PKCS7:
-            //  05 05 05 05 05
-            PadMode::PKCS7 => pad_len as u8,
-            // ANSIX923:
-            //  00 00 00 00 05
-            PadMode::ANSIX923 => {
-                if i == (pad_len - 1) {
-                    pad_len as u8
-                } else {
-                    0u8
-                }
-            }
-        };
-        data.push(val);
-    }
-}
-
-/// Unpad a byte vector. We do this generically. Both PKCS7 and AnsiX923 store
-/// the length of the padded bytes at the end of the data, so all we have to do
-/// is grab the last byte and truncate the vector to LEN - LASTBYTE. So easy. A
-/// baboon could do it.
-fn unpad(data: &mut Vec<u8>) {
-    let blocksize: usize = *AES_BLOCK_SIZE;
-    let last = match data.last() {
-        Some(x) => x + 0,
-        None => return
-    };
-
-    // if our padding is greater than our block size, the padding is invalid and
-    // we proceed without unpadding.
-    if (last as usize) > blocksize { return; }
-
-    let datalen = data.len();
-    data.truncate(datalen - (last as usize));
-}
-
 /// Returns the aes block size. Obviously, always 16, but let's get it straight
 /// from the panda's mouth instead of making WILD assumptions.
 pub fn aes_block_size() -> usize {
     *AES_BLOCK_SIZE
 }
 
+struct AnsiPadding {}
+impl PaddingProcessor for AnsiPadding {
+    fn pad_input<W: WriteBuffer>(&mut self, input_buffer: &mut W) {
+        let rem = input_buffer.remaining();
+        assert!(rem != 0 && rem <= 255);
+        let mut i = 0;
+        for v in input_buffer.take_remaining().iter_mut() {
+            if i == (rem - 1) {
+                *v = rem as u8;
+            } else {
+                *v = 0;
+            }
+            i += 1;
+        }
+    }
+    fn strip_output<R: ReadBuffer>(&mut self, output_buffer: &mut R) -> bool {
+        let last_byte: u8;
+        {
+            let data = output_buffer.peek_remaining();
+            last_byte = *data.last().unwrap();
+        }
+        output_buffer.truncate(last_byte as usize);
+        true
+    }
+}
+
 /// Encrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) -> CResult<Vec<u8>> {
-    let mut data = Vec::from(data);
-    pad(&mut data, pad_mode);
-    let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS)?;
-    cipher.set_key(key)?;
-    cipher.set_iv(iv)?;
-    cipher.encrypt(&data[..], &mut enc[..])?;
-    Ok(enc)
+    let mut encryptor = match pad_mode {
+        PadMode::PKCS7 => {
+            rust_crypto::aes::cbc_encryptor(
+                rust_crypto::aes::KeySize::KeySize256,
+                key,
+                iv,
+                rust_crypto::blockmodes::PkcsPadding {}
+            )
+        }
+        PadMode::ANSIX923 => {
+            rust_crypto::aes::cbc_encryptor(
+                rust_crypto::aes::KeySize::KeySize256,
+                key,
+                iv,
+                AnsiPadding {}
+            )
+        }
+    };
+    let mut result = Vec::<u8>::new();
+    let mut out = [0; 4096];
+    let mut reader = rust_crypto::buffer::RefReadBuffer::new(data);
+    let mut writer = rust_crypto::buffer::RefWriteBuffer::new(&mut out);
+
+    loop {
+        let res = encryptor.encrypt(&mut reader, &mut writer, true)?;
+        result.extend(writer.take_read_buffer().take_remaining().iter().map(|&i| i));
+        match res {
+            rust_crypto::buffer::BufferResult::BufferUnderflow => break,
+            rust_crypto::buffer::BufferResult::BufferOverflow => { }
+        }
+    }
+    Ok(result)
 }
 
 /// Decrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
-    let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_CBC, GCRYPT_CIPHER_FLAGS)?;
-    cipher.set_key(key)?;
-    cipher.set_iv(iv)?;
-    cipher.decrypt(&data[..], &mut dec[..])?;
-    unpad(&mut dec);
-    Ok(dec)
+    let mut decryptor = rust_crypto::aes::cbc_decryptor(
+        rust_crypto::aes::KeySize::KeySize256,
+        key,
+        iv,
+        AnsiPadding {}
+    );
+    let mut result = Vec::<u8>::new();
+    let mut out = [0; 4096];
+    let mut reader = rust_crypto::buffer::RefReadBuffer::new(data);
+    let mut writer = rust_crypto::buffer::RefWriteBuffer::new(&mut out);
+
+    loop {
+        let res = decryptor.decrypt(&mut reader, &mut writer, true)?;
+        result.extend(writer.take_read_buffer().take_remaining().iter().map(|&i| i));
+        match res {
+            rust_crypto::buffer::BufferResult::BufferUnderflow => break,
+            rust_crypto::buffer::BufferResult::BufferOverflow => { }
+        }
+    }
+    Ok(result)
 }
 
 /// Encrypt data using a 256-bit length key via AES-GCM
 pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
+    let mut gcm = rust_crypto::aes_gcm::AesGcm::new(
+        rust_crypto::aes::KeySize::KeySize256,
+        key,
+        iv,
+        auth
+    );
     let mut tag: Vec<u8> = vec![0; GCM_TAG_LENGTH];
     let mut enc: Vec<u8> = vec![0; data.len()];
-    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS)?;
-    cipher.set_key(key)?;
-    cipher.set_iv(iv)?;
-    cipher.authenticate(auth)?;
-    cipher.encrypt(data, &mut enc[..])?;
-    cipher.get_tag(&mut tag[..])?;
+    gcm.encrypt(data, enc.as_mut_slice(), tag.as_mut_slice());
     enc.append(&mut tag);
     Ok(enc)
 }
@@ -364,15 +393,15 @@ pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResu
     let tag_cutoff: usize = data.len() - GCM_TAG_LENGTH;
     let tag = &data[tag_cutoff..];
     let data = &data[0..tag_cutoff];
+    let mut gcm = rust_crypto::aes_gcm::AesGcm::new(
+        rust_crypto::aes::KeySize::KeySize256,
+        key,
+        iv,
+        auth
+    );
     let mut dec: Vec<u8> = vec![0; data.len()];
-    let mut cipher = gcrypt::cipher::Cipher::new(*TOKEN, gcrypt::cipher::CIPHER_AES256, gcrypt::cipher::MODE_GCM, GCRYPT_CIPHER_FLAGS)?;
-    cipher.set_key(key)?;
-    cipher.set_iv(iv)?;
-    cipher.authenticate(auth)?;
-    cipher.decrypt(data, &mut dec[..])?;
-    match cipher.check_tag(&tag[..]) {
-        Ok(..) => {},
-        Err(e) => return Err(CryptoError::Authentication(format!("{}", e))),
+    if !gcm.decrypt(data, dec.as_mut_slice(), tag) {
+        return Err(CryptoError::Authentication(String::from("Authentication error (bad key/corrupt data)")));
     }
     Ok(dec)
 }

@@ -17,7 +17,7 @@ jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
 log = "0.3.6"
 quick-error = "1.1.0"
-rust-crypto = "0.2.36"
+rust-crypto = { path = "rust-crypto" }
 rustc-serialize = "0.3.19"
 serde = "1.0.8"
 serde_derive = "1.0.8"
