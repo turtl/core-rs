@@ -1,7 +1,7 @@
 vars.mk
 target
 config.yaml
-sess.vim
+*sess.vim
 *.exe
 *.stackdump
 *.un~
