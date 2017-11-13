@@ -48,7 +48,7 @@ jobs:
 
       # install our apt deps
       - run: sudo apt-get update
-      - run: sudo apt-get install --fix-missing gpgv2 libgpg-error0 libgpg-error-dev libgcrypt20-dev
+      - run: sudo apt-get install --fix-missing gpgv2
 
       # install libsodium
       - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O /tmp/libsodium.tar.gz
