@@ -13,37 +13,55 @@
 //!
 //! Also note that a goal of this module is to only wrap *one* underlying crypto
 //! lib, but thanks to various issues with PBKDF2 (which MUST be supported for
-//! backwards compat), it currently uses both gcrypt and rust-crypto.
+//! backwards compat), it currently uses rust-crypto.
 
 use ::std::error::Error;
 
 use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
-use ::gcrypt;
-use ::gcrypt::rand::Random;
 use ::rust_crypto;
 use ::rust_crypto::buffer::{ReadBuffer, WriteBuffer};
 use ::rust_crypto::blockmodes::PaddingProcessor;
 use ::rust_crypto::aead::{AeadEncryptor, AeadDecryptor};
 use ::rust_crypto::digest::Digest;
 use ::rust_crypto::mac::Mac;
+use ::rand::{self, Rng, SeedableRng};
+use ::std::sync::Mutex;
+use ::std::ops::Sub;
+use ::time;
 
 lazy_static! {
-    /// Init the gcrypt lib and store our token
-    static ref TOKEN: gcrypt::Token = gcrypt::init(|mut x| {
-        //x.enable_secmem(1024 * 1024 * 1).unwrap();
-        x.disable_secmem();
-        //x.enable_secure_rndpool();
-    });
+    static ref RNG: Mutex<rust_crypto::fortuna::Fortuna> = {
+        // our random seed consists of the current time (w/ nanoseconds), a NON
+        // CS random number, some math based on that non-CS rand, and the
+        // duration it takes to compute that math (in nanoseconds). obviously
+        // this could be better, but this is two sources of high-resolution
+        // entropy, so should be good.
+        //
+        // keeping in mind that this crate is JUST for migrating data from v0.6
+        // to v0.7, and ALL the crypto is deterministic in that sense (both
+        // generating logins and decrypting existing data). a true CSPRNG isn't
+        // really necessary.
+        let start = time::now_utc();
+        let mut x: f64 = 888889999.0;
+        let simple_rand = rand::random::<u16>();
+        for _ in 0..simple_rand { x = x / 1.00001; }
+        let end = time::now_utc();
+        let dur = end.sub(start);
+        let seed = format!(
+            "t{}.{}/d{}/x{}:{}",
+            time::now_utc().rfc3339(),
+            time::now_utc().tm_nsec,
+            dur.num_nanoseconds().unwrap_or(dur.num_microseconds().unwrap_or(0)),
+            simple_rand,
+            x
+        );
+        let rng = rust_crypto::fortuna::Fortuna::from_seed(seed.as_bytes());
+        Mutex::new(rng)
+    };
 }
 /// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;
-/// Defines flags for our ciphers
-const GCRYPT_CIPHER_FLAGS: gcrypt::cipher::Flags = gcrypt::cipher::FLAG_SECURE;
-/// Defines flags for our hmacs
-const GCRYPT_MAC_FLAGS: gcrypt::mac::Flags = gcrypt::mac::FLAG_SECURE;
-/// Defines flags for our random number generation
-const GCRYPT_RANDOM_STRENGTH: gcrypt::rand::Level = gcrypt::rand::VERY_STRONG_RANDOM;
 
 quick_error! {
     /// Define a type for cryptography errors.
@@ -87,7 +105,6 @@ macro_rules! make_boxed_err {
         }
     }
 }
-make_boxed_err!(::gcrypt::Error);
 make_boxed_err!(::std::string::FromUtf8Error);
 make_boxed_err!(::serialize::hex::FromHexError);
 
@@ -222,9 +239,10 @@ pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
 
 /// Generate N number of CS random bytes.
 pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
-    let mut result: Vec<u8> = vec![0; len];
-    (&mut result[..]).randomize(*TOKEN, GCRYPT_RANDOM_STRENGTH);
-    Ok(result)
+    let mut out = vec![0u8; len];
+    let mut guard = (*RNG).lock().unwrap();
+    guard.fill_bytes(out.as_mut_slice());
+    Ok(out)
 }
 
 /// Generate a random u64. Uses rand_bytes() and bit shifting to build a u64.
