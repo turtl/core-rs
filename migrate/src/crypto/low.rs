@@ -25,6 +25,7 @@ use ::rust_crypto;
 use ::rust_crypto::buffer::{ReadBuffer, WriteBuffer};
 use ::rust_crypto::blockmodes::PaddingProcessor;
 use ::rust_crypto::aead::{AeadEncryptor, AeadDecryptor};
+use ::rust_crypto::digest::Digest;
 
 lazy_static! {
     /// Init the gcrypt lib and store our token
@@ -33,9 +34,6 @@ lazy_static! {
         x.disable_secmem();
         //x.enable_secure_rndpool();
     });
-    /// Store our block size. This is mainly used for padding.
-    //static ref AES_BLOCK_SIZE: usize = gcrypt::cipher::CIPHER_AES256.block_len();
-    static ref AES_BLOCK_SIZE: usize = 16;
 }
 /// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;
@@ -114,14 +112,29 @@ pub enum Hasher {
 /// used for hte given data. Note that this function is not a necessary export
 /// for this module, so it remains private.
 fn hash(hasher: Hasher, data: &[u8]) -> CResult<Vec<u8>> {
-    let hashtype = match hasher {
-        Hasher::SHA1 => gcrypt::digest::MD_SHA1,
-        Hasher::SHA256 => gcrypt::digest::MD_SHA256,
-        Hasher::SHA512 => gcrypt::digest::MD_SHA512,
-    };
-    let mut result: Vec<u8> = vec![0; hashtype.digest_len()];
-    gcrypt::digest::hash(*TOKEN, hashtype, data, &mut result[..]);
-    Ok(result)
+    match hasher {
+        Hasher::SHA1 => {
+            let mut sha = rust_crypto::sha1::Sha1::new();
+            sha.input(data);
+            let mut out = vec![0u8; sha.output_bytes()];
+            sha.result(out.as_mut_slice());
+            Ok(out)
+        }
+        Hasher::SHA256 => {
+            let mut sha = rust_crypto::sha2::Sha256::new();
+            sha.input(data);
+            let mut out = vec![0u8; sha.output_bytes()];
+            sha.result(out.as_mut_slice());
+            Ok(out)
+        }
+        Hasher::SHA512 => {
+            let mut sha = rust_crypto::sha2::Sha512::new();
+            sha.input(data);
+            let mut out = vec![0u8; sha.output_bytes()];
+            sha.result(out.as_mut_slice());
+            Ok(out)
+        }
+    }
 }
 
 /// SHA1 some data and return a u8 vec result.
@@ -219,47 +232,6 @@ pub fn rand_float() -> CResult<f64> {
     Ok((rand_int()? as f64) / (::std::u64::MAX as f64))
 }
 
-/*
-/// Generate a key from a password/salt using PBKDF2/SHA256. This uses gcrypt.
-///
-/// NOTE that gcrypt does NOT allow zero-length salts, which of course v0 auth
-/// generation relies on.
-pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
-    let hashtype = match hasher {
-        Hasher::SHA1 => gcrypt::digest::MD_SHA1,
-        Hasher::SHA256 => gcrypt::digest::MD_SHA256,
-        Hasher::SHA512 => gcrypt::digest::MD_SHA512,
-    };
-    let mut result: Vec<u8> = vec![0; keylen];
-    gcrypt::kdf::pbkdf2_derive(*TOKEN, hashtype, iter as u32, pass, salt, &mut result[..])?;
-    Ok(result)
-}
-*/
-
-/*
-/// Generate a key from a password/salt using PBKDF2/SHA256. This uses openssl.
-///
-/// NOTE that openssl requires the salt be a utf8 string, so cannot possibly
-/// work with binary data. useless.
-pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
-    let pbfn = match hasher {
-        Hasher::SHA1 => pkcs5::pbkdf2_hmac_sha1,
-        Hasher::SHA256 => pkcs5::pbkdf2_hmac_sha256,
-        Hasher::SHA512 => pkcs5::pbkdf2_hmac_sha512,
-    };
-
-    let mut pass_str = String::new();
-    let mut i = 0;
-    for byte in pass {
-        pass_str.push(*byte as char);
-        i += 1;
-        println!("byte: {} -- {} / {}", byte, i, pass_str.len());
-    }
-    println!("- pass: {}", to_base64(&Vec::from(pass_str.as_bytes())).unwrap());
-    Ok(pbfn(&pass_str, salt, iter, keylen))
-}
-*/
-
 /// Generate a key from a password/salt using PBKDF2/SHA256. This uses
 /// rust-crypto.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
@@ -284,7 +256,7 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
 /// Returns the aes block size. Obviously, always 16, but let's get it straight
 /// from the panda's mouth instead of making WILD assumptions.
 pub fn aes_block_size() -> usize {
-    *AES_BLOCK_SIZE
+    16
 }
 
 struct AnsiPadding {}
