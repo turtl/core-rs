@@ -2,7 +2,7 @@ os: Visual Studio 2015
 
 branches:
   only:
-    - master
+    - appveyor
 
 services:
   - postgresql96
@@ -16,27 +16,89 @@ environment:
   PGPASSWORD: "Password12!"
 
 install:
-  - createdb turtl
-  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+  # path setup
+  - mkdir c:\lib
+  - set PATH=C:\lib;C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+
+  # gcrypt/libsodium
+  - ps: >-
+      bash -c @"
+        set -e
+        exec 0</dev/null 2>&1
+        cp build-tools/gpg-error-config.bat /c/lib
+        cp build-tools/libgcrypt-config.bat /c/lib
+        pacman -S --noconfirm mingw-w64-x86_64-libgpg-error
+        pacman -S --noconfirm mingw-w64-x86_64-libgcrypt
+        pacman -S --noconfirm mingw-w64-x86_64-sqlite3
+        cp /usr/bin/msys-gpg-error-0.dll /c/lib/libgpg-error.dll
+        cp /usr/bin/msys-gcrypt-20.dll /c/lib/libgcrypt.dll
+        cp /usr/bin/msys-sqlite3-0.dll /c/lib/sqlite3.dll
+
+        mkdir /c/src
+        cd /c/src
+        wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O libsodium.tar.gz
+        wget -q https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O libsodium.tar.gz.sig
+        gpg --import /c/projects/core-rs/build-tools/libsodium.gpg.pub
+        gpg --verify libsodium.tar.gz.sig libsodium.tar.gz
+        tar -xvf libsodium.tar.gz > /dev/null
+        cd libsodium-1.0.12
+        ./configure --prefix=/usr --includedir=/c/include --libdir=/c/lib --enable-shared --enable-static
+        make
+        make install
+      "@
+      #  - ps: >-
+      #      bash -c @"
+      #        mkdir -p /c/projects/
+      #        cd /c/projects
+      #        wget -q https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2
+      #        wget -q https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.1.tar.bz2
+      #        tar -xvf libgpg-error-1.27.tar.bz2 > /dev/null
+      #        tar -xvf libgcrypt-1.8.1.tar.bz2 > /dev/null
+      #        cd libgpg-error-1.27
+      #        ./configure --prefix=/c/usr/ --libdir=/c/lib --includedir=/c/include
+      #        make
+      #        make install
+      #        cd ../libgcrypt-1.8.1
+      #        ./configure --prefix=/c/usr --libdir=/c/lib --includedir=/c/include
+      #        make
+      #        make install
+      #      "@
+
+  # install node
+  - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
+  - npm config set msvs_version 2015
+  - node -e "console.log(process.argv[0], process.arch, process.versions)"
+
+  # install rust
   - curl -sSf -o rustup-init.exe https://win.rustup.rs
   - rustup-init.exe -y --default-toolchain stable-x86_64-pc-windows-gnu
   #- rustup toolchain install stable-x86_64-pc-windows-msvc
   - rustup default stable-gnu
   - rustup show
-  - ps: Install-Product node $env:NODEJS_VERSION $env:PLATFORM
-  - npm config set msvs_version 2015
-  - node -e "console.log(process.argv[0], process.arch, process.versions)"
-  - ps: >-
-      bash -c @"
-        set -e
-        exec 0</dev/null 2>&1
-        uname -a
-      "@
+
+before_build:
+  - set PATH=C:\msys64\usr\bin;C:\msys64\mingw64\bin;C:\Program Files\PostgreSQL\9.6\bin\;C:\Users\appveyor\.cargo\bin;%PATH%
+  - createdb turtl
+  - git checkout https://github.com/turtl/server c:\projects\turtl-server
+  - cd c:\projects\turtl-server
+  - copy config\config.yaml.ci config\config.yaml
+  - npm install
+  - mkdir plugins
+  - mkdir public
+  - mkdir public\uploads
+  - node tools\create-db-schema.js
+  - node tools\populate-test-data.js
+  - ps: $Server = Start-Process node server.js -PassThru
 
 build: false
 
 test_script:
-  - cargo test --release
+  - set GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat
+  - set LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat
+  - bash -c "GPG_ERROR_CONFIG=c:/lib/gpg-error-config.bat LIBGCRYPT_CONFIG=c:/lib/libgcrypt-config.bat cargo test --release"
+
+on_finish:
+  - ps: Stop-Process -Id $Server.Id
 
 cache:
   - target
