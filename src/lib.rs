@@ -51,6 +51,7 @@ mod search;
 mod dispatch;
 mod schema;
 mod turtl;
+mod rpc;
 
 use ::std::thread;
 use ::std::sync::Arc;
@@ -99,11 +100,11 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
 /// those keys that exist in the config.yaml (app config). this gives the entire
 /// app access to our runtime config.
 pub fn start(config_str: String) -> thread::JoinHandle<()> {
-    thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
-        let runner = move || -> TResult<()> {
-            // load our ocnfiguration
-            process_runtime_config(config_str)?;
+    // load our configuration
+    process_runtime_config(config_str).unwrap();
 
+    let handle = thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
+        let runner = move || -> TResult<()> {
             let data_folder = config::get::<String>(&["data_folder"])?;
             if data_folder != ":memory:" {
                 util::create_dir(&data_folder)?;
@@ -119,6 +120,8 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
             // start our messaging thread
             let msg_res = messaging::start(move |msg: String| {
                 let turtl2 = turtl.clone();
+                // spawn a new thread for each message. this lets us process
+                // multiple messages at once without blocking.
                 let res = thread::Builder::new().name(String::from("dispatch:msg")).spawn(move || {
                     match dispatch::process(turtl2.as_ref(), &msg) {
                         Ok(..) => {},
@@ -143,7 +146,22 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
                 error!("main::start() -- {}", e);
             }
         }
-    }).unwrap()
+    }).unwrap();
+
+    match config::get::<String>(&["rpc", "enable"]) {
+        Ok(x) => {
+            if x == "I UNDERSTAND THE RPC SERVER IS INSECURE AND IS FOR TESTING ONLY" {
+                match rpc::run() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("main::start() -- problem starting RPC: {}", e);
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    handle
 }
 
 // -----------------------------------------------------------------------------

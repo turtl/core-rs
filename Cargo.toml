@@ -57,4 +57,5 @@ time = "0.1.35"
 
 [features]
 panic-on-error = []
+rpc-test = []
 
