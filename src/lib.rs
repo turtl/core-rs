@@ -257,6 +257,11 @@ pub extern fn turtl_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usiz
 }
 
 #[no_mangle]
+pub extern fn turtl_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
+    turtl_recv(non_block, ptr::null(), len_c)
+}
+
+#[no_mangle]
 pub extern fn turtl_free(msg: *const u8, len: usize) -> i32 {
     carrier::c::carrier_free(msg, len)
 }
@@ -266,13 +271,12 @@ mod tests {
     use super::*;
     use ::std::{thread, slice, str};
     use ::std::ffi::CString;
-    use ::std::ptr;
 
     fn recv_str(mid: &str) -> String {
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
         let msg = if mid == "" {
-            turtl_recv(0, ptr::null(), raw_len)
+            turtl_recv_event(0, raw_len)
         } else {
             let suffix_c = CString::new(mid).unwrap();
             turtl_recv(0, suffix_c.as_ptr(), raw_len)
