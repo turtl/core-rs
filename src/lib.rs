@@ -151,6 +151,41 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
     handle
 }
 
+/// Send a message into turtl's dispatcher
+pub fn send(msg: String) -> TResult<()> {
+    let channel: String = format!("{}-core-in", config::get::<String>(&["messaging", "reqres"])?);
+    carrier::send_string(channel.as_str(), msg)?;
+    Ok(())
+}
+
+/// Receive a turtl message (blocking)
+pub fn recv(msg_id: Option<&str>) -> TResult<String> {
+    let chan_switch = if msg_id.is_some() { "reqres" } else { "events" };
+    let chan_cfg: String = config::get(&["messaging", chan_switch])?;
+    let channel: String = match msg_id {
+        Some(id) => format!("{}-core-out:{}", chan_cfg, id),
+        None => chan_cfg,
+    };
+    let msg = carrier::recv(channel.as_str())?;
+    Ok(String::from_utf8(msg)?)
+}
+
+/// Receive a turtl message (blocking)
+pub fn recv_nb(msg_id: Option<&str>) -> TResult<Option<String>> {
+    let chan_switch = if msg_id.is_some() { "reqres" } else { "events" };
+    let chan_cfg: String = config::get(&["messaging", chan_switch])?;
+    let channel: String = match msg_id {
+        Some(id) => format!("{}-core-out:{}", chan_cfg, id),
+        None => chan_cfg,
+    };
+    let msg = carrier::recv_nb(channel.as_str())?;
+    let mapped = match msg {
+        Some(x) => Some(String::from_utf8(x)?),
+        None => None,
+    };
+    Ok(mapped)
+}
+
 // -----------------------------------------------------------------------------
 // our C api
 // -----------------------------------------------------------------------------
@@ -287,6 +322,23 @@ mod tests {
         let ret = String::from(res_str);
         turtlc_free(msg, len);
         ret
+    }
+
+    #[test]
+    fn rust_api() {
+        let handle = start(String::from("{}"));
+
+        send(String::from(r#"["1","ping"]"#)).unwrap();
+        let res_msg = recv(Some("1")).unwrap();
+        assert_eq!(res_msg, r#"{"e":0,"d":"pong"}"#);
+        let res_ev = recv(None).unwrap();
+        assert_eq!(res_ev, r#"{"e":"pong","d":null}"#);
+
+        send(String::from(r#"["2","app:shutdown"]"#)).unwrap();
+        let res_msg = recv(Some("2")).unwrap();
+        assert_eq!(res_msg, r#"{"e":0,"d":{}}"#);
+
+        handle.join().unwrap();
     }
 
     #[test]
