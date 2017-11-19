@@ -51,7 +51,6 @@ mod search;
 mod dispatch;
 mod schema;
 mod turtl;
-mod rpc;
 
 use ::std::thread;
 use ::std::sync::Arc;
@@ -158,7 +157,7 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
 /// Start Turtl
 #[no_mangle]
-pub extern fn turtl_start(config_c: *const c_char) -> i32 {
+pub extern fn turtlc_start(config_c: *const c_char) -> i32 {
     let res = panic::catch_unwind(|| -> i32 {
         if config_c.is_null() { return -1; }
         let config_res = unsafe { CStr::from_ptr(config_c).to_str() };
@@ -196,7 +195,7 @@ pub extern fn turtl_start(config_c: *const c_char) -> i32 {
 }
 
 #[no_mangle]
-pub extern fn turtl_send(message_bytes: *const u8, message_len: usize) -> i32 {
+pub extern fn turtlc_send(message_bytes: *const u8, message_len: usize) -> i32 {
     let channel: String = match config::get(&["messaging", "reqres"]) {
         Ok(x) => x,
         Err(e) => {
@@ -215,7 +214,7 @@ pub extern fn turtl_send(message_bytes: *const u8, message_len: usize) -> i32 {
 }
 
 #[no_mangle]
-pub extern fn turtl_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
+pub extern fn turtlc_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
     let null = ptr::null_mut();
     let non_block = non_block == 1;
     let is_ev = msgid_c.is_null();
@@ -257,12 +256,12 @@ pub extern fn turtl_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usiz
 }
 
 #[no_mangle]
-pub extern fn turtl_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
-    turtl_recv(non_block, ptr::null(), len_c)
+pub extern fn turtlc_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
+    turtlc_recv(non_block, ptr::null(), len_c)
 }
 
 #[no_mangle]
-pub extern fn turtl_free(msg: *const u8, len: usize) -> i32 {
+pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
     carrier::c::carrier_free(msg, len)
 }
 
@@ -276,17 +275,17 @@ mod tests {
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
         let msg = if mid == "" {
-            turtl_recv_event(0, raw_len)
+            turtlc_recv_event(0, raw_len)
         } else {
             let suffix_c = CString::new(mid).unwrap();
-            turtl_recv(0, suffix_c.as_ptr(), raw_len)
+            turtlc_recv(0, suffix_c.as_ptr(), raw_len)
         };
 
         assert!(!msg.is_null());
         let slice = unsafe { slice::from_raw_parts(msg, len) };
         let res_str = str::from_utf8(slice).unwrap();
         let ret = String::from(res_str);
-        turtl_free(msg, len);
+        turtlc_free(msg, len);
         ret
     }
 
@@ -295,12 +294,12 @@ mod tests {
         let handle = thread::spawn(|| {
             let config = String::from("{}");
             let cstr = CString::new(config).unwrap();
-            let res = turtl_start(cstr.as_ptr());
+            let res = turtlc_start(cstr.as_ptr());
             assert_eq!(res, 0);
         });
 
         let msg = Vec::from(String::from("[\"1\",\"ping\"]").as_bytes());
-        let res = turtl_send(msg.as_ptr(), msg.len());
+        let res = turtlc_send(msg.as_ptr(), msg.len());
         assert_eq!(res, 0);
 
         let res_msg = recv_str("1");
@@ -309,7 +308,7 @@ mod tests {
         assert_eq!(res_ev, r#"{"e":"pong","d":null}"#);
 
         let msg = Vec::from(String::from("[\"2\",\"app:shutdown\"]").as_bytes());
-        let res = turtl_send(msg.as_ptr(), msg.len());
+        let res = turtlc_send(msg.as_ptr(), msg.len());
         assert_eq!(res, 0);
         let res_msg = recv_str("2");
         assert_eq!(res_msg, r#"{"e":0,"d":{}}"#);
