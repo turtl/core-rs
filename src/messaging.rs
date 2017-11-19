@@ -66,7 +66,7 @@ impl Messenger {
         let channel: String = match config::get(&["messaging", "reqres"]) {
             Ok(x) => x,
             Err(e) => {
-                error!("messaging: problem grabbing address (messaging.address) from config, using default: {}", e);
+                error!("messaging: problem grabbing address (messaging.reqres) from config, using default: {}", e);
                 String::from("inproc://turtl")
             }
         };
@@ -91,6 +91,7 @@ impl Messenger {
             d: data,
         };
         let msg = jedi::stringify(&event)?;
+        debug!("messaging: event: {} ({})", channel, msg.len());
         carrier::send_string(channel.as_str(), msg)
             .map_err(|e| From::from(e))
     }
@@ -98,7 +99,7 @@ impl Messenger {
     /// Blocking receive
     pub fn recv(&self) -> TResult<String> {
         let bytes = carrier::recv(&self.channel_in[..])?;
-        debug!("messaging: recv: {}", bytes.len());
+        debug!("messaging: recv: {} ({})", self.channel_in, bytes.len());
         String::from_utf8(bytes).map_err(|e| From::from(e))
     }
 
@@ -108,7 +109,7 @@ impl Messenger {
         let maybe_bytes = carrier::recv_nb(&self.channel_in[..])?;
         match maybe_bytes {
             Some(x) => {
-                debug!("messaging: recv: {}", x.len());
+                debug!("messaging: recv: {} ({})", self.channel_in, x.len());
                 String::from_utf8(x).map_err(|e| From::from(e))
             },
             None => Err(TError::TryAgain),
@@ -117,14 +118,14 @@ impl Messenger {
 
     /// Send a message out
     pub fn send(&self, msg: String) -> TResult<()> {
-        debug!("messaging: send: {}", msg.len());
+        debug!("messaging: send: {} ({})", self.channel_out, msg.len());
         carrier::send_string(self.channel_out.as_str(), msg)
             .map_err(|e| From::from(e))
     }
 
     /// Send a message on the out channel, but suffix the channel
     pub fn send_suffix(&self, suffix: String, msg: String) -> TResult<()> {
-        debug!("messaging: send: {}", msg.len());
+        debug!("messaging: send_suffix: {}:{} ({})", self.channel_out, suffix, msg.len());
         carrier::send_string(format!("{}:{}", &self.channel_out, suffix).as_str(), msg)
             .map_err(|e| From::from(e))
     }
@@ -178,7 +179,6 @@ pub fn start<F>(process: F) -> TResult<()>
                     messenger.shutdown();
                     continue;
                 }
-                debug!("messaging: recv: {}", x.len());
                 process(x);
             },
             Err(e) => {

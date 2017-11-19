@@ -309,6 +309,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "ping" => {
             info!("ping!");
+            messaging::ui_event("pong", &Value::Null)?;
             Ok(Value::String(String::from("pong")))
         }
         _ => {

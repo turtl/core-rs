@@ -56,7 +56,8 @@ mod rpc;
 use ::std::thread;
 use ::std::sync::Arc;
 use ::std::os::raw::c_char;
-use ::std::ffi::CStr;
+use ::std::ptr;
+use ::std::ffi::{CStr, CString};
 use ::std::panic;
 
 use ::jedi::Value;
@@ -148,19 +149,6 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
         }
     }).unwrap();
 
-    match config::get::<String>(&["rpc", "enable"]) {
-        Ok(x) => {
-            if x == "I UNDERSTAND THE RPC SERVER IS INSECURE AND IS FOR TESTING ONLY" {
-                match rpc::run() {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("main::start() -- problem starting RPC: {}", e);
-                    }
-                }
-            }
-        }
-        Err(_) => {}
-    }
     handle
 }
 
@@ -204,6 +192,124 @@ pub extern fn turtl_start(config_c: *const c_char) -> i32 {
             println!("turtl_start() -- panic: {:?}", e);
             return -5;
         },
+    }
+}
+
+#[no_mangle]
+pub extern fn turtl_send(message_bytes: *const u8, message_len: usize) -> i32 {
+    let channel: String = match config::get(&["messaging", "reqres"]) {
+        Ok(x) => x,
+        Err(e) => {
+            error!("turtl_send() -- problem grabbing address (messaging.reqres) from config: {}", e);
+            return -5;
+        }
+    };
+    let cstr = match CString::new(format!("{}-core-in", channel)) {
+        Ok(x) => x,
+        Err(e) => {
+            error!("turtl_send() -- bad channel passed: {}", e);
+            return -6;
+        }
+    };
+    carrier::c::carrier_send(cstr.as_ptr(), message_bytes, message_len)
+}
+
+#[no_mangle]
+pub extern fn turtl_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
+    let null = ptr::null_mut();
+    let non_block = non_block == 1;
+    let is_ev = msgid_c.is_null();
+    let chan_switch = if is_ev { "events" } else { "reqres" };
+    let channel: String = match config::get(&["messaging", chan_switch]) {
+        Ok(x) => x,
+        Err(e) => {
+            error!("turtl_recv() -- problem grabbing address (messaging.reqres) from config: {}", e);
+            return null;
+        }
+    };
+    let suffix = if msgid_c.is_null() {
+        ""
+    } else {
+        let cstr_suffix = unsafe { CStr::from_ptr(msgid_c).to_str() };
+        match cstr_suffix {
+            Ok(x) => x,
+            Err(e) => {
+                error!("turtl_recv() -- bad suffix given: {}", e);
+                return null;
+            }
+        }
+    };
+    let suffix = if suffix == "" { String::from("") } else { format!(":{}", suffix) };
+    let append = if is_ev { "" } else { "-core-out" };
+    let channel = format!("{}{}{}", channel, append, suffix);
+    let cstr = match CString::new(channel) {
+        Ok(x) => x,
+        Err(e) => {
+            error!("turtl_recv() -- bad channel passed: {}", e);
+            return null;
+        }
+    };
+    if non_block {
+        carrier::c::carrier_recv_nb(cstr.as_ptr(), len_c)
+    } else {
+        carrier::c::carrier_recv(cstr.as_ptr(), len_c)
+    }
+}
+
+#[no_mangle]
+pub extern fn turtl_free(msg: *const u8, len: usize) -> i32 {
+    carrier::c::carrier_free(msg, len)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::std::{thread, slice, str};
+    use ::std::ffi::CString;
+    use ::std::ptr;
+
+    fn recv_str(mid: &str) -> String {
+        let mut len: usize = 0;
+        let raw_len = &mut len as *mut usize;
+        let msg = if mid == "" {
+            turtl_recv(0, ptr::null(), raw_len)
+        } else {
+            let suffix_c = CString::new(mid).unwrap();
+            turtl_recv(0, suffix_c.as_ptr(), raw_len)
+        };
+
+        assert!(!msg.is_null());
+        let slice = unsafe { slice::from_raw_parts(msg, len) };
+        let res_str = str::from_utf8(slice).unwrap();
+        let ret = String::from(res_str);
+        turtl_free(msg, len);
+        ret
+    }
+
+    #[test]
+    fn c_api() {
+        let handle = thread::spawn(|| {
+            let config = String::from("{}");
+            let cstr = CString::new(config).unwrap();
+            let res = turtl_start(cstr.as_ptr());
+            assert_eq!(res, 0);
+        });
+
+        let msg = Vec::from(String::from("[\"1\",\"ping\"]").as_bytes());
+        let res = turtl_send(msg.as_ptr(), msg.len());
+        assert_eq!(res, 0);
+
+        let res_msg = recv_str("1");
+        assert_eq!(res_msg, r#"{"e":0,"d":"pong"}"#);
+        let res_ev = recv_str("");
+        assert_eq!(res_ev, r#"{"e":"pong","d":null}"#);
+
+        let msg = Vec::from(String::from("[\"2\",\"app:shutdown\"]").as_bytes());
+        let res = turtl_send(msg.as_ptr(), msg.len());
+        assert_eq!(res, 0);
+        let res_msg = recv_str("2");
+        assert_eq!(res_msg, r#"{"e":0,"d":{}}"#);
+        handle.join().unwrap();
     }
 }
 
