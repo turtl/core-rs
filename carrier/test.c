@@ -3,9 +3,9 @@
 #include <string.h>
 
 extern int32_t carrier_send(char*, uint8_t*, size_t);
-extern uint8_t* carrier_recv_nb(char*, uint64_t*);
-extern uint8_t* carrier_recv(char*, uint64_t*);
-extern int32_t carrier_free(uint8_t*);
+extern uint8_t* carrier_recv_nb(char*, size_t*);
+extern uint8_t* carrier_recv(char*, size_t*);
+extern size_t carrier_free(uint8_t*, size_t);
 
 void send(int id, char* msg) {
 	int32_t send = carrier_send("core", msg, strlen(msg));
@@ -14,12 +14,12 @@ void send(int id, char* msg) {
 }
 
 void recv(int id) {
-	uint64_t len = 0;
+	size_t len = 0;
 	uint8_t* recv = carrier_recv_nb("core", &len);
 	/*printf("recv%d: got %d bytes\n", id, len);*/
 	fflush(stdout);
 	if(recv && len > 0) {
-		int32_t res = carrier_free(recv);
+		int32_t res = carrier_free(recv, len);
 		/*printf("recv%d: free: %d\n", id, res);*/
 		fflush(stdout);
 	} else {

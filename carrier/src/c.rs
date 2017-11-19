@@ -1,7 +1,7 @@
 //! This is the Carrier C API
 
-use ::std::mem::transmute;
-use ::std::ffi::{CStr, CString};
+use ::std::mem;
+use ::std::ffi::CStr;
 use ::std::ptr;
 use ::std::os::raw::c_char;
 use ::std::slice;
@@ -30,7 +30,7 @@ pub extern fn carrier_send(channel_c: *const c_char, message_bytes: *const u8, m
 }
 
 #[no_mangle]
-pub extern fn carrier_recv(channel_c: *const c_char, len_c: *mut u64) -> *mut u8 {
+pub extern fn carrier_recv(channel_c: *const c_char, len_c: *mut usize) -> *const u8 {
     let null = ptr::null_mut();
     unsafe { *len_c = 0; }
     if channel_c.is_null() { return null; }
@@ -43,15 +43,15 @@ pub extern fn carrier_recv(channel_c: *const c_char, len_c: *mut u64) -> *mut u8
         },
     };
     match ::recv(channel) {
-        Ok(x) => {
-            unsafe { *len_c = x.len() as u64; }
-            match CString::new(x) {
-                Ok(x) => unsafe { transmute(Box::new(x.into_raw())) },
-                Err(e) => {
-                    println!("carrier: recv: error: {}", e);
-                    return null;
-                }
+        Ok(mut x) => {
+            // make len == capacity
+            x.shrink_to_fit();
+            let ptr = x.as_mut_ptr();
+            unsafe {
+                *len_c = x.len();
+                mem::forget(x);
             }
+            ptr
         },
         Err(e) => {
             println!("carrier: recv: error: {}", e);
@@ -61,7 +61,7 @@ pub extern fn carrier_recv(channel_c: *const c_char, len_c: *mut u64) -> *mut u8
 }
 
 #[no_mangle]
-pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut u64) -> *mut u8 {
+pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut usize) -> *const u8 {
     let null = ptr::null_mut();
     unsafe { *len_c = 0; }
     if channel_c.is_null() { return null; }
@@ -76,15 +76,15 @@ pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut u64) -> *mut
     match ::recv_nb(channel) {
         Ok(x) => {
             match x {
-                Some(x) => {
-                    unsafe { *len_c = x.len() as u64; }
-                    match CString::new(x) {
-                        Ok(x) => unsafe { transmute(Box::new(x.into_raw())) },
-                        Err(e) => {
-                            println!("carrier: recv_nb: error: {}", e);
-                            return null;
-                        }
+                Some(mut x) => {
+                    // make len == capacity
+                    x.shrink_to_fit();
+                    let ptr = x.as_mut_ptr();
+                    unsafe {
+                        *len_c = x.len();
+                        mem::forget(x);
                     }
+                    ptr
                 },
                 None => return null,
             }
@@ -97,10 +97,9 @@ pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut u64) -> *mut
 }
 
 #[no_mangle]
-pub extern fn carrier_free(msg: *mut u8) -> i32 {
-    let rmsg: Box<Vec<u8>> = unsafe { transmute(msg) };
-    drop(rmsg);
+pub extern fn carrier_free(msg: *const u8, len: usize) -> i32 {
+    let vec = unsafe { Vec::from_raw_parts(msg as *mut u8, len, len) };
+    drop(vec);
     0
 }
-
 
