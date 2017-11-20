@@ -330,6 +330,7 @@ pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
 }
 
 #[cfg(test)]
+#[cfg(feature = "public-api-tests")]
 mod tests {
     use super::*;
     use ::std::{thread, slice, str};
