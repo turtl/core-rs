@@ -10,7 +10,7 @@ mod tests {
         dispatch_ass(json!(["app:wipe-user-data"]));
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
         let ret = dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", password]));
-        let user_id: String = jedi::from_val(ret).unwrap();
+        let user_id: String = jedi::get(&["id"], &ret).unwrap();
         dispatch_ass(json!(["sync:start"]));
         wait_on("sync:connected");
         wait_on("profile:loaded");
@@ -23,7 +23,7 @@ mod tests {
         let username: String = config::get(&["integration_tests", "login", "username"]).unwrap();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
         let ret = dispatch_ass(json!(["user:login", username, password]));
-        let user_id: String = jedi::from_val(ret).unwrap();
+        let user_id: String = jedi::get(&["id"], &ret).unwrap();
         dispatch_ass(json!(["sync:start"]));
         wait_on("sync:connected");
         wait_on("profile:loaded");
