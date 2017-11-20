@@ -144,7 +144,6 @@ impl Turtl {
     /// Send a success response to a remote request
     pub fn msg_success(&self, mid: &String, data: Value) -> TResult<()> {
         let reqres_append_mid: bool = config::get(&["messaging", "reqres_append_mid"])?;
-        println!("- turtl: append_mid? {}", reqres_append_mid);
         if reqres_append_mid {
             let res = Response::new(0, data);
             let msg = jedi::stringify(&res)?;
