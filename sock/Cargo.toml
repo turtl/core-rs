@@ -1,0 +1,9 @@
+[package]
+name = "sock"
+version = "0.1.0"
+authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
+
+[dependencies]
+turtl_core = { path = ".." }
+websocket = "0.20.2"
+
