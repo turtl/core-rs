@@ -40,13 +40,15 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let username: String = jedi::get(&["2"], &data)?;
             let password: String = jedi::get(&["3"], &data)?;
             turtl.login(username, password)?;
-            Ok(Value::String(turtl.user_id()?))
+            let user_guard = lockr!(turtl.user);
+            user_guard.data()
         }
         "user:join" => {
             let username: String = jedi::get(&["2"], &data)?;
             let password: String = jedi::get(&["3"], &data)?;
             turtl.join(username, password)?;
-            Ok(json!({}))
+            let user_guard = lockr!(turtl.user);
+            user_guard.data()
         }
         "user:can-migrate" => {
             let old_username: String = jedi::get(&["2"], &data)?;
