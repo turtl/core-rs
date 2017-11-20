@@ -22,10 +22,25 @@ use ::error::{TResult, TError};
 #[derive(Serialize)]
 #[serde(rename = "res")]
 pub struct Response {
+    /// The message id
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
     /// `e > 0` means "error!!!1", `e == 0` means "great success!!"
     pub e: i64,
     /// Any data we want to pass back to the UI
     pub d: Value,
+}
+
+impl Response {
+    /// Make a new Response object with a blank id
+    pub fn new(e: i64, d: Value) -> Response {
+        Response { id: None, e: e, d: d }
+    }
+
+    /// Make a new Response object
+    pub fn new_w_id(id: String, e: i64, d: Value) -> Response {
+        Response { id: Some(id), e: e, d: d }
+    }
 }
 
 /// Defines a container for sending events to the client. See the `Response`

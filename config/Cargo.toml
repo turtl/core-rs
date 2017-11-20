@@ -6,4 +6,5 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 [dependencies]
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
+serde_json = "1.0.2"
 

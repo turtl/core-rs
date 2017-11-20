@@ -143,22 +143,31 @@ impl Turtl {
 
     /// Send a success response to a remote request
     pub fn msg_success(&self, mid: &String, data: Value) -> TResult<()> {
-        let res = Response {
-            e: 0,
-            d: data,
-        };
-        let msg = jedi::stringify(&res)?;
-        self.remote_send(Some(mid.clone()), msg)
+        let reqres_append_mid: bool = config::get(&["messaging", "reqres_append_mid"])?;
+        println!("- turtl: append_mid? {}", reqres_append_mid);
+        if reqres_append_mid {
+            let res = Response::new(0, data);
+            let msg = jedi::stringify(&res)?;
+            self.remote_send(Some(mid.clone()), msg)
+        } else {
+            let res = Response::new_w_id(mid.clone(), 0, data);
+            let msg = jedi::stringify(&res)?;
+            self.remote_send(None, msg)
+        }
     }
 
     /// Send an error response to a remote request
     pub fn msg_error(&self, mid: &String, err: &TError) -> TResult<()> {
-        let res = Response {
-            e: 1,
-            d: Value::String(format!("{}", err)),
-        };
-        let msg = jedi::stringify(&res)?;
-        self.remote_send(Some(mid.clone()), msg)
+        let reqres_append_mid: bool = config::get(&["messaging", "reqres_append_mid"])?;
+        if reqres_append_mid {
+            let res = Response::new(1, Value::String(format!("{}", err)));
+            let msg = jedi::stringify(&res)?;
+            self.remote_send(Some(mid.clone()), msg)
+        } else {
+            let res = Response::new_w_id(mid.clone(), 1, Value::String(format!("{}", err)));
+            let msg = jedi::stringify(&res)?;
+            self.remote_send(None, msg)
+        }
     }
 
     /// Set up the user object
