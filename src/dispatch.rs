@@ -102,6 +102,16 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.wipe_app_data()?;
             Ok(json!({}))
         }
+        "app:api:set-endpoint" => {
+            let endpoint: String = jedi::get(&["2"], &data)?;
+            config::set(&["api", "endpoint"], &endpoint)?;
+            Ok(json!({}))
+        }
+        "app:shutdown" => {
+            turtl.sync_shutdown(false)?;
+            turtl.events.trigger("app:shutdown", &json!({}));
+            Ok(json!({}))
+        }
         "sync:start" => {
             turtl.sync_start()?;
             Ok(json!({}))
@@ -133,16 +143,6 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "sync:delete-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;
             SyncRecord::delete_sync_item(turtl, &sync_id)?;
-            Ok(json!({}))
-        }
-        "app:api:set-endpoint" => {
-            let endpoint: String = jedi::get(&["2"], &data)?;
-            config::set(&["api", "endpoint"], &endpoint)?;
-            Ok(json!({}))
-        }
-        "app:shutdown" => {
-            turtl.sync_shutdown(false)?;
-            turtl.events.trigger("app:shutdown", &json!({}));
             Ok(json!({}))
         }
         "profile:load" => {
@@ -260,7 +260,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(jedi::to_val(&notes)?)
         }
         "profile:find-notes" => {
-            let qry: Query = jedi::get(&["2"], &data)?;
+            let qry: Query = match jedi::get(&["2"], &data) {
+                Ok(x) => x,
+                Err(e) => {
+                    return TErr!(TError::BadValue(format!("error deserializing search query: {}", e)));
+                }
+            };
             let search_guard = lockr!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
