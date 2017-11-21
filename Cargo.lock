@@ -1069,6 +1069,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "sock"
 version = "0.1.0"
 dependencies = [
+ "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "turtl_core 0.1.0",
  "websocket 0.20.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
