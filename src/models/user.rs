@@ -149,6 +149,7 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     let userdata = turtl.api.get(url.as_str(), ApiReq::new())?;
     let mut user_guard = lockw!(turtl.user);
     user_guard.merge_fields(&userdata)?;
+    user_guard.deserialize()?;
     user_guard.trigger("login", &json!({}));
     debug!("user::do_login() -- auth success, logged in");
     Ok(())
@@ -427,6 +428,7 @@ impl User {
 
         let mut user_guard_w = lockw!(turtl.user);
         user_guard_w.set_setting(turtl, "default_space", &default_space_id)?;
+        user_guard_w.deserialize()?;
         drop(user_guard_w);
 
         Ok(())
