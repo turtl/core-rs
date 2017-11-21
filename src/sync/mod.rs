@@ -272,21 +272,6 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
     // no need to synchronize/coordinate between the threads.
     util::sleep(100);
 
-    // Wait on an "OK! A++++" Ok(()) signal from the sync thread (sent after it
-    // inits successfully) or a "SHITFUCK!" Err() if there was a problem.
-    for rx in rx_vec {
-        match rx.recv() {
-            Ok(x) => {
-                match x {
-                    Err(e) => return Err(toterr!(e)),
-                    _ => (),
-                }
-            },
-            Err(e) => return Err(toterr!(e)),
-        }
-    }
-    info!("sync::start() -- all sync threads started");
-
     // define some callbacks Turtl can use to control the sync processes. turtl
     // could manage this junk itself, but it's nicer to have a single object
     // that handles the state for us via functions.
@@ -312,7 +297,30 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
         guard.enabled
     };
 
-    // uhhh, you have a ffcall. thank you. uhh, hand the phone to me, please.
+    // Wait on an "OK! A++++" Ok(()) signal from the sync thread (sent after it
+    // inits successfully) or a "SHITFUCK!" Err() if there was a problem.
+    //
+    // note that if we hit ANY snags, we stop ALL the sync threads.
+    for rx in rx_vec {
+        match rx.recv() {
+            Ok(x) => {
+                match x {
+                    Err(e) => {
+                        shutdown();
+                        return Err(toterr!(e));
+                    }
+                    _ => (),
+                }
+            },
+            Err(e) => {
+                shutdown();
+                return Err(toterr!(e));
+            }
+        }
+    }
+    info!("sync::start() -- all sync threads started");
+
+    // uhhh, you have a ph... call. thank you. uhh, hand the phone to me, please.
     // yes, here you go.
     Ok(SyncState {
         join_handles: join_handles,
