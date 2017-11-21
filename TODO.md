@@ -1,5 +1,9 @@
 v0.7:
+- search
+  - URL search (used for finding bookmarking dupes)
+  - active tags by search
 - integration tests
+  - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!
   - sync:pause
   - sync:resume
   - sync:get-pending
@@ -14,6 +18,8 @@ v0.7:
       - does the sync system break in any way?
     - move space
 - premium
+- profile
+  - calculate size
 
 later:
 - document core API
@@ -31,8 +37,7 @@ later:
 - implement i18n? seems the only place using it is the user model. maybe not a
   big deal to just have a few hardcoded english items?
 - investigate more stateless way of syncing files?
-- move Turtl.find_model_key(s) et al to protected model (or wherever
-  appropriate)
+- move Turtl.find_model_key(s) et al to protected model (or wherever appropriate)
   - profile loading
   - messaging
   - key management
