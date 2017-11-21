@@ -350,11 +350,13 @@ impl Turtl {
     /// Shut down the sync system
     pub fn sync_shutdown(&self, join: bool) -> TResult<()> {
         let mut guard = lockw!(self.sync_state);
+        info!("turtl.sync_shutdown() -- has state? {}", guard.is_some());
         if guard.is_none() { return Ok(()); }
         {
             let state = guard.as_mut().unwrap();
             (state.shutdown)();
             if join {
+                info!("turtl.sync_shutdown() -- waiting on {} handles", state.join_handles.len());
                 loop {
                     let hn = state.join_handles.pop();
                     match hn {
