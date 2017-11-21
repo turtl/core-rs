@@ -247,7 +247,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
             let val = match ty {
                 SyncType::User => {
                     if action != SyncAction::Edit {
-                        return TErr!(TError::BadValue(format!("cannot `add` item of type {:?}", ty)));
+                        return TErr!(TError::BadValue(format!("can only perform `edit` sync on item of type {:?}", ty)));
                     }
                     let mut model: User = jedi::from_val(modeldata)?;
                     save_model(action, turtl, &mut model, false)?
