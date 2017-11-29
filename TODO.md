@@ -1,6 +1,5 @@
 v0.7:
 - search
-  - URL search (used for finding bookmarking dupes)
   - active tags by search
 - integration tests
   - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!

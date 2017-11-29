@@ -30,6 +30,7 @@ pub struct Query {
     pub exclude_tags: Vec<String>,
     #[serde(rename = "type")]
     pub type_: Option<String>,
+    pub url: Option<String>,
     pub has_file: Option<bool>,
     pub color: Option<i32>,
     #[serde(default)]
@@ -56,7 +57,7 @@ impl Search {
     /// Create a new Search object
     pub fn new() -> TResult<Search> {
         let idx = Clouseau::new()?;
-        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, space_id VARCHAR(96), board_id VARCHAR(96), has_file BOOL, created INTEGER, mod INTEGER, type VARCHAR(32), color INTEGER)", &[])?;
+        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, space_id VARCHAR(96), board_id VARCHAR(96), has_file BOOL, created INTEGER, mod INTEGER, type VARCHAR(32), color INTEGER, url VARCHAR(256))", &[])?;
         idx.conn.execute("CREATE TABLE IF NOT EXISTS notes_tags (id ROWID, note_id VARCHAR(64), tag VARCHAR(128))", &[])?;
         Ok(Search {
             idx: idx,
@@ -82,8 +83,8 @@ impl Search {
         let type_ = get_field!(note, type_, String::from("text"));
         let color = get_field!(note, color, 0);
         self.idx.conn.execute(
-            "INSERT INTO notes (id, space_id, board_id, has_file, created, mod, type, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            &[&id, &space_id, &board_id, &has_file, &id_mod, &mod_, &type_, &color]
+            "INSERT INTO notes (id, space_id, board_id, has_file, created, mod, type, color, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            &[&id, &space_id, &board_id, &has_file, &id_mod, &mod_, &type_, &color, &note.url]
         )?;
 
         let tags = get_field!(note, tags, Vec::new());
@@ -223,6 +224,11 @@ impl Search {
         if query.type_.is_some() {
             queries.push(String::from("SELECT id FROM notes WHERE type = ?"));
             qry_vals.push(SearchVal::String(query.type_.as_ref().unwrap().clone()));
+        }
+
+        if query.url.is_some() {
+            queries.push(String::from("SELECT id FROM notes WHERE url = ?"));
+            qry_vals.push(SearchVal::String(query.url.as_ref().unwrap().clone()));
         }
 
         if query.has_file.is_some() {
