@@ -121,6 +121,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             config::set(&["api", "endpoint"], &endpoint)?;
             Ok(json!({}))
         }
+        "app:api:get-endpoint" => {
+            let endpoint: String = config::get(&["api", "endpoint"])?;
+            Ok(Value::String(endpoint))
+        }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
             turtl.events.trigger("app:shutdown", &json!({}));
