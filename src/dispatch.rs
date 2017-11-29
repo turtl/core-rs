@@ -67,6 +67,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(json!({}))
         }
         "user:logout" => {
+            let clear_cookie: bool = match jedi::get(&["2"], &data) {
+                Ok(x) => x,
+                Err(_) => true,
+            };
+            if clear_cookie {
+                messaging::ui_event("user:logout:clear-cookie", &Value::Null)
+                    .unwrap_or_else(|e| error!("dispatch::dispatch() -- error sending ui event: {}", e));
+            }
             turtl.logout()?;
             util::sleep(1000);
             Ok(json!({}))
@@ -80,6 +88,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(json!({}))
         }
         "user:delete-account" => {
+            messaging::ui_event("user:logout:clear-cookie", &Value::Null)
+                .unwrap_or_else(|e| error!("dispatch::dispatch() -- error sending ui event: {}", e));
             turtl.delete_account()?;
             Ok(json!({}))
         }
@@ -95,10 +105,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(Value::Bool(connected))
         }
         "app:wipe-user-data" => {
+            messaging::ui_event("user:logout:clear-cookie", &Value::Null)
+                .unwrap_or_else(|e| error!("dispatch::dispatch() -- error sending ui event: {}", e));
             turtl.wipe_user_data()?;
             Ok(json!({}))
         }
         "app:wipe-app-data" => {
+            messaging::ui_event("user:logout:clear-cookie", &Value::Null)
+                .unwrap_or_else(|e| error!("dispatch::dispatch() -- error sending ui event: {}", e));
             turtl.wipe_app_data()?;
             Ok(json!({}))
         }
