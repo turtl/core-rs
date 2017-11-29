@@ -113,7 +113,7 @@ pub trait Syncer {
     fn run_sync(&mut self) -> TResult<()>;
 
     /// Run any initialization this Syncer needs.
-    fn init(&self) -> TResult<()> {
+    fn init(&mut self) -> TResult<()> {
         Ok(())
     }
 
@@ -203,11 +203,9 @@ pub trait Syncer {
 
     /// Let the main thread know that we've (dis)connected to the API. Useful
     /// for updating the UI on our connection state
-    fn connected(&self, yesno: bool) {
+    fn connected(&mut self, yesno: bool) {
         messaging::app_event("sync:connected", &yesno)
             .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected app event: {}", e));
-        messaging::ui_event("sync:connected", &yesno)
-            .unwrap_or_else(|e| error!("Syncer::connected() -- error sending connected UI event: {}", e));
     }
 }
 

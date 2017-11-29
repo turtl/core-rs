@@ -78,6 +78,11 @@ pub struct SyncIncoming {
     /// that is able to handle that incoming item (for instance a "note" coming
     /// from the API might get handled by the NoteCollection).
     handlers: Handlers,
+
+    /// Stores whether or not we're connected. Used internally, mainly to
+    /// determine whether we should check sync immediate (if disconnected) or
+    /// long-poll (if connected).
+    connected: bool,
 }
 
 impl SyncIncoming {
@@ -98,6 +103,7 @@ impl SyncIncoming {
             api: api,
             db: db,
             handlers: handlers,
+            connected: false,
         }
     }
 
@@ -141,7 +147,7 @@ impl SyncIncoming {
 
     /// Grab the latest changes from the API (anything after the given sync ID).
     /// Also, if `poll` is true, we long-poll.
-    fn sync_from_api(&self, sync_id: &String, poll: bool) -> TResult<()> {
+    fn sync_from_api(&mut self, sync_id: &String, poll: bool) -> TResult<()> {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
         let timeout = if poll {
@@ -161,10 +167,12 @@ impl SyncIncoming {
                 let e = e.shed();
                 match e {
                     TError::Io(io) => {
-                        self.connected(false);
                         match io.kind() {
                             ErrorKind::TimedOut => return Ok(()),
-                            _ => return TErr!(TError::Io(io)),
+                            _ => {
+                                self.set_connected(false);
+                                return TErr!(TError::Io(io));
+                            }
                         }
                     }
                     _ => return Err(e),
@@ -172,16 +180,16 @@ impl SyncIncoming {
             },
         };
 
-        self.connected(true);
+        self.set_connected(true);
         self.update_local_db_from_api_sync(syncdata, !poll)
     }
 
     /// Load the user's entire profile. The API gives us back a set of sync
     /// objects, which is super handy because we can just treat them like any
     /// other sync
-    fn load_full_profile(&self) -> TResult<()> {
+    fn load_full_profile(&mut self) -> TResult<()> {
         let syncdata = self.api.get("/sync/full", ApiReq::new().timeout(120))?;
-        self.connected(true);
+        self.set_connected(true);
         self.update_local_db_from_api_sync(syncdata, true)
     }
 
@@ -283,6 +291,11 @@ impl SyncIncoming {
 
         Ok(())
     }
+
+    fn set_connected(&mut self, yesno: bool) {
+        self.connected = yesno;
+        self.connected(yesno);
+    }
 }
 
 impl Syncer for SyncIncoming {
@@ -294,7 +307,7 @@ impl Syncer for SyncIncoming {
         self.config.clone()
     }
 
-    fn init(&self) -> TResult<()> {
+    fn init(&mut self) -> TResult<()> {
         let sync_id = with_db!{ db, self.db, db.kv_get("sync_id") }?;
         let skip_init = {
             let config_guard = lockr!(self.config);
@@ -315,8 +328,13 @@ impl Syncer for SyncIncoming {
 
     fn run_sync(&mut self) -> TResult<()> {
         let sync_id = with_db!{ db, self.db, db.kv_get("sync_id") }?;
+        // note that when syncing changes from the server, we only poll if we
+        // are currently connected. this way, if we DO get a connection back
+        // after being previously disconnected, we can update our state
+        // immediately instead of waiting 60s or w/e until the sync goes through
+        let do_poll = self.connected;
         let res = match sync_id {
-            Some(ref x) => self.sync_from_api(x, true),
+            Some(ref x) => self.sync_from_api(x, do_poll),
             None => return TErr!(TError::MissingData(String::from("no sync_id present"))),
         };
         res

@@ -351,7 +351,13 @@ fn dispatch_event(cmd: &String, turtl: &Turtl, data: Value) -> TResult<()> {
         "sync:connected" => {
             let yesno: bool = jedi::from_val(data)?;
             let mut connguard = lockw!(turtl.connected);
+            let cur_yesno = *connguard;
             *connguard = yesno;
+            if cur_yesno != yesno {
+                // only send the ui event if we've changed state
+                messaging::ui_event("sync:connected", &yesno)
+                    .unwrap_or_else(|e| error!("dispatch::dispatch_event() -- error sending connected UI event: {}", e));
+            }
         }
         "sync:incoming" => {
             sync::incoming::process_incoming_sync(turtl)?;
