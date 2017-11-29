@@ -904,16 +904,19 @@ pub mod tests {
         // just make sure here.
 
         let qry = parserrr(r#"{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","boards":["015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034"]}"#);
-        assert_eq!(search.find(&qry).unwrap(), vec![String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"), String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b")]);
+        assert_eq!(search.find(&qry).unwrap().0, vec![String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"), String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b")]);
 
         let qry = parserrr(r#"{"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","text":"grandpa happy"}"#);
-        assert_eq!(search.find(&qry).unwrap(), vec![String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5")]);
+        assert_eq!(search.find(&qry).unwrap().0, vec![String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5")]);
 
         let qry = parserrr(r#"{"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","text":"grandpa happy"}"#);
-        assert_eq!(search.find(&qry).unwrap().len(), 0);
+        let (notes, total) = search.find(&qry).unwrap();
+        assert_eq!(notes.len(), 0);
+        assert_eq!(total, 0);
 
+        let qry = parserrr(r#"{"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","boards":[]}"#);
         assert_eq!(
-            search.tags_by_frequency(&String::from("015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"), &Vec::new(), 9999).unwrap(),
+            search.find_tags(&qry).unwrap(),
             vec![
                 (String::from("fuck yeah"), 2),
                 (String::from("america"), 1),

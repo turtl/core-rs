@@ -16,7 +16,7 @@ use ::models::note::Note;
 use ::models::file::File;
 
 /// A query builder
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Query {
     pub text: Option<String>,
     #[serde(default)]
@@ -130,7 +130,7 @@ impl Search {
     /// that, it makes extensive use of SQL's `intersect` to grab results from a
     /// bunch of separate queries. There may be a more efficient way to do this,
     /// however since this is all in-memory anyway, it's probably fine.
-    pub fn find(&self, query: &Query) -> TResult<Vec<String>> {
+    pub fn find(&self, query: &Query) -> TResult<(Vec<String>, i32)> {
         let mut queries: Vec<String> = Vec::new();
         let mut exclude_queries: Vec<String> = Vec::new();
         let mut qry_vals: Vec<SearchVal> = Vec::new();
@@ -265,7 +265,8 @@ impl Search {
 
         let orderby = format!(" ORDER BY {} {}", sort, sort_dir);
         let pagination = format!(" LIMIT {} OFFSET {}", per_page, (page - 1) * per_page);
-        let final_query = (filter_query + &orderby) + &pagination;
+        let final_query = (filter_query.clone() + &orderby) + &pagination;
+        let total_query = format!("SELECT COUNT(search.id) AS total FROM ({}) AS search", filter_query);
 
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
         let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
@@ -276,32 +277,43 @@ impl Search {
         let rows = prepared_qry.query_map(values.as_slice(), |row| row.get(0))?;
         let mut note_ids = Vec::new();
         for id in rows { note_ids.push(id?); }
-        debug!("Search.find() -- found {} notes", note_ids.len());
-        Ok(note_ids)
+
+        let total = self.idx.conn.query_row(total_query.as_str(), values.as_slice(), |row| {
+            row.get("total")
+        })?;
+
+        debug!("Search.find() -- grabbed {} notes ({} total)", note_ids.len(), total);
+        Ok((note_ids, total))
     }
 
-    /// Grab note tags out of the index, sorted by frequency of use (desc).
-    /// Takes a vec of board_ids to limit the search to, but if passed a zero
-    /// length vec, will just pull out all tags.
-    pub fn tags_by_frequency(&self, space_id: &String, boards: &Vec<String>, limit: i32) -> TResult<Vec<(String, i32)>> {
-        let mut tag_qry: Vec<&str> = Vec::with_capacity(boards.len() + 4);
+    /// Given a query object, find the tags that match it. This disregards page
+    /// and per_page, since we want a list of all tags that match that result.
+    pub fn find_tags(&self, query: &Query) -> TResult<Vec<(String, i32)>> {
+        let mut query = query.clone();
+        query.page = 1;
+        query.per_page = 99999;
+        let (note_ids, _total) = self.find(&query)?;
+        self.tags_by_notes(&note_ids)
+    }
+
+    /// Given a set of note ids, grab the tags for hose notes and their
+    /// frequency.
+    pub fn tags_by_notes(&self, note_ids: &Vec<String>) -> TResult<Vec<(String, i32)>> {
+        let mut tag_qry: Vec<&str> = Vec::with_capacity(note_ids.len() + 4);
         let mut qry_vals: Vec<SearchVal> = Vec::new();
-        tag_qry.push("SELECT tag, count(tag) AS tag_count FROM notes_tags WHERE note_id IN (SELECT id FROM notes WHERE space_id = ?)");
-        qry_vals.push(SearchVal::String(space_id.clone()));
-        if boards.len() > 0 {
-            tag_qry.push("AND note_id IN (SELECT id FROM notes WHERE board_id IN (");
-            for board in boards {
-                if board == &boards[boards.len() - 1] {
+        tag_qry.push("SELECT tag, count(tag) AS tag_count FROM notes_tags WHERE note_id IN (");
+        if note_ids.len() > 0 {
+            for note_id in note_ids {
+                if note_id == &note_ids[note_ids.len() - 1] {
                     tag_qry.push("?");
                 } else {
                     tag_qry.push("?,");
                 }
-                qry_vals.push(SearchVal::String(board.clone()));
+                qry_vals.push(SearchVal::String(note_id.clone()));
             }
-            tag_qry.push(")) ");
+            tag_qry.push(") ");
         }
-        tag_qry.push("GROUP BY tag ORDER BY tag_count DESC, tag ASC LIMIT ?");
-        qry_vals.push(SearchVal::Int(limit));
+        tag_qry.push("GROUP BY tag ORDER BY tag_count DESC, tag ASC");
 
         let final_query = tag_qry.as_slice().join("");
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
@@ -346,6 +358,7 @@ mod tests {
         let note3: Note = jedi::parse(&String::from(r#"{"id":"3333","space_id":"4455","user_id":69,"type":"text","title":"Buzzfeed","text":"Other drivers hate him!!1 Find out why! Are you wasting thousands of dollars on insurance?! This one weird tax loophole has the IRS furious! New report shows the color of your eyes determines the SIZE OF YOUR PENIS AND/OR BREASTS <Ad for colored contacts>!!","tags":["buzzfeed","weird","simple","trick","breasts"],"board_id":"6969"}"#)).unwrap();
         let note4: Note = jedi::parse(&String::from(r#"{"id":"4444","space_id":"4455","user_id":69,"type":"text","title":"Libertarian news","text":"TAXES ARE THEFT. AYN RAND WAS RIGHT ABOUT EVERYTHING EXCEPT FOR ALL THE THINGS SHE WAS WRONG ABOUT WHICH WAS EVERYTHING. WE DON'T NEED REGULATIONS BECAUSE THE MARKET IS MORAL. NET NEUTRALITY IS COMMUNISM. DO YOU ENJOY USING UR COMPUTER?! ...WELL IT WAS BUILD WITH THE FREE MARKET, COMMUNIST. TAXES ARE SLAVERY. PROPERTY RIGHTS.","tags":["liberatrians","taxes","property rights","socialism"],"board_id":"1212"}"#)).unwrap();
         let note5: Note = jedi::parse(&String::from(r#"{"id":"5555","space_id":"4455","user_id":69,"type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"board_id":"6969"}"#)).unwrap();
+        // NOTE: this is space_id "0000", so won't turn up in searches!!!!11
         let note6: Note = jedi::parse(&String::from(r#"{"id":"5556","space_id":"0000","user_id":69,"type":"text","title":"Any News Any Time","text":"Peaceful protests happened today amid the news of Trump being elected. In other news, VIOLENT RIOTS broke out because a bunch of native americans are angry about some stupid pipeline. They are so violent, these natives. They don't care about their lands being polluted by corrupt government or corporate forces, they just like blowing shit up. They just cannot find it in their icy hearts to leave the poor pipeline corporations alone. JUST LEAVE THEM ALONE. THE PIPELINE WON'T POLLUTE! CORPORATIONS DON'T LIE SO LEAVE THEM ALONE!!","tags":["pipeline","protests","riots","corporations"],"board_id":"6969"}"#)).unwrap();
 
         search.index_note(&note1).unwrap();
@@ -357,51 +370,57 @@ mod tests {
 
         // search by note ids
         let query = parserrr(r#"{"notes":["1111","4444","6969loljkomg"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["4444", "1111"]);
+        assert_eq!(total, 2);
 
         // board search
         let query = parserrr(r#"{"boards":["6969"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333", "1111"]);
 
         // board search w/ paging
         let query = parserrr(r#"{"boards":["6969"],"page":2,"per_page":1}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333"]);
+        assert_eq!(total, 3);
 
         // combine boards/tags
         let query = parserrr(r#"{"boards":["6969"],"tags":["terrorists"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combining boards/tags/sort
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","sort":"id"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555", "3333"]);
 
         // combining boards/tags/sort/desc
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","sort":"id","sort_direction":"asc"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333", "5555"]);
 
         // combining boards/text/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","tags":["riots"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555"]);
 
         // do tags show up in a text search? they should
         let query = parserrr(r#"{"text":"socialism"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["4444"]);
 
         // excluded tags!
         let query = parserrr(r#"{"boards":["6969"],"exclude_tags":["weird"],"sort":"mod","sort_direction":"asc"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111", "5555"]);
 
         // tag frequency search
-        let tags = search.tags_by_frequency(&String::from("4455"), &Vec::new(), 9999).unwrap();
+        let qry: Query = jedi::from_val(json!({
+            "space_id": "4455",
+            "boards": [],
+        })).unwrap();
+        let tags = search.find_tags(&qry).unwrap();
         assert_eq!(
             tags,
             vec![
@@ -427,7 +446,11 @@ mod tests {
                 (String::from("weird"), 1),
             ]
         );
-        let tags = search.tags_by_frequency(&String::from("4455"), &vec![String::from("6969")], 9999).unwrap();
+        let qry: Query = jedi::from_val(json!({
+            "space_id": "4455",
+            "boards": ["6969"],
+        })).unwrap();
+        let tags = search.find_tags(&qry).unwrap();
         assert_eq!(
             tags,
             vec![
@@ -446,7 +469,11 @@ mod tests {
                 (String::from("weird"), 1),
             ]
         );
-        let tags = search.tags_by_frequency(&String::from("4455"), &vec![String::from("6969"), String::from("1212")], 9999).unwrap();
+        let qry: Query = jedi::from_val(json!({
+            "space_id": "4455",
+            "boards": ["6969", "1212"],
+        })).unwrap();
+        let tags = search.find_tags(&qry).unwrap();
         assert_eq!(
             tags,
             vec![
@@ -478,17 +505,17 @@ mod tests {
 
         // combining boards/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["5555"]);
 
         // combining boards/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"one simple trick"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["3333"]);
 
         // combining boards/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"simple tricks"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
         // ---------------------------------------------------------------------
@@ -499,42 +526,42 @@ mod tests {
 
         // board search
         let query = parserrr(r#"{"boards":["6969"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combine boards/tags
         let query = parserrr(r#"{"boards":["6969"],"tags":["terrorists"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // combining boards/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
         // combining boards/text/tags
         let query = parserrr(r#"{"boards":["6969"],"text":"(penis OR \"icy hearts\")","tags":["riots"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
 
         // do tags show up in a text search? they should
         let query = parserrr(r#"{"text":"socialism"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["4444"]);
 
         // excluded tags!
         let query = parserrr(r#"{"boards":["6969"],"exclude_tags":["weird"]}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["1111"]);
 
         // type
         let query = parserrr(r#"{"type":"link"}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes, vec!["2222"]);
 
         // color
         let query = parserrr(r#"{"color":3,"has_file":true}"#);
-        let notes = search.find(&query).unwrap();
+        let (notes, _total) = search.find(&query).unwrap();
         assert_eq!(notes.len(), 0);
     }
 }

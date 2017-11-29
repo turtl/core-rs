@@ -47,7 +47,7 @@ mod tests {
         dispatch_ass(json!(["user:delete-account"]));
         end(handle);
 
-        let notes: Vec<Value> = jedi::from_val(notes).unwrap();
+        let notes: Vec<Value> = jedi::get(&["notes"], &notes).unwrap();
         assert!(notes.len() > 0);
     }
 }

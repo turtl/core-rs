@@ -289,27 +289,20 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
             let search = search_guard.as_ref().unwrap();
-            let note_ids = search.find(&qry)?;
+            let (note_ids, total) = search.find(&qry)?;
             let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
-            Ok(jedi::to_val(&notes)?)
+            let tags: Vec<(String, i32)> = search.find_tags(&qry)?;
+            Ok(json!({
+                "notes": notes,
+                "tags": tags,
+                "total": total,
+            }))
         }
         "profile:get-file" => {
             let note_id = jedi::get(&["2"], &data)?;
             let notes: Vec<Note> = turtl.load_notes(&vec![note_id])?;
             FileData::load_file(turtl, &notes[0])?;
             Ok(Value::Null)
-        }
-        "profile:get-tags" => {
-            let space_id: String = jedi::get(&["2"], &data)?;
-            let boards: Vec<String> = jedi::get(&["3"], &data)?;
-            let limit: i32 = jedi::get(&["4"], &data)?;
-            let search_guard = lockr!(turtl.search);
-            if search_guard.is_none() {
-                return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
-            }
-            let search = search_guard.as_ref().unwrap();
-            let tags = search.tags_by_frequency(&space_id, &boards, limit)?;
-            Ok(jedi::to_val(&tags)?)
         }
         "profile:export" => {
             let export = Profile::export(turtl)?;
