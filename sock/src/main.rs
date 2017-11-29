@@ -53,6 +53,7 @@ pub fn main() {
                 match msg_turtl {
                     Some(x) => {
                         info!("* core -> ui ({})", x.len());
+                        println!("---\n{}", x);
                         client.send_message(&Message::text(x)).unwrap();
                     }
                     None => {}
@@ -62,11 +63,12 @@ pub fn main() {
                 match msg_turtl {
                     Some(x) => {
                         info!("* core -> ui ({})", x.len());
+                        println!("---\n{}", x);
                         client.send_message(&Message::text(x)).unwrap();
                     }
                     None => {}
                 }
-                sleep(100);
+                sleep(10);
             }
         });
     }
