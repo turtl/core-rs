@@ -299,6 +299,9 @@ impl Search {
     /// Given a set of note ids, grab the tags for hose notes and their
     /// frequency.
     pub fn tags_by_notes(&self, note_ids: &Vec<String>) -> TResult<Vec<(String, i32)>> {
+        if note_ids.len() == 0 {
+            return Ok(Vec::new());
+        }
         let mut tag_qry: Vec<&str> = Vec::with_capacity(note_ids.len() + 4);
         let mut qry_vals: Vec<SearchVal> = Vec::new();
         tag_qry.push("SELECT tag, count(tag) AS tag_count FROM notes_tags WHERE note_id IN (");
