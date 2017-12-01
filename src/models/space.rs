@@ -36,7 +36,7 @@ protected! {
         pub title: Option<String>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
-        #[protected_field(Color)]
+        #[protected_field(private)]
         pub color: Option<String>,
     }
 }
