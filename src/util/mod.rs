@@ -4,9 +4,11 @@ use ::error::TResult;
 use ::std::io;
 use ::std::fs;
 use ::std::path::Path;
+use ::jedi::{self, Value};
 
 macro_rules! do_lock {
     ($lock:expr) => {{
+        //println!(" >>> lock {} ({}::{})", stringify!($lock), file!(), line!());
         $lock.unwrap()
     }}
 }
@@ -32,7 +34,6 @@ macro_rules! lockw {
 }
 
 pub mod logger;
-pub mod event;
 pub mod thredder;
 #[macro_use]
 pub mod ser;
@@ -58,5 +59,11 @@ pub fn create_dir<P: AsRef<Path>>(dir: P) -> TResult<()> {
             }
         }
     }
+}
+
+/// Try to parse a string as JSON, and if it fails, return the string as a Value
+pub fn json_or_string(maybe_json: String) -> Value {
+    jedi::parse(&maybe_json)
+        .unwrap_or(Value::String(maybe_json))
 }
 

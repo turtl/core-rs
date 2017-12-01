@@ -207,7 +207,11 @@ impl Api {
                             String::from("<unknown>")
                         }
                     };
-                    return TErr!(TError::Api(res.status, errstr));
+                    let val = match jedi::parse(&errstr) {
+                        Ok(x) => x,
+                        Err(_) => Value::String(errstr),
+                    };
+                    return TErr!(TError::Api(res.status, val));
                 }
                 str_res.map(move |x| (x, res))
             })

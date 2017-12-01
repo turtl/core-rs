@@ -13,6 +13,7 @@ mod tests {
 
         dispatch_ass(json!(["app:wipe-app-data"]));
         dispatch_ass(json!(["user:join", "slippyslappy@turtlapp.com", password]));
+        wait_on("user:login");
         dispatch_ass(json!(["sync:start"]));
 
         wait_on("profile:loaded");
@@ -32,6 +33,7 @@ mod tests {
 
         // log in with our BRAND NEW username/password
         dispatch_ass(json!(["user:login", "slippyslappy@turtlapp.com", new_password]));
+        wait_on("user:login");
         dispatch_ass(json!(["sync:start"]));
 
         // wait on the profile load. we shouldn't get any errors about bad

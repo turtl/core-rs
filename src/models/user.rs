@@ -11,7 +11,6 @@ use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util;
-use ::util::event::Emitter;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming::SyncIncoming;
 use ::messaging;
@@ -150,7 +149,6 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     let mut user_guard = lockw!(turtl.user);
     user_guard.merge_fields(&userdata)?;
     user_guard.deserialize()?;
-    user_guard.trigger("login", &json!({}));
     debug!("user::do_login() -- auth success, logged in");
     Ok(())
 }
@@ -184,6 +182,18 @@ impl User {
     }
 
     pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
+        if username.len() < 3 {
+            return TErr!(TError::BadValue(String::from("Please enter a username 3 characters or longer.")));
+        }
+        if password.len() == 0 {
+            return TErr!(TError::BadValue(String::from("Please enter a passphrase. Hint: Sentences are much better than single words.")));
+        }
+        if password.len() < 4 {
+            return TErr!(TError::BadValue(String::from("We don\'t mean to tell you your business, but a passphrase less than four characters won\'t cut it. Try again.")));
+        }
+        if password == "password" {
+            return TErr!(TError::BadValue(String::from("That passphrase is making me cringe.")));
+        }
         let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
         let (pk, sk) = crypto::asym::keygen()?;
         let userdata = {
@@ -213,9 +223,6 @@ impl User {
         user_guard_w.do_login(key, auth);
         drop(user_guard_w);
 
-        let user_guard_r = lockr!(turtl.user);
-        user_guard_r.trigger("login", &json!({}));
-        drop(user_guard_r);
         debug!("user::join() -- auth success, joined and logged in");
         Ok(())
     }
@@ -442,8 +449,6 @@ impl User {
         }
         user_guard.do_logout();
         drop(user_guard);
-        let user_guard = lockr!(turtl.user);
-        user_guard.trigger("logout", &json!({}));
         turtl.api.clear_auth();
         Ok(())
     }

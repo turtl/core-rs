@@ -11,6 +11,7 @@ use ::hyper;
 use ::std::time::Duration;
 use ::std::fs;
 use ::std::io::{Read, Write};
+use ::jedi::{self, Value};
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {
@@ -92,7 +93,11 @@ impl FileSyncIncoming {
             if status >= 400 {
                 let mut errstr = String::new();
                 res.read_to_string(&mut errstr)?;
-                return TErr!(TError::Api(res.status.clone(), errstr));
+                let val = match jedi::parse(&errstr) {
+                    Ok(x) => x,
+                    Err(_) => Value::String(errstr),
+                };
+                return TErr!(TError::Api(res.status.clone(), val));
             }
             // start streaming our API call into the file 4K at a time
             let mut buf = [0; 4096];

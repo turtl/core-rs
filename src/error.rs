@@ -4,12 +4,19 @@ use ::std::convert::From;
 use ::std::sync::Arc;
 
 use ::hyper::status::StatusCode;
-use ::jedi::JSONError;
+use ::jedi::{Value, JSONError};
 use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
 use ::migrate::error::MError as MigrateError;
 
 use ::crypto::CryptoError;
+use ::util;
+
+macro_rules! quick_error_obj {
+    ($ty:expr, $err:expr) => {
+        json!({"type": $ty, "message": util::json_or_string(format!("{}", $err))})
+    }
+}
 
 quick_error! {
     #[derive(Debug)]
@@ -17,93 +24,93 @@ quick_error! {
     pub enum TError {
         Wrapped(function: &'static str, file: &'static str, line: u32, err: Arc<TError>) {
             description("Turtl wrap error")
-            display("{{\"file\":\"{}\",\"line\":{},\"err\":\"{}\"}}", file, line, err)
+            display("{}", json!({"file": file, "line": line, "err": util::json_or_string(format!("{}", err)), "wrapped": true}))
         }
         Boxed(err: Box<Error + Send + Sync>) {
             description(err.description())
-            display("error: {}", err)
+            display("{}", quick_error_obj!("generic", err))
         }
         Msg(msg: String) {
             description(msg)
-            display("error: {}", msg)
+            display("{}", quick_error_obj!("generic", msg))
         }
         BadValue(msg: String) {
             description(msg)
-            display("bad value: {}", msg)
+            display("{}", quick_error_obj!("bad_value", msg))
         }
         MissingField(msg: String) {
             description(msg)
-            display("missing field: {}", msg)
+            display("{}", quick_error_obj!("missing_field", msg))
         }
         MissingData(msg: String) {
             description(msg)
-            display("missing data: {}", msg)
+            display("{}", quick_error_obj!("missing_data", msg))
         }
         MissingCommand(msg: String) {
             description(msg)
-            display("unknown command: {}", msg)
+            display("{}", quick_error_obj!("missing_command", msg))
         }
         NotFound(msg: String) {
             description(msg)
-            display("not found: {}", msg)
+            display("{}", quick_error_obj!("not_found", msg))
         }
         PermissionDenied(msg: String) {
             description(msg)
-            display("permission denied: {}", msg)
+            display("{}", quick_error_obj!("permission_denied", msg))
         }
         ConnectionRequired {
             description("connection required")
-            display("connection required")
+            display("{}", json!({"type": "connection_required"}))
         }
         Crypto(err: CryptoError) {
             cause(err)
             description("crypto error")
-            display("crypto error: {}", err)
+            display("{}", quick_error_obj!("crypto_error", err))
         }
         JSON(err: JSONError) {
             cause(err)
             description("JSON error")
-            display("JSON error: {}", err)
+            display("{}", quick_error_obj!("json_error", err))
         }
         Dumpy(err: DError) {
             cause(err)
             description("Dumpy error")
-            display("Dumpy error: {}", err)
+            display("{}", quick_error_obj!("dumpy_error", err))
         }
         Clippo(err: ClippoError) {
             cause(err)
             description("Clippo error")
-            display("Clippo error: {}", err)
+            display("{}", quick_error_obj!("clippy_error", err))
         }
         Migrate(err: MigrateError) {
             cause(err)
             description("migrate error")
-            display("migrate error: {}", err)
+            display("{}", quick_error_obj!("migrate_error", err))
         }
         Io(err: IoError) {
             cause(err)
             description("io error")
-            display("io error: {}", err)
+            display("{}", quick_error_obj!("io_error", err))
         }
-        Api(status: StatusCode, msg: String) {
+        Api(status: StatusCode, msg: Value) {
             description("API error")
-            display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+            display("{}", json!({"type": "api", "subtype": status.canonical_reason().unwrap_or("unknown"), "message": msg}))
         }
-        Http(status: StatusCode, msg: String) {
+        Http(status: StatusCode, msg: Value) {
             description("HTTP error")
-            display("http error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+            display("{}", json!({"type": "http", "subtype": status.canonical_reason().unwrap_or("unknown"), "message": msg}))
         }
         ParseError(msg: String) {
             description("Parse error")
-            display("parse error: {}", msg)
+            display("{}", quick_error_obj!("parse_error", msg))
         }
         TryAgain {
             description("try again")
-            display("try again")
+            display("{}", json!({"type": "try_again"}))
         }
         NotImplemented {
             description("not implemented")
-            display("not implemented")
+            display("{}", json!({"type": "not_implemented"}))
         }
     }
 }

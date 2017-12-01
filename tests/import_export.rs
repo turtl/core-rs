@@ -14,6 +14,7 @@ mod tests {
 
         dispatch_ass(json!(["app:wipe-app-data"]));
         dispatch_ass(json!(["user:login", username, password]));
+        wait_on("user:login");
         dispatch_ass(json!(["sync:start"]));
 
         wait_on("profile:loaded");
@@ -39,6 +40,7 @@ mod tests {
 
         dispatch_ass(json!(["app:wipe-app-data"]));
         dispatch_ass(json!(["user:join", "slippyslappy@turtlapp.com", password]));
+        wait_on("user:login");
         dispatch_ass(json!(["sync:start"]));
         wait_on("profile:loaded");
         wait_on("profile:indexed");

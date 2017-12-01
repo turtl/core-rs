@@ -62,7 +62,6 @@ use ::std::panic;
 use ::jedi::Value;
 
 use ::error::TResult;
-use ::util::event::Emitter;
 
 /// Init any state/logging/etc the app needs
 pub fn init() -> TResult<()> {
@@ -109,9 +108,6 @@ pub fn start(config_str: String) -> thread::JoinHandle<()> {
 
             // create our turtl object
             let turtl = Arc::new(turtl::Turtl::new()?);
-            turtl.events.bind("app:shutdown", |_| {
-                messaging::stop();
-            }, "app:shutdown:main");
 
             // start our messaging thread
             let msg_res = messaging::start(move |msg: String| {

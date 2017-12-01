@@ -1,6 +1,11 @@
 ---
 loglevel: "info"
 
+# set to `true` if you want errors to be wrapped in an object that includes the
+# file/line number. nice for testing, probably annoying when actually using the
+# core
+wrap_errors: false
+
 messaging:
   # the channel our request/response dialog happens on
   reqres: "inproc://turtl-req"

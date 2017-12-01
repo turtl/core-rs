@@ -13,7 +13,6 @@ use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::config;
 use ::util;
-use ::util::event::Emitter;
 use ::turtl::Turtl;
 use ::search::Query;
 use ::profile::{Profile, Export, ImportMode};
@@ -127,7 +126,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
-            turtl.events.trigger("app:shutdown", &json!({}));
+            messaging::stop();
             Ok(json!({}))
         }
         "sync:start" => {

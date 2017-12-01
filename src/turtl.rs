@@ -11,7 +11,7 @@ use ::jedi::{self, Value};
 use ::config;
 use ::error::{TResult, TError};
 use ::crypto::Key;
-use ::util::event::{self, Emitter};
+use ::util;
 use ::util::thredder::Thredder;
 use ::storage::{self, Storage};
 use ::api::Api;
@@ -48,8 +48,6 @@ pub fn data_folder() -> TResult<String> {
 /// Defines a container for our app's state. Note that most operations the user
 /// has access to via messaging get this object passed to them.
 pub struct Turtl {
-    /// This is our app-wide event bus.
-    pub events: event::EventEmitter,
     /// Holds our current user (Turtl only allows one logged-in user at once)
     pub user: RwLock<User>,
     /// A lot of times we just want to get the user's id. We shouldn't have to
@@ -108,7 +106,6 @@ impl Turtl {
         storage::setup_client_id(kv.clone())?;
 
         let turtl = Turtl {
-            events: event::EventEmitter::new(),
             user: RwLock::new(User::default()),
             user_id: RwLock::new(None),
             profile: RwLock::new(Profile::new()),
@@ -123,7 +120,6 @@ impl Turtl {
             connected: RwLock::new(false),
             incoming_sync_lock: Mutex::new(()),
         };
-        turtl.setup_user();
         Ok(turtl)
     }
 
@@ -158,33 +154,27 @@ impl Turtl {
     /// Send an error response to a remote request
     pub fn msg_error(&self, mid: &String, err: &TError) -> TResult<()> {
         let reqres_append_mid: bool = config::get(&["messaging", "reqres_append_mid"])?;
+        let mut errval = util::json_or_string(format!("{}", err));
+        let wrapped = match jedi::get_opt::<bool>(&["wrapped"], &errval) {
+            Some(x) => x,
+            None => false,
+        };
+        let wrap_errors: bool = match config::get(&["wrap_errors"]) {
+            Ok(x) => x,
+            Err(_) => false,
+        };
+        if !wrap_errors && wrapped {
+            errval = jedi::get(&["err"], &errval)?;
+        }
         if reqres_append_mid {
-            let res = Response::new(1, Value::String(format!("{}", err)));
+            let res = Response::new(1, errval);
             let msg = jedi::stringify(&res)?;
             self.remote_send(Some(mid.clone()), msg)
         } else {
-            let res = Response::new_w_id(mid.clone(), 1, Value::String(format!("{}", err)));
+            let res = Response::new_w_id(mid.clone(), 1, errval);
             let msg = jedi::stringify(&res)?;
             self.remote_send(None, msg)
         }
-    }
-
-    /// Set up the user object
-    fn setup_user(&self) {
-        let mut user_guard = lockw!(self.user);
-        *user_guard = User::default();
-        user_guard.bind("login", |obj| {
-            match messaging::ui_event("user:login", obj) {
-                Ok(_) => {},
-                Err(e) => error!("Turtl::new() -- user.login -- error sending UI login event: {}", e),
-            }
-        }, "turtl:user:login");
-        user_guard.bind("logout", |obj| {
-            match messaging::ui_event("user:logout", obj) {
-                Ok(_) => {},
-                Err(e) => error!("Turtl::new() -- user.logout -- error sending UI logout event: {}", e),
-            }
-        }, "turtl:user:logout");
     }
 
     /// If the `turtl.user` object has a valid ID, set it into `turtl.user_id`
@@ -231,6 +221,7 @@ impl Turtl {
         let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
+        messaging::ui_event("user:login", &Value::Null)?;
         Ok(())
     }
 
@@ -243,6 +234,7 @@ impl Turtl {
         *db_guard = Some(db);
         drop(db_guard);
         User::post_join(self, migrate_data)?;
+        messaging::ui_event("user:login", &Value::Null)?;
         Ok(())
     }
 
@@ -280,9 +272,9 @@ impl Turtl {
         User::logout(self)?;
         let mut db_guard = lock!(self.db);
         *db_guard = None;
-        self.setup_user();
         let mut connguard = lockw!(self.connected);
         *connguard = false;
+        messaging::ui_event("user:logout", &Value::Null)?;
         Ok(())
     }
 
@@ -313,9 +305,41 @@ impl Turtl {
         }
     }
 
+    /// Poll `turtl.db` until either it exists or a few seconds have passed.
+    fn check_db_exists(&self) -> TResult<()> {
+        let exists = {
+            let db_guard = lock!(self.db);
+            db_guard.is_some()
+        };
+        if !exists {
+            for _i in 0..5 {
+                let exists = {
+                    let db_guard = lock!(self.db);
+                    db_guard.is_some()
+                };
+                if exists { break; }
+                info!("turtl.sync_start() -- waiting on `turtl.db`...");
+                util::sleep(1000);
+            }
+        }
+        let exists = {
+            let db_guard = lock!(self.db);
+            db_guard.is_some()
+        };
+        if !exists {
+            return TErr!(TError::MissingField(String::from("Turtl.db")));
+        }
+        Ok(())
+    }
+
     /// Start our sync system. This should happen after a user is logged in, and
     /// we definitely have a Turtl.db object available.
     pub fn sync_start(&self) -> TResult<()> {
+        // it's possible that login/join return before the db is initialized. in
+        // that case, we wait for it here, up to 5s. if after then we don't have
+        // our heroic db, error out ='[
+        self.check_db_exists()?;
+
         // lock down incoming syncs so we have a chance to load our profile
         // before dealing with a bunch of sync records
         let sync_lock = self.incoming_sync_lock.lock();
@@ -608,8 +632,6 @@ impl Turtl {
 
         let mut user_guard = lockw!(self.user);
         user_guard.deserialize()?;
-
-        self.events.trigger("profile:loaded", &json!({}));
         Ok(())
     }
 

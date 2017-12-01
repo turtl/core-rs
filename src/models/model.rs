@@ -13,7 +13,6 @@ use ::serde::de::DeserializeOwned;
 use ::jedi::{self, Value};
 use ::crypto;
 use ::error::{TError, TResult};
-use ::util::event::Emitter;
 
 lazy_static! {
     /// create a static/global cid counter
@@ -111,7 +110,7 @@ pub fn id_timestamp(id: &String) -> TResult<i64> {
 
 /// The model trait defines an interface for (de)serializable objects that track
 /// their changes via eventing.
-pub trait Model: Emitter + Serialize + DeserializeOwned + Default {
+pub trait Model: Serialize + DeserializeOwned + Default {
     /// Get this model's ID
     fn id<'a>(&'a self) -> Option<&'a String>;
 
@@ -166,9 +165,6 @@ macro_rules! model {
         $(#[$struct_meta])*
         #[derive(Default)]
         pub struct $name {
-            #[serde(skip)]
-            pub _emitter: ::util::event::EventEmitter,
-
             #[serde(default)]
             #[serde(skip_serializing_if = "Option::is_none")]
             #[serde(deserialize_with = "::util::ser::int_opt_converter::deserialize")]
@@ -187,12 +183,6 @@ macro_rules! model {
                 let mut model = Self::new();
                 model.id = Some(::models::model::cid()?);
                 Ok(model)
-            }
-        }
-
-        impl ::util::event::Emitter for $name {
-            fn bindings(&self) -> &::util::event::Bindings {
-                self._emitter.bindings()
             }
         }
 

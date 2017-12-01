@@ -21,6 +21,7 @@ mod tests {
         let new_password = format!("{}_newLOLOL", password);
 
         dispatch_ass(json!(["user:join-migrate", old_username, old_password, "slippyslappy@turtlapp.com", new_password]));
+        wait_on("user:login");
         dispatch_ass(json!(["sync:start"]));
         wait_on("profile:loaded");
         wait_on("profile:indexed");
