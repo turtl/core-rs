@@ -25,8 +25,10 @@ use ::models::invite::Invite;
 use ::models::keychain::KeychainEntry;
 use ::models::note::Note;
 use ::models::file::FileData;
+use ::models::sync_record::SyncAction;
 use ::messaging::{self, Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
+use ::sync::sync_model::MemorySaver;
 use ::search::Search;
 use ::schema;
 use ::migrate::{self, MigrateResult};
@@ -604,31 +606,29 @@ impl Turtl {
         // decrypt the keychain
         self.find_models_keys(&mut keychain)?;
         let keychain: Vec<KeychainEntry> = protected::map_deserialize(self, keychain)?;
-        let mut profile_guard = lockw!(self.profile);
-        profile_guard.keychain.entries = keychain;
-        drop(profile_guard);
+        for entry in keychain {
+            entry.mem_update(self, SyncAction::Add)?;
+        }
 
         // now decrypt the spaces
         self.find_models_keys(&mut spaces)?;
         let spaces: Vec<Space> = protected::map_deserialize(self, spaces)?;
-        // set the spaces into the profile
-        let mut profile_guard = lockw!(self.profile);
-        profile_guard.spaces = spaces;
-        drop(profile_guard);
+        for space in spaces {
+            space.mem_update(self, SyncAction::Add)?;
+        }
 
         // now decrypt the boards
         self.find_models_keys(&mut boards)?;
         let boards: Vec<Board> = protected::map_deserialize(self, boards)?;
-        // set the boards into the profile
-        let mut profile_guard = lockw!(self.profile);
-        profile_guard.boards = boards;
-        drop(profile_guard);
+        for board in boards {
+            board.mem_update(self, SyncAction::Add)?;
+        }
 
         // invites are NOT decrypted. they are stored as-is.
         // set the invites into the profile
-        let mut profile_guard = lockw!(self.profile);
-        profile_guard.invites = invites;
-        drop(profile_guard);
+        for invite in invites {
+            invite.mem_update(self, SyncAction::Add)?;
+        }
 
         let mut user_guard = lockw!(self.user);
         user_guard.deserialize()?;

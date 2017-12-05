@@ -1,4 +1,5 @@
 v0.7:
+- space: return owner record if it's missing
 - integration tests
   - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!
   - sync:pause

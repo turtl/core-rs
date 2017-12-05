@@ -9,11 +9,12 @@ use ::models::sync_record::SyncAction;
 use ::models::keychain;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
-use ::lib_permissions::Permission;
+use ::lib_permissions::{Role, Permission};
 use ::api::ApiReq;
 use ::jedi::{self, Value};
 use ::crypto::Key;
 use ::messaging;
+use ::std::default::Default;
 
 /// Defines a Space, which is a container for notes and boards. It also acts as
 /// an organization of sorts, allowing multiple members to access the space,
@@ -41,6 +42,51 @@ protected! {
     }
 }
 
+impl Space {
+    fn process_members(&mut self, turtl: &Turtl) -> TResult<()> {
+        // this could be inlined, but i don't feel like rewriting the early
+        // return to accommodate that.
+        //
+        // i'm from chicago. thin crust pizza? no, thank you. i'm from chicago.
+        fn ensure_owner(space: &mut Space, turtl: &Turtl) -> TResult<()> {
+            // if the current logged-in user is the owner of this space, make sure
+            // the space has an owner record in the members list. we get this when
+            // syncing from the API (and therefor don't need to do this for spaces
+            // shared with us) but for newly created spaces, we need to make sure
+            // the member record exists.
+            if space.user_id == turtl.user_id()? {
+                // remove all default/fake records
+                space.members.retain(|x| { x.id != 0 });
+                // now, see if we have an existing owner rec
+                for member in &space.members {
+                    if member.role == Role::Owner {
+                        return Ok(())
+                    }
+                }
+                // no owner rec? create a fake one and add it to the member list.
+                // FAILING TURTL APP ALLOWS FAKE MEMBER RECORDS! SAD.
+                let user_guard = lockr!(turtl.user);
+                let mut member = SpaceMember::default();
+                member.id = 0;
+                member.user_id = space.user_id.clone();
+                member.space_id = space.id().unwrap().clone();
+                member.username = user_guard.username.clone();
+                member.role = Role::Owner;
+                member.permissions = Role::Owner.allowed_permissions();
+                space.members.push(member);
+            }
+            Ok(())
+        }
+        ensure_owner(self, turtl)?;
+
+        // ensure the members have ze proper papers
+        for member in &mut space.members {
+            member.permissions = member.role.allowed_permissions();
+        }
+        Ok(())
+    }
+}
+
 make_storable!(Space, "spaces");
 impl SyncModel for Space {}
 
@@ -52,16 +98,18 @@ impl Keyfinder for Space {
 }
 
 impl MemorySaver for Space {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(mut self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 let mut profile_guard = lockw!(turtl.profile);
                 for space in &mut profile_guard.spaces {
                     if space.id() == self.id() {
                         space.merge_fields(&self.data()?)?;
+                        space.process_members(turtl)?;
                         return Ok(());
                     }
                 }
+                self.process_members(turtl)?;
                 // if it doesn't exist, push it on
                 profile_guard.spaces.push(self);
             }
@@ -157,17 +205,6 @@ impl Space {
         }
     }
 
-    /// Find a member by id, if such member exists. OR ELSE.
-    fn find_member_or_else<'a>(&'a mut self, member_id: i64) -> TResult<&'a mut SpaceMember> {
-        let member = self.members.iter_mut()
-            .filter(|x| x.id == member_id)
-            .next();
-        match member {
-            Some(x) => Ok(x),
-            None => TErr!(TError::NotFound(format!("member {} is not a member of this space", member_id))),
-        }
-    }
-
     /// Find a member by user_id, if such member exists. OR ELSE.
     fn find_member_by_user_id_or_else<'a>(&'a mut self, member_user_id: &String) -> TResult<&'a mut SpaceMember> {
         let member = self.members.iter_mut()
@@ -225,7 +262,7 @@ impl Space {
         let user_id = turtl.user_id()?;
         self.can_i_or_else(&user_id, &Permission::EditSpaceMember)?;
 
-        let mut existing_member = self.find_member_or_else(member.id)?;
+        let mut existing_member = self.find_member_by_user_id_or_else(&member.user_id)?;
         member.edit(turtl, Some(&mut existing_member))?;
         Ok(())
     }

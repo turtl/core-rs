@@ -15,7 +15,7 @@ dependencies = [
  "hyper 0.9.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "jedi 0.1.0",
  "lazy_static 0.2.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "lib_permissions 0.1.2 (git+https://github.com/turtl/lib-permissions?tag=v0.1.2)",
+ "lib_permissions 0.1.3 (git+https://github.com/turtl/lib-permissions?tag=v0.1.3)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "migrate 0.1.0",
  "num_cpus 1.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -500,8 +500,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "lib_permissions"
-version = "0.1.2"
-source = "git+https://github.com/turtl/lib-permissions?tag=v0.1.2#4853252538192732005b25ef59cbdd651bfa29a3"
+version = "0.1.3"
+source = "git+https://github.com/turtl/lib-permissions?tag=v0.1.3#9f24233d55f4f8fc7fc4c9fe8070b9e1d6c46f9e"
 dependencies = [
  "regex 0.1.80 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1424,7 +1424,7 @@ dependencies = [
 "checksum language-tags 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a91d884b6667cd606bb5a69aa0c99ba811a115fc68915e7056ec08a46e93199a"
 "checksum lazy_static 0.2.9 (registry+https://github.com/rust-lang/crates.io-index)" = "c9e5e58fa1a4c3b915a561a78a22ee0cac6ab97dca2504428bc1cb074375f8d5"
 "checksum lazycell 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3b585b7a6811fb03aa10e74b278a0f00f8dd9b45dc681f148bb29fa5cb61859b"
-"checksum lib_permissions 0.1.2 (git+https://github.com/turtl/lib-permissions?tag=v0.1.2)" = "<none>"
+"checksum lib_permissions 0.1.3 (git+https://github.com/turtl/lib-permissions?tag=v0.1.3)" = "<none>"
 "checksum libc 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)" = "5ba3df4dcb460b9dfbd070d41c94c19209620c191b0340b929ce748a2bcd42d2"
 "checksum libressl-pnacl-sys 2.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "cbc058951ab6a3ef35ca16462d7642c4867e6403520811f28537a4e2f2db3e71"
 "checksum libsqlite3-sys 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "663508cb9c1e23363aea1a8b1f7d6340394ebc3bc3a6daebfb9cc99b8feaf2ec"

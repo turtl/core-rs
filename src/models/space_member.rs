@@ -6,7 +6,7 @@ use ::api::ApiReq;
 use ::sync::incoming;
 
 /// Holds information about a member of a space.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SpaceMember {
     /// Member id
     #[serde(with = "::util::ser::str_i64_converter")]
