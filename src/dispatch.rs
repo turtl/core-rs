@@ -53,7 +53,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let old_username: String = jedi::get(&["2"], &data)?;
             let old_password: String = jedi::get(&["3"], &data)?;
             match migrate::check_login(&old_username, &old_password) {
-                Ok(_) => Ok(json!(true)),
+                Ok(x) => {
+                    match x {
+                        Some(_) => Ok(json!(true)),
+                        None => Ok(json!(false)),
+                    }
+                }
                 Err(_) => Ok(json!(false)),
             }
         }
