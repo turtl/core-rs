@@ -4,7 +4,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::file::{File, FileData};
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::crypto::Key;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::std::fs;
@@ -176,7 +176,8 @@ impl Keyfinder for Note {
 
 impl MemorySaver for Note {
     // reindex note on add/update (reindex is idempotent)
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 let note_id = match self.id() {
@@ -187,6 +188,7 @@ impl MemorySaver for Note {
                 let notes = turtl.load_notes(&vec![note_id])?;
                 if notes.len() == 0 { return Ok(()); }
                 let note = &notes[0];
+                sync_item.data = Some(note.data()?);
                 let mut search_guard = lockw!(turtl.search);
                 match search_guard.as_mut() {
                     Some(ref mut search) => {

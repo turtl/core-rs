@@ -4,7 +4,7 @@ use ::error::{TResult, TError};
 use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::jedi::{self, Value};
@@ -119,16 +119,15 @@ make_storable!(KeychainEntry, "keychain");
 impl SyncModel for KeychainEntry {}
 impl Keyfinder for KeychainEntry {}
 impl MemorySaver for KeychainEntry {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
-                let key = match self.k.as_ref() {
-                    Some(x) => x,
-                    None => return TErr!(TError::MissingField(String::from("Keychain.k"))),
-                };
-                // upsert our key
+                if self.k.is_none() {
+                    return TErr!(TError::MissingField(String::from("Keychain.k")));
+                }
                 let mut profile_guard = lockw!(turtl.profile);
-                profile_guard.keychain.upsert_key(turtl, &self.item_id, key, &self.ty)?;
+                profile_guard.keychain.replace_entry(self)?;
             }
             SyncAction::Delete => {
                 let mut profile_guard = lockw!(turtl.profile);
@@ -162,33 +161,29 @@ impl Keychain {
             let key = user_guard.key_or_else()?;
             (id, key)
         };
-        let remove = {
-            let existing = self.find_entry(item_id);
-            match existing {
-                Some(entry) => {
-                    if entry.k.is_some() && entry.k.as_ref().unwrap() == key {
-                        return Ok(());
-                    }
-                    true
-                },
-                None => false,
+        let mut new_entry = KeychainEntry::new();
+        let exists = {
+            let existing = self.find_entry_mut(item_id);
+            let exists = existing.is_some();
+            let entry = match existing {
+                Some(x) => x,
+                None => &mut new_entry,
+            };
+            entry.set_key(Some(user_key.clone()));
+            entry.ty = ty.clone();
+            entry.user_id = user_id.clone();
+            entry.item_id = item_id.clone();
+            entry.k = Some(key.clone());
+            if save {
+                sync_model::save_model(SyncAction::Add, turtl, entry, skip_remote_sync)?;
+            } else if !exists {
+                entry.generate_id()?;
             }
+            exists
         };
-        if save && remove {
-            self.remove_entry(item_id, Some((turtl, skip_remote_sync)))?;
+        if !exists {
+            self.entries.push(new_entry);
         }
-        let mut entry = KeychainEntry::new();
-        entry.set_key(Some(user_key.clone()));
-        entry.ty = ty.clone();
-        entry.user_id = user_id.clone();
-        entry.item_id = item_id.clone();
-        entry.k = Some(key.clone());
-        if save {
-            sync_model::save_model(SyncAction::Add, turtl, &mut entry, skip_remote_sync)?;
-        } else {
-            entry.generate_id()?;
-        }
-        self.entries.push(entry);
         Ok(())
     }
 
@@ -200,6 +195,16 @@ impl Keychain {
     /// Upsert a key to the keychain, then save (sync)
     pub fn upsert_key_save(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, skip_remote_sync: bool) -> TResult<()> {
         self.upsert_key_impl(turtl, item_id, key, ty, true, skip_remote_sync)
+    }
+
+    /// Upsert a keychain entry to the keychain
+    pub fn replace_entry(&mut self, entry: KeychainEntry) -> TResult<()> {
+        let exists = self.find_entry(&entry.item_id).is_some();
+        if exists {
+            self.remove_entry(&entry.item_id, None)?;
+        }
+        self.entries.push(entry);
+        Ok(())
     }
 
     /// Remove a keychain entry
@@ -217,6 +222,16 @@ impl Keychain {
             &entry.item_id != item_id
         });
         Ok(())
+    }
+
+    /// Find the KeychainEntry matching the given item id
+    pub fn find_entry_mut<'a>(&'a mut self, item_id: &String) -> Option<&'a mut KeychainEntry> {
+        for entry in &mut self.entries {
+            if &entry.item_id == item_id {
+                return Some(entry);
+            }
+        }
+        None
     }
 
     /// Find the KeychainEntry matching the given item id
@@ -288,3 +303,27 @@ pub fn remove_key(turtl: &Turtl, item_id: &String, skip_remote_sync: bool) -> TR
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use ::crypto::Key;
+
+    #[test]
+    fn upserts_keys_properly() {
+        let turtl = ::turtl::tests::with_test(true);
+        let mut kc = Keychain::new();
+        let key1 = Key::random().unwrap();
+        let mut key2 = Key::random().unwrap();
+        let item1_id = String::from("1234");
+        let ty = String::from("space");
+        loop {
+            if key1.data() != key2.data() { break; }
+            key2 = Key::random().unwrap();
+        }
+        kc.upsert_key(&turtl, &item1_id, &key1, &ty).unwrap();
+        let entry_a_id = kc.find_entry(&item1_id).unwrap().id().unwrap().clone();
+        kc.upsert_key(&turtl, &item1_id, &key2, &ty).unwrap();
+        let entry_b_id = kc.find_entry(&item1_id).unwrap().id().unwrap().clone();
+        assert_eq!(entry_a_id, entry_b_id);
+    }
+}

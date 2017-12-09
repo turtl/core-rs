@@ -25,7 +25,7 @@ use ::models::invite::Invite;
 use ::models::keychain::KeychainEntry;
 use ::models::note::Note;
 use ::models::file::FileData;
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::messaging::{self, Messenger, Response};
 use ::sync::{self, SyncConfig, SyncState};
 use ::sync::sync_model::MemorySaver;
@@ -320,7 +320,7 @@ impl Turtl {
                     db_guard.is_some()
                 };
                 if exists { break; }
-                info!("turtl.sync_start() -- waiting on `turtl.db`...");
+                info!("turtl.check_db_exists() -- waiting on `turtl.db`...");
                 util::sleep(1000);
             }
         }
@@ -606,28 +606,30 @@ impl Turtl {
         // decrypt the keychain
         self.find_models_keys(&mut keychain)?;
         let keychain: Vec<KeychainEntry> = protected::map_deserialize(self, keychain)?;
+        let mut sync_item = SyncRecord::default();
+        sync_item.action = SyncAction::Add;
         for entry in keychain {
-            entry.mem_update(self, SyncAction::Add)?;
+            entry.mem_update(self, &mut sync_item)?;
         }
 
         // now decrypt the spaces
         self.find_models_keys(&mut spaces)?;
         let spaces: Vec<Space> = protected::map_deserialize(self, spaces)?;
         for space in spaces {
-            space.mem_update(self, SyncAction::Add)?;
+            space.mem_update(self, &mut sync_item)?;
         }
 
         // now decrypt the boards
         self.find_models_keys(&mut boards)?;
         let boards: Vec<Board> = protected::map_deserialize(self, boards)?;
         for board in boards {
-            board.mem_update(self, SyncAction::Add)?;
+            board.mem_update(self, &mut sync_item)?;
         }
 
         // invites are NOT decrypted. they are stored as-is.
         // set the invites into the profile
         for invite in invites {
-            invite.mem_update(self, SyncAction::Add)?;
+            invite.mem_update(self, &mut sync_item)?;
         }
 
         let mut user_guard = lockw!(self.user);
@@ -790,7 +792,7 @@ pub mod tests {
         let turtl = Turtl::new().unwrap();
         if logged_in {
             let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
-            let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600}"#)).unwrap();
+            let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600,"body":"AAYBAAzWT6T3jTOu+I0DN7GKxgMocHTwkFPADW6pogRjUDo="}"#)).unwrap();
             let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
             user.do_login(user_key, user_auth);
             let mut user_guard = lockw!(turtl.user);
@@ -875,21 +877,25 @@ pub mod tests {
 
     #[test]
     fn loads_profile_search_notes() {
-        let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());
-        let mut user: User = jedi::parse(&String::from(r#"{"id":"51","username":"slippyslappy@turtlapp.com","storage":104857600,"body":"AAYBAAws5WZbVHnXwgSc1U4Txv7E2khclSUiQXK9/fquJa8="}"#)).unwrap();
-        let user_auth = String::from("000601000c9af06607bbb78b0cab4e01f2fda9887cf4fcdcb351527f9a1a134c7c89513241f8fc0d5d71341b46e792242dbce7d43f80e70d1c3c5c836e72b5bd861db35fed19cadf45d565fa95e7a72eb96ef464477271631e9ab375e74aa38fc752a159c768522f6fef1b4d8f1e29fdbcde59d52bfe574f3d600d6619c3609175f29331a353428359bcce95410d6271802275807c2fabd50d0189638afa7ce0a6");
-        user.do_login(user_key, user_auth);
+        let turtl = with_test(true);
 
-        let mut turtl = with_test(false);
-        turtl.user = RwLock::new(user);
-
-        let db = turtl.create_user_db().unwrap();
         // load our profile from a few big JSON blobs. we do this out of scope
         // so's not to be tempted to use them later on...we want the profile to
         // load itself completely from the DB and deserialize successfully w/o
         // having access to any of the data we put in here.
         {
-            let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[{"id":"015bac22440b4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30020","type":"space","item_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"body":"AAYBAAwuE3ASfPUmqgFhjcllp4atv6bJ/hf1CUjfPuMs/g+0nDcrC6Ye6AAr26Gk/0LWwjB0mgT3/Bb/00SxFrM97YDA6EUs1xxNG2SKakMTz585vw=="},{"id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30028","type":"space","item_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"body":"AAYBAAwl4cOKFgxzAM8CFFCEiy4SKbC01qhtI40O7El7UG05UneASSsxdKN15bFZUAyD0TQPx/fEKf5zn251Bdmdl/mAw0aNKYX9/60/mpj17+6zsw=="},{"id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30030","type":"space","item_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"body":"AAYBAAwgRYgtpMVP2H66+WJd0BWEuN7Cqoh4TasleTl77Dim4gvOPIjq2pvtse+O0ywW0B98CCoo4wg5JP3UJKpb3On20fgPmx5sgxgSszk3IfU0ow=="},{"id":"015bae37fb224944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30048","type":"space","item_id":"015a8362721ab6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90026","user_id":51,"body":"AAYBAAw9t7R3TUCPVCYUyh4mqJK/OMUUJOnYZviN2yCdoD3JUA0c7mjfdmvYAnNmSYMdJgGAbyHYBYqR4KWwIxM9xhk5wAlF59ZKXc7r+ikfCltUYw=="},{"id":"015bb25a31c59097895e547164bd5935025703c9d5188f2be449364e26aa736e01a6f74ceaac00f4","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyp/Q4ry3GR1fU7034oy52mIccQ8I7U5ZPyRgFvaAX4QrlVCSa53Z7NLP1iZU7PW3bnV40rKdfGALIJ2zmo8pifWnItV+ChVScz4Hwy5PPTGg=="},{"id":"015bffa0d30d950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00b9","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwrVM4bcSP3qwkFEv5qAQSq7O5/8qBa2nZFPFQdB5ZGYc7Qa+GKB55H5l2F37s6QSa84n8FX6/tbTmwNqBSyEsNSAI9OHw0SyXUf9dugVzsPQ=="},{"id":"015bffa2ce42950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00fa","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwT5rBK44hbHZQOICE3FnzOw9B606+4gEl64YCWqqIN7Vwsr6x8Ff9XGvvwbOCJQyeWGM9tpLSIr5uwFuiYe9Mc13h4odPiCudlXXJzcz09Fg=="},{"id":"015c14254472cb9346f941d635d7cd81602dee4af381029f25e1d637ebce44b6170700262e0c0081","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyCp5xUilhR0WJt5r8IeV/dRvkFsoHjUC8k5Kc9Wy5YqN3+rzM7NHBmwivRNofr2DS22GrdkngVUhEOqjdgoc37djTTRumZDRjAwsw0f9Wpfg=="}]"#)).unwrap();
+            let mut db_guard = lock!(turtl.db);
+            let db = db_guard.as_mut().unwrap();
+            let keychain: Vec<KeychainEntry> = jedi::parse(&String::from(r#"[
+                {"id":"015bac22440b4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30020","type":"space","item_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"body":"AAYBAAwuE3ASfPUmqgFhjcllp4atv6bJ/hf1CUjfPuMs/g+0nDcrC6Ye6AAr26Gk/0LWwjB0mgT3/Bb/00SxFrM97YDA6EUs1xxNG2SKakMTz585vw=="},
+                {"id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30028","type":"space","item_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"body":"AAYBAAwl4cOKFgxzAM8CFFCEiy4SKbC01qhtI40O7El7UG05UneASSsxdKN15bFZUAyD0TQPx/fEKf5zn251Bdmdl/mAw0aNKYX9/60/mpj17+6zsw=="},
+                {"id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30030","type":"space","item_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"body":"AAYBAAwgRYgtpMVP2H66+WJd0BWEuN7Cqoh4TasleTl77Dim4gvOPIjq2pvtse+O0ywW0B98CCoo4wg5JP3UJKpb3On20fgPmx5sgxgSszk3IfU0ow=="},
+                {"id":"015bae37fb224944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30048","type":"space","item_id":"015a8362721ab6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90026","user_id":51,"body":"AAYBAAw9t7R3TUCPVCYUyh4mqJK/OMUUJOnYZviN2yCdoD3JUA0c7mjfdmvYAnNmSYMdJgGAbyHYBYqR4KWwIxM9xhk5wAlF59ZKXc7r+ikfCltUYw=="},
+                {"id":"015bb25a31c59097895e547164bd5935025703c9d5188f2be449364e26aa736e01a6f74ceaac00f4","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyp/Q4ry3GR1fU7034oy52mIccQ8I7U5ZPyRgFvaAX4QrlVCSa53Z7NLP1iZU7PW3bnV40rKdfGALIJ2zmo8pifWnItV+ChVScz4Hwy5PPTGg=="},
+                {"id":"015bffa0d30d950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00b9","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwrVM4bcSP3qwkFEv5qAQSq7O5/8qBa2nZFPFQdB5ZGYc7Qa+GKB55H5l2F37s6QSa84n8FX6/tbTmwNqBSyEsNSAI9OHw0SyXUf9dugVzsPQ=="},
+                {"id":"015bffa2ce42950451886efa5af640eda04c689cb9e3de1caea1b59c732b265e8a5aae7c96cd00fa","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAwT5rBK44hbHZQOICE3FnzOw9B606+4gEl64YCWqqIN7Vwsr6x8Ff9XGvvwbOCJQyeWGM9tpLSIr5uwFuiYe9Mc13h4odPiCudlXXJzcz09Fg=="},
+                {"id":"015c14254472cb9346f941d635d7cd81602dee4af381029f25e1d637ebce44b6170700262e0c0081","type":"space","item_id":"015a836469b5b6e84d965f99d2741739cf417b7df52f51008c55035365bc734b25fb2acbf5c90041","user_id":51,"body":"AAYBAAyCp5xUilhR0WJt5r8IeV/dRvkFsoHjUC8k5Kc9Wy5YqN3+rzM7NHBmwivRNofr2DS22GrdkngVUhEOqjdgoc37djTTRumZDRjAwsw0f9Wpfg=="}
+            ]"#)).unwrap();
             let spaces: Vec<Space> = jedi::parse(&String::from(r#"[{"id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"members":[{"id":90,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":"51","role":"owner","created":"2017-04-26T19:19:40.782Z","updated":"2017-04-26T19:19:40.782Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAzSnOFnsF8LgCqQbQDhjowbdfeuWYRfRevmY/ie0GOeJhEbxaaloFsT7wblZjYMGd+ocL0TKvUYqO0U/qJEwFM2Uh0="},{"id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":51,"members":[{"id":91,"space_id":"015bac2244c84944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30026","user_id":"51","role":"owner","created":"2017-04-26T19:19:40.819Z","updated":"2017-04-26T19:19:40.819Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAweqy/gx9HTkvkQXNgCvSyVApuJKXEOJNTqlEU8udrW2qb5/gzjdn5dOh/fCI9HHUzyYysiFG739oLBTexxdg=="},{"id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":51,"members":[{"id":92,"space_id":"015bac2244d44944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3002e","user_id":"51","role":"owner","created":"2017-04-26T19:19:40.871Z","updated":"2017-04-26T19:19:40.871Z","username":"andrew@lyonbros.com"}],"invites":[],"keys":[],"body":"AAYBAAzAf7huCdGhIfZ8LakfUsgOLXsKxsMkK1ulo7G+lTEElums6ViZ8SLxFUnF3kn1BDtbN29sT8NAxCDlKskFkg=="}]"#)).unwrap();
             let boards: Vec<Board> = jedi::parse(&String::from(r#"[{"id":"015bac2244ea4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30034","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAz9znE+csObRfJh7v1+vILRefrGx/ZC97qtGetYvtPYr3gO4v4AnhWPP/z49ESptJ1aSIOWTzPKBt5B1fI=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAxEVD6FeHQaEl9yh3M9LVJTh0poYU8FA1SxwYVn/8N1SBNYBYzuWcfXMoTFrmz0CHum"},{"id":"015bac2244f54944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa30039","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAwYIRhvHsm43RJnwXRXCIGnzCs2e+eBW6Wzyr+ojo00PY123AmMGMSqq6IStUrSbteDdxG4iRZEyBJwY8g=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAyijrKoEz3RznfMJslv2qO17BqmiYP8SgDW1i/AkC/O50Y6jizxq2cljfwlwRn0"},{"id":"015bac2245044944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3003e","space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","user_id":51,"keys":[{"k":"AAYBAAyr/nHZWKTTcsvdokRUReLnUDM60/D0BigVJ1sRcGZg3cQ1M0ocZzC45nehLqw5iJAO/N2RP/AKoKOqTio=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"body":"AAYBAAzXFMlrh9a4hWujp2PKTeXoSMbfSwX2YpPgC6mg2IoUSfO4/NU8bbVQNTV+pG64PRBz"}]"#)).unwrap();
             let notes: Vec<Note> = jedi::parse(&String::from(r#"[
@@ -905,11 +911,10 @@ pub mod tests {
             for board in &boards { db.save(board).unwrap(); }
             for note in &notes { db.save(note).unwrap(); }
         }
-        turtl.db = Arc::new(Mutex::new(Some(db)));
 
         turtl.load_profile().unwrap();
         let profile_guard = lockr!(turtl.profile);
-        assert_eq!(profile_guard.keychain.entries.len(), 8);
+        assert_eq!(profile_guard.keychain.entries.len(), 5);
         assert_eq!(profile_guard.spaces.len(), 3);
         assert_eq!(profile_guard.boards.len(), 3);
         assert_eq!(profile_guard.boards[0].title.as_ref().unwrap(), &String::from("Bookmarks"));

@@ -110,7 +110,8 @@ impl SyncModel for FileData {
 
 impl Keyfinder for FileData {}
 impl MemorySaver for FileData {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Delete => {
                 // unwrap is ok. we will always have an id. hopefully. no, but

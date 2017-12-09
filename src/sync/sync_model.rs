@@ -125,7 +125,12 @@ pub trait MemorySaver: Protected {
     /// Update in-mem state based on sync item. Generally, models will overwrite
     /// this with custom code that updates whatever respective state is in the
     /// Turtl object.
-    fn mem_update(self, _turtl: &Turtl, _action: SyncAction) -> TResult<()> {
+    ///
+    /// Note that we send in the SyncRecord as a mutable ref. The idea here is
+    /// that if a model's mem saver needs to do any special data manipulation
+    /// to its data, it can set that updated data back into `SyncRecord.data`
+    /// which will then be sent to the ui via `sync:update`.
+    fn mem_update(self, _turtl: &Turtl, _sync_item: &mut SyncRecord) -> TResult<()> {
         Ok(())
     }
 
@@ -138,7 +143,7 @@ pub trait MemorySaver: Protected {
         sync_item.item_id = self.id_or_else()?;
         sync_item.ty = SyncType::from_string(self.model_type())?;
         sync_item.data = Some(self.data()?);
-        self.mem_update(turtl, action)?;
+        self.mem_update(turtl, &mut sync_item)?;
         messaging::ui_event("sync:update", &sync_item)
     }
 }

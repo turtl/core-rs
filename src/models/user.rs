@@ -62,7 +62,8 @@ impl SyncModel for User {
 impl Keyfinder for User {}
 
 impl MemorySaver for User {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 // NOTE: it's not wise to do a direct edit here (as in, lock

@@ -1,7 +1,7 @@
 use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming;
 use ::lib_permissions::Role;
@@ -60,16 +60,19 @@ impl SyncModel for Invite {}
 impl Keyfinder for Invite {}
 
 impl MemorySaver for Invite {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 let mut profile_guard = lockw!(turtl.profile);
                 for invite in &mut profile_guard.invites {
                     if invite.id() == self.id() {
                         invite.merge_fields(&self.data()?)?;
+                        sync_item.data = Some(invite.data()?);
                         return Ok(());
                     }
                 }
+                sync_item.data = Some(self.data()?);
                 // if it doesn't exist, push it on
                 profile_guard.invites.push(self);
             }

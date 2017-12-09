@@ -6,7 +6,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
 use ::models::keychain::{Keychain, KeyRef, KeyType};
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::turtl::Turtl;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::models::storable::Storable;
@@ -118,16 +118,19 @@ impl Keyfinder for Board {
 }
 
 impl MemorySaver for Board {
-    fn mem_update(self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 let mut profile_guard = lockw!(turtl.profile);
                 for board in &mut profile_guard.boards {
                     if board.id() == self.id() {
                         board.merge_fields(&self.data()?)?;
+                        sync_item.data = Some(board.data()?);
                         return Ok(());
                     }
                 }
+                sync_item.data = Some(self.data()?);
                 // if it doesn't exist, push it on
                 profile_guard.boards.push(self);
             }

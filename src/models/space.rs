@@ -5,7 +5,7 @@ use ::models::note::Note;
 use ::models::invite::{Invite, InviteRequest};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::space_member::SpaceMember;
-use ::models::sync_record::SyncAction;
+use ::models::sync_record::{SyncRecord, SyncAction};
 use ::models::keychain;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
@@ -80,7 +80,7 @@ impl Space {
         ensure_owner(self, turtl)?;
 
         // ensure the members have ze proper papers
-        for member in &mut space.members {
+        for member in &mut self.members {
             member.permissions = member.role.allowed_permissions();
         }
         Ok(())
@@ -98,7 +98,8 @@ impl Keyfinder for Space {
 }
 
 impl MemorySaver for Space {
-    fn mem_update(mut self, turtl: &Turtl, action: SyncAction) -> TResult<()> {
+    fn mem_update(mut self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
+        let action = sync_item.action.clone();
         match action {
             SyncAction::Add | SyncAction::Edit => {
                 let mut profile_guard = lockw!(turtl.profile);
@@ -106,10 +107,12 @@ impl MemorySaver for Space {
                     if space.id() == self.id() {
                         space.merge_fields(&self.data()?)?;
                         space.process_members(turtl)?;
+                        sync_item.data = Some(space.data()?);
                         return Ok(());
                     }
                 }
                 self.process_members(turtl)?;
+                sync_item.data = Some(self.data()?);
                 // if it doesn't exist, push it on
                 profile_guard.spaces.push(self);
             }
