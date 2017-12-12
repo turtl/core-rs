@@ -68,7 +68,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let new_username: String = jedi::get(&["4"], &data)?;
             let new_password: String = jedi::get(&["5"], &data)?;
             turtl.join_migrate(old_username, old_password, new_username, new_password)?;
-            Ok(json!({}))
+            let user_guard = lockr!(turtl.user);
+            user_guard.data()
         }
         "user:logout" => {
             let clear_cookie: bool = match jedi::get(&["2"], &data) {
@@ -125,8 +126,17 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             config::set(&["api", "endpoint"], &endpoint)?;
             Ok(json!({}))
         }
+        "app:api:set-old-endpoint" => {
+            let endpoint: String = jedi::get(&["2"], &data)?;
+            config::set(&["api", "v6", "endpoint"], &endpoint)?;
+            Ok(json!({}))
+        }
         "app:api:get-endpoint" => {
             let endpoint: String = config::get(&["api", "endpoint"])?;
+            Ok(Value::String(endpoint))
+        }
+        "app:api:get-old-endpoint" => {
+            let endpoint: String = config::get(&["api", "v6", "endpoint"])?;
             Ok(Value::String(endpoint))
         }
         "app:shutdown" => {
