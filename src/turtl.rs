@@ -270,10 +270,9 @@ impl Turtl {
             profile_guard.wipe();
         }
         self.sync_shutdown(false)?;
+        self.close_user_db()?;
         self.clear_user_id();
         User::logout(self)?;
-        let mut db_guard = lock!(self.db);
-        *db_guard = None;
         let mut connguard = lockw!(self.connected);
         *connguard = false;
         messaging::ui_event("user:logout", &Value::Null)?;
@@ -430,6 +429,16 @@ impl Turtl {
         let db_location = self.get_user_db_location()?;
         let dumpy_schema = schema::get_schema();
         Storage::new(&db_location, dumpy_schema)
+    }
+
+    /// Close the per-user database.
+    pub fn close_user_db(&self) -> TResult<()> {
+        let mut db_guard = lock!(self.db);
+        if let Some(db) = db_guard.as_mut() {
+            db.close()?;
+        }
+        *db_guard = None;
+        Ok(())
     }
 
     /// Get the physical location of the per-user database file we will use for
@@ -720,6 +729,7 @@ impl Turtl {
     pub fn wipe_user_data(&self) -> TResult<()> {
         let user_id = self.user_id()?;
         self.sync_shutdown(true)?;
+        self.logout()?;
 
         let db_loc = self.get_user_db_location()?;
         if db_loc != ":memory:" {
@@ -732,8 +742,6 @@ impl Turtl {
             fs::remove_file(&file)?;
             info!("turtl.wipe_user_data() -- removing {}", file.display());
         }
-
-        self.logout()?;
 
         Ok(())
     }
