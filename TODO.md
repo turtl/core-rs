@@ -15,6 +15,7 @@ v0.7:
       - does the file still remain?
       - does the sync system break in any way?
     - move space
+  - check migrate w/ bad login (should fail)
 - premium
 - profile
   - calculate size
