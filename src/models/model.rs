@@ -68,8 +68,8 @@ pub fn set_client_id(id: String) -> TResult<()> {
     Ok(())
 }
 
-/// Create a turtl object id from a client id
-pub fn cid() -> TResult<String> {
+/// Create a new cid with the given timestamp
+pub fn cid_w_timestamp(millis: u64) -> TResult<String> {
     let client_id = match get_client_id() {
         Some(ref x) => x.clone(),
         None => return TErr!(TError::MissingData(format!("CLIENT_ID missing"))),
@@ -77,13 +77,18 @@ pub fn cid() -> TResult<String> {
     let mut counter_guard = lockw!((*CID_COUNTER));
     let counter: u32 = counter_guard.clone();
     (*counter_guard) += 1;
-    let now = time::get_time();
-    let milis = ((now.sec as u64) * 1000) + ((now.nsec as u64) / 1000000);
-    let mut cid = format!("{:01$x}", milis, 12);
+    let mut cid = format!("{:01$x}", millis, 12);
     let counter_str = format!("{:01$x}", (counter & 65535), 4);
     cid.push_str(&client_id[..]);
     cid.push_str(&counter_str[..]);
     Ok(cid)
+}
+
+/// Create a turtl object id from a client id
+pub fn cid() -> TResult<String> {
+    let now = time::get_time();
+    let millis = ((now.sec as u64) * 1000) + ((now.nsec as u64) / 1000000);
+    cid_w_timestamp(millis)
 }
 
 /// Given a cid and a client id, replace the cid's client id with the given one.

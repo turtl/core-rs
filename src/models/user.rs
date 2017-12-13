@@ -372,9 +372,18 @@ impl User {
                 title_map.insert(id, title);
             }
 
+            // take an old id, grab the timestamp out of it, and use it as the
+            // timestamp in a newly-generated id. useful for upgrading the old
+            // mongodb id format (if needed) and also for creating a totally new
+            // id but preserving the create date of the object.
+            fn val_to_new_id(val: &Value) -> TResult<String> {
+                let old_id: String = jedi::get(&["id"], &val)?;
+                model::cid_w_timestamp(model::id_timestamp(&old_id)? as u64)
+            }
+
             for mut boardval in boards {
-                let new_board_id = model::cid()?;
                 let old_board_id: String = jedi::get(&["id"], &boardval)?;
+                let new_board_id = val_to_new_id(&boardval)?;
                 let mut title: String = jedi::get(&["title"], &boardval)?;
                 // if we have a parent id and a title related to that parent
                 // board, prepend the parent's title to this board's title
@@ -408,7 +417,7 @@ impl User {
                         }
                     }
                 };
-                let new_note_id = model::cid()?;
+                let new_note_id = val_to_new_id(&noteval)?;
                 jedi::set(&["id"], &mut noteval, &new_note_id)?;
                 jedi::set(&["user_id"], &mut noteval, &user_id)?;
                 jedi::set(&["space_id"], &mut noteval, &migrate_space_id)?;
