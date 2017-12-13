@@ -425,6 +425,13 @@ impl Turtl {
         }
     }
 
+    /// Returns whether or not syncing has been initialized (ie, sync_start has
+    /// been called). Basically just tests for the presence of sync_state.
+    pub fn sync_ready(&self) -> bool {
+        let guard = lockr!(self.sync_state);
+        guard.is_some()
+    }
+
     /// Create a new per-user database for the current user.
     pub fn create_user_db(&self) -> TResult<Storage> {
         let db_location = self.get_user_db_location()?;

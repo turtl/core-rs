@@ -144,7 +144,10 @@ pub trait MemorySaver: Protected {
         sync_item.ty = SyncType::from_string(self.model_type())?;
         sync_item.data = Some(self.data()?);
         self.mem_update(turtl, &mut sync_item)?;
-        messaging::ui_event("sync:update", &sync_item)
+        if turtl.sync_ready() {
+            messaging::ui_event("sync:update", &sync_item)?;
+        }
+        Ok(())
     }
 }
 
