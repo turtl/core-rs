@@ -32,6 +32,7 @@ use ::sync::sync_model::MemorySaver;
 use ::search::Search;
 use ::schema;
 use ::migrate::{self, MigrateResult};
+use ::std::collections::HashMap;
 
 pub fn data_folder() -> TResult<String> {
     let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
@@ -654,7 +655,21 @@ impl Turtl {
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
 
-        let mut notes: Vec<Note> = db.by_id("notes", note_ids)?;
+        let notes: Vec<Note> = db.by_id("notes", note_ids)?;
+        // make sure notes are ordered based on the ids we passed
+        let mut notes = {
+            let mut tmp = Vec::with_capacity(notes.len());
+            let mut sort_hash: HashMap<String, Note> = HashMap::with_capacity(notes.len());
+            for note in notes {
+                sort_hash.insert(note.id().unwrap().clone(), note);
+            }
+            for note_id in note_ids {
+                if let Some(note) = sort_hash.remove(note_id) {
+                    tmp.push(note);
+                }
+            }
+            tmp
+        };
         self.find_models_keys(&mut notes)?;
         protected::map_deserialize(self, notes)
     }
@@ -959,6 +974,29 @@ pub mod tests {
                 (String::from("free market"), 1),
             ]
         );
+
+        // make sure loading notes by id preserves order
+        let note_ids = vec![
+            String::from("015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e"),
+            String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b"),
+            String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"),
+            String::from("015d0aee51102af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a0249"),
+            String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5"),
+        ];
+        let notes = turtl.load_notes(&note_ids).unwrap();
+        let grabbed_ids = notes.into_iter().map(|x| x.id().unwrap().clone()).collect::<Vec<_>>();
+        assert_eq!(grabbed_ids, note_ids);
+
+        let note_ids = vec![
+            String::from("015d0aee51102af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a0249"),
+            String::from("015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e"),
+            String::from("015d0b84f5562af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00f5"),
+            String::from("015ce7ea7f742af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a00aa"),
+            String::from("015caf7c5f4d2af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a022b"),
+        ];
+        let notes = turtl.load_notes(&note_ids).unwrap();
+        let grabbed_ids = notes.into_iter().map(|x| x.id().unwrap().clone()).collect::<Vec<_>>();
+        assert_eq!(grabbed_ids, note_ids);
     }
 
     #[test]
