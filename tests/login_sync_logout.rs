@@ -40,8 +40,10 @@ mod tests {
         sleep(10);
 
         let noteval = dispatch_ass(json!([
-            "profile:find-notes",
-            {"space_id": "015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}
+            "profile:find-notes", {
+                "space_id": "015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e",
+                "sort_direction": "asc",
+            }
         ]));
         let notes: Vec<Value> = jedi::get(&["notes"], &noteval).unwrap();
         let note = jedi::stringify(&notes[0]).unwrap();
