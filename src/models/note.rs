@@ -189,7 +189,7 @@ impl MemorySaver for Note {
                 if notes.len() == 0 { return Ok(()); }
                 let note = &notes[0];
                 sync_item.data = Some(note.data()?);
-                let mut search_guard = lockw!(turtl.search);
+                let mut search_guard = lock!(turtl.search);
                 match search_guard.as_mut() {
                     Some(ref mut search) => {
                         search.reindex_note(note)?;
@@ -199,7 +199,7 @@ impl MemorySaver for Note {
                 }
             }
             SyncAction::Delete => {
-                let mut search_guard = lockw!(turtl.search);
+                let mut search_guard = lock!(turtl.search);
                 match search_guard.as_mut() {
                     Some(ref mut search) => search.unindex_note(&self)?,
                     // i COULD throw an error here. i'm choosing not to...

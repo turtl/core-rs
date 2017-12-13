@@ -298,7 +298,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                     return TErr!(TError::BadValue(format!("error deserializing search query: {}", e)));
                 }
             };
-            let search_guard = lockr!(turtl.search);
+            let search_guard = lock!(turtl.search);
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }

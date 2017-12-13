@@ -83,7 +83,7 @@ pub struct Turtl {
     pub api: Arc<Api>,
     /// Holds our heroic search object, used to index/find our notes once the
     /// profile is loaded.
-    pub search: RwLock<Option<Search>>,
+    pub search: Mutex<Option<Search>>,
     /// Sync system configuration (shared state with the sync system).
     pub sync_config: Arc<RwLock<SyncConfig>>,
     /// Holds our sync state data
@@ -116,7 +116,7 @@ impl Turtl {
             work: Thredder::new("work", num_workers as u32),
             kv: kv,
             db: Arc::new(Mutex::new(None)),
-            search: RwLock::new(None),
+            search: Mutex::new(None),
             sync_config: Arc::new(RwLock::new(SyncConfig::new())),
             sync_state: Arc::new(RwLock::new(None)),
             connected: RwLock::new(false),
@@ -683,7 +683,7 @@ impl Turtl {
                 Err(e) => error!("turtl.index_notes() -- problem indexing note {:?}: {}", note.id(), e),
             }
         }
-        let mut search_guard = lockw!(self.search);
+        let mut search_guard = lock!(self.search);
         *search_guard = Some(search);
         Ok(())
     }
@@ -932,7 +932,7 @@ pub mod tests {
             jedi::parse(&String::from(json)).unwrap()
         }
 
-        let search_guard = lockr!(turtl.search);
+        let search_guard = lock!(turtl.search);
         let search = search_guard.as_ref().unwrap();
 
         // this stuff is mostly covered in the search tests, but let's
