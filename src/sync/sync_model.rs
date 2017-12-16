@@ -13,7 +13,6 @@ use ::models::keychain;
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::storable::Storable;
 use ::models::validate::Validate;
-use ::models::user::User;
 use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
@@ -259,7 +258,28 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     if action != SyncAction::Edit {
                         return TErr!(TError::BadValue(format!("can only perform `edit` sync on item of type {:?}", ty)));
                     }
-                    let mut model: User = jedi::from_val(modeldata)?;
+
+                    // NOTE: this is kind of weird, but here goes:
+                    //
+                    // we only ever want the user to be able to edit `settings`.
+                    // they CANNOT edit username, pubkey, etc etc. so what we do
+                    // here is clone the current logged-in user model and move
+                    // only the settings in from `modeldata`, basically meaning:
+                    // only save the settings, throw out everything else.
+                    //
+                    // it probably makes more sense to have some kind of "pre
+                    // sync" function that mutates the modeldata and is called
+                    // by save_model, but the user object is so far the only
+                    // place that needs this (essentially readonly fields) so
+                    // for now we'll leave it here and hopefully if another
+                    // model in the future needs it i'll remember where i put
+                    // that one thing that one time that kind of had something
+                    // to do with readonly fields.
+                    let mut model = {
+                        let user_guard = lockr!(turtl.user);
+                        user_guard.clone()?
+                    };
+                    model.settings = jedi::get_opt(&["settings"], &modeldata);
                     save_model(action, turtl, &mut model, false)?
                 }
                 SyncType::Space => {
