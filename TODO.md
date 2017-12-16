@@ -32,9 +32,11 @@ later:
   - storage sysem ONLY accepts encrypted model types
   - UI messaging layer ONLY accepts decrypted model types
   - encrypting and decrypting BOTH consume a model and return the new type
-- implement i18n? seems the only place using it is the user model. maybe not a
-  big deal to just have a few hardcoded english items?
-- investigate more stateless way of syncing files?
+- implement i18n? the number of strings grows as the validation strings are
+  moved into the core. right now stubbed out as t! macro in util/i18n.rs
+  - thinking core should NOT own i18n, it should be owned by each interface
+  - we can port the few translations over from js we need (space/board names,
+    validation errors).
 - move Turtl.find_model_key(s) et al to protected model (or wherever appropriate)
   - profile loading
   - messaging
