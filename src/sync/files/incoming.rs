@@ -153,6 +153,8 @@ impl Syncer for FileSyncIncoming {
         let syncs = self.get_incoming_file_syncs()?;
         for sync in &syncs {
             self.download_file(sync)?;
+            // if we've been disabled, return
+            if !self.is_enabled() { return Ok(()); }
         }
         Ok(())
     }

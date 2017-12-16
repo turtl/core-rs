@@ -159,6 +159,11 @@ impl SyncIncoming {
             10
         };
         let syncres: TResult<SyncResponse> = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
+
+        // ^ this call can take a while. if sync got disabled while it was
+        // taking its sweet time, then bail on the result.
+        if !self.is_enabled() { return Ok(()); }
+
         // if we have a timeout just return Ok(()) (the sync system is built to
         // timeout if no response is received)
         let syncdata = match syncres {
