@@ -156,8 +156,8 @@ impl Keychain {
         }
     }
 
-    /// Upsert a key to the keychain
-    fn upsert_key_impl(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, save: bool, skip_remote_sync: bool) -> TResult<()> {
+    /// Upsert a key to the keychain, don't save
+    pub fn upsert_key(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
         let (user_id, user_key) = {
             let user_guard = lockr!(turtl.user);
             let id = user_guard.id_or_else()?;
@@ -177,28 +177,13 @@ impl Keychain {
             entry.user_id = user_id.clone();
             entry.item_id = item_id.clone();
             entry.k = Some(key.clone());
-            if save {
-                let action = if exists { SyncAction::Edit } else { SyncAction::Add };
-                sync_model::save_model(action, turtl, entry, skip_remote_sync)?;
-            } else if !exists {
-                entry.generate_id()?;
-            }
+            entry.generate_id()?;
             exists
         };
         if !exists {
             self.entries.push(new_entry);
         }
         Ok(())
-    }
-
-    /// Upsert a key to the keychain, don't save
-    pub fn upsert_key(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String) -> TResult<()> {
-        self.upsert_key_impl(turtl, item_id, key, ty, false, true)
-    }
-
-    /// Upsert a key to the keychain, then save (sync)
-    pub fn upsert_key_save(&mut self, turtl: &Turtl, item_id: &String, key: &Key, ty: &String, skip_remote_sync: bool) -> TResult<()> {
-        self.upsert_key_impl(turtl, item_id, key, ty, true, skip_remote_sync)
     }
 
     /// Upsert a keychain entry to the keychain
@@ -275,9 +260,7 @@ impl Keychain {
 }
 
 // NOTE: for the following two functions, instead of saving to
-// Turtl.profile.keychain directly, we create a temp keychain and save the
-// changes to it, which in turns invokes MemorySaver (adding/removing the key
-// to the Turtl.profile.keychain object).
+// Turtl.profile.keychain directly, we copy/clone data out of the real keychain.
 //
 // if we don't do it this way, then we have a write lock on
 // Turtl.profile when the MemorySaver runs for the new key and we get
@@ -296,14 +279,54 @@ impl Keychain {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 /// Save a key to the keychain for the current logged in user
 pub fn save_key(turtl: &Turtl, item_id: &String, key: &Key, ty: &String, skip_remote_sync: bool) -> TResult<()> {
-    let mut tmp_keychain = Keychain::new();
-    tmp_keychain.upsert_key_save(turtl, item_id, key, ty, skip_remote_sync)
+    let (user_id, user_key) = {
+        let user_guard = lockr!(turtl.user);
+        let id = user_guard.id_or_else()?;
+        let key = user_guard.key_or_else()?;
+        (id, key)
+    };
+
+    let mut new_entry = KeychainEntry::new();
+    let mut existing: Option<KeychainEntry> = {
+        let profile_guard = lockr!(turtl.profile);
+        match profile_guard.keychain.find_entry(item_id) {
+            Some(x) => Some(x.clone()?),
+            None => None,
+        }
+    };
+    let exists = existing.is_some();
+    let entry = match existing.as_mut() {
+        Some(x) => x,
+        None => &mut new_entry,
+    };
+
+    entry.set_key(Some(user_key.clone()));
+    entry.ty = ty.clone();
+    entry.user_id = user_id.clone();
+    entry.item_id = item_id.clone();
+    entry.k = Some(key.clone());
+
+    let action = if exists { SyncAction::Edit } else { SyncAction::Add };
+    sync_model::save_model(action, turtl, entry, skip_remote_sync)?;
+    Ok(())
 }
 
 /// Remove a key from the keychain for the current logged in user
 pub fn remove_key(turtl: &Turtl, item_id: &String, skip_remote_sync: bool) -> TResult<()> {
-    let mut tmp_keychain = Keychain::new();
-    tmp_keychain.remove_entry(item_id, Some((turtl, skip_remote_sync)))
+    let entry_ids = {
+        let profile_guard = lockr!(turtl.profile);
+        let mut ids = Vec::new();
+        for entry in &profile_guard.keychain.entries {
+            if &entry.item_id == item_id {
+                ids.push(entry.id().unwrap().clone());
+            }
+        }
+        ids
+    };
+    for entry_id in entry_ids {
+        sync_model::delete_model::<KeychainEntry>(turtl, &entry_id, skip_remote_sync)?;
+    }
+    Ok(())
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
