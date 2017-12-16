@@ -207,6 +207,7 @@ impl SyncIncoming {
 
         // grab sync ids we're ignoring
         let ignored = self.get_ignored()?;
+        let mut ignore_count = 0;
         // filter out ignored records
         let mut records = records
             .into_iter()
@@ -215,6 +216,7 @@ impl SyncIncoming {
                     Some(id) => {
                         if ignored.contains(id) {
                             debug!("SyncIncoming.update_local_db_from_api_sync() -- ignoring {}", id);
+                            ignore_count += 1;
                             false
                         } else {
                             true
@@ -225,6 +227,7 @@ impl SyncIncoming {
             })
             .collect::<Vec<_>>();
 
+        info!("SyncIncoming.update_local_db_from_api_sync() -- ignored {} incoming syncs", ignore_count);
         with_db!{ db, self.db,
             // start a transaction. running incoming sync is all or nothing.
             db.conn.execute("BEGIN TRANSACTION", &[])?;
