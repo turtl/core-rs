@@ -178,7 +178,8 @@ impl Keychain {
             entry.item_id = item_id.clone();
             entry.k = Some(key.clone());
             if save {
-                sync_model::save_model(SyncAction::Add, turtl, entry, skip_remote_sync)?;
+                let action = if exists { SyncAction::Edit } else { SyncAction::Add };
+                sync_model::save_model(action, turtl, entry, skip_remote_sync)?;
             } else if !exists {
                 entry.generate_id()?;
             }
