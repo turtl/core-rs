@@ -94,13 +94,8 @@ impl SyncModel for Space {}
 impl Validate for Space {
     fn validate(&self) -> Vec<(String, String)> {
         let mut errors = Vec::new();
-        match self.title.as_ref() {
-            Some(x) => {
-                if x == "" {
-                    errors.push(validate::entry("title", t!("Please give your space a title.")));
-                }
-            }
-            None => errors.push(validate::entry("title", t!("Please give your space a title."))),
+        if self.title.as_ref().map(|x| x == "").unwrap_or(true) {
+            errors.push(validate::entry("title", t!("Please give your space a title")));
         }
         errors
     }
