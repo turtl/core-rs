@@ -58,6 +58,10 @@ quick_error! {
             description(msg)
             display("{}", quick_error_obj!("permission_denied", msg))
         }
+        Validation(objtype: String, errors: Vec<(String, String)>) {
+            description("validaton error")
+            display("{}", json!({"type": "validation", "subtype": objtype, "errors": errors}))
+        }
         ConnectionRequired {
             description("connection required")
             display("{}", json!({"type": "connection_required"}))

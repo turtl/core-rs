@@ -7,6 +7,7 @@ pub mod model;
 pub mod protected;
 #[macro_use]
 pub mod storable;
+pub mod validate;
 
 pub mod sync_record;
 pub mod user;

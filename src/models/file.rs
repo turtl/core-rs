@@ -5,6 +5,7 @@ use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
 use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
+use ::models::validate::Validate;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::std::mem;
@@ -67,6 +68,8 @@ protected! {
 }
 
 make_storable!(FileData, "files");
+impl Validate for FileData {}
+
 impl SyncModel for FileData {
     // this one is weird. we detect if this is saving from an incoming sync
     // (API -> turtl), and if so, save a SyncRecord to the `sync` table w/ sync

@@ -3,6 +3,7 @@ use ::jedi::Value;
 use ::error::TResult;
 use ::crypto::Key;
 use ::models::model::Model;
+use ::models::validate::Validate;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::note::Note;
 use ::models::keychain::{Keychain, KeyRef, KeyType};
@@ -31,6 +32,7 @@ protected! {
 
 make_storable!(Board, "boards");
 impl SyncModel for Board {}
+impl Validate for Board {}
 
 impl Board {
     /// Move a note to a different space

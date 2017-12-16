@@ -12,6 +12,7 @@ use ::models::protected::{Protected, Keyfinder};
 use ::models::keychain;
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::storable::Storable;
+use ::models::validate::Validate;
 use ::models::user::User;
 use ::models::space::Space;
 use ::models::board::Board;
@@ -153,8 +154,9 @@ pub trait MemorySaver: Protected {
 
 /// Serialize this model and save it to the local db
 pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remote_sync: bool) -> TResult<Value>
-    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Sync + Send
+    where T: Protected + Storable + Keyfinder + SyncModel + MemorySaver + Validate + Sync + Send
 {
+    model.do_validate(model.model_type())?;
     {
         let db_guard = lock!(turtl.db);
         let db = match (*db_guard).as_ref() {

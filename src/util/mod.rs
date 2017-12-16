@@ -37,6 +37,8 @@ pub mod logger;
 pub mod thredder;
 #[macro_use]
 pub mod ser;
+#[macro_use]
+pub mod i18n;
 
 /// Go to sleeeeep
 pub fn sleep(millis: u64) {

@@ -8,6 +8,7 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
+use ::models::validate::{self, Validate};
 use ::turtl::Turtl;
 use ::api::ApiReq;
 use ::util;
@@ -60,6 +61,16 @@ impl SyncModel for User {
 }
 
 impl Keyfinder for User {}
+
+impl Validate for User {
+    fn validate(&self) -> Vec<(String, String)> {
+        let mut errors = Vec::new();
+        if self.username.len() < 3 {
+            errors.push(validate::entry("username", t!("Please enter a username 3 characters or longer.")));
+        }
+        errors
+    }
+}
 
 impl MemorySaver for User {
     fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
@@ -154,6 +165,26 @@ fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -
     Ok(())
 }
 
+fn validate_user(username: &String, password: &String) -> TResult<()> {
+    let mut fake_user_sad = User::default();
+    fake_user_sad.username = username.clone();
+    fake_user_sad.do_validate(fake_user_sad.model_type())?;
+    // these are not in validation because password is not a model field
+    let mut errors = Vec::new();
+    if password.len() == 0 {
+        errors.push(validate::entry("password", t!("Please enter a passphrase. Hint: Sentences are much better than single words.")));
+    } else if password.len() < 4 {
+        errors.push(validate::entry("password", t!("We don't mean to tell you your business, but a passphrase less than four characters won't cut it. Try again.")));
+    } else if password == "password" {
+        errors.push(validate::entry("password", t!("That passphrase is making me cringe.")));
+    }
+
+    if errors.len() > 0 {
+        return TErr!(TError::Validation(fake_user_sad.model_type(), errors));
+    }
+    Ok(())
+}
+
 impl User {
     /// Given a turtl, a username, and a password, see if we can log this user
     /// in.
@@ -183,18 +214,7 @@ impl User {
     }
 
     pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
-        if username.len() < 3 {
-            return TErr!(TError::BadValue(String::from("Please enter a username 3 characters or longer.")));
-        }
-        if password.len() == 0 {
-            return TErr!(TError::BadValue(String::from("Please enter a passphrase. Hint: Sentences are much better than single words.")));
-        }
-        if password.len() < 4 {
-            return TErr!(TError::BadValue(String::from("We don\'t mean to tell you your business, but a passphrase less than four characters won\'t cut it. Try again.")));
-        }
-        if password == "password" {
-            return TErr!(TError::BadValue(String::from("That passphrase is making me cringe.")));
-        }
+        validate_user(&username, &password)?;
         let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
         let (pk, sk) = crypto::asym::keygen()?;
         let userdata = {
@@ -239,6 +259,7 @@ impl User {
     /// we tried to shoehorn this through the sync system, but this tends to be
     /// a delicate procedure and you really want everything to work or nothing.
     pub fn change_password(&mut self, turtl: &Turtl, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
+        validate_user(&new_username, &new_password)?;
         let user_id = self.id_or_else()?;
         let (_, auth) = generate_auth(&current_username, &current_password, CURRENT_AUTH_VERSION)?;
         if Some(auth) != self.auth {
@@ -346,19 +367,19 @@ impl User {
             Ok(id)
         }
 
-        let personal_space_id = save_space(turtl, &user_id, "Personal", "#408080")?;
-        save_space(turtl, &user_id, "Work", "#439645")?;
-        save_space(turtl, &user_id, "Home", "#800000")?;
-        save_board(turtl, &user_id, &personal_space_id, "Bookmarks")?;
-        save_board(turtl, &user_id, &personal_space_id, "Photos")?;
-        save_board(turtl, &user_id, &personal_space_id, "Passwords")?;
+        let personal_space_id = save_space(turtl, &user_id, t!("Personal"), "#408080")?;
+        save_space(turtl, &user_id, t!("Work"), "#439645")?;
+        save_space(turtl, &user_id, t!("Home"), "#800000")?;
+        save_board(turtl, &user_id, &personal_space_id, t!("Bookmarks"))?;
+        save_board(turtl, &user_id, &personal_space_id, t!("Photos"))?;
+        save_board(turtl, &user_id, &personal_space_id, t!("Passwords"))?;
 
         // the user's default space id. might change if we have import data
         let mut default_space_id = personal_space_id.clone();
 
         if let Some(migration) = migrate_data {
             let MigrateResult { boards, notes } = migration;
-            let migrate_space_id = save_space(turtl, &user_id, "Imported", "#b7479b")?;
+            let migrate_space_id = save_space(turtl, &user_id, t!("Imported"), "#b7479b")?;
             // if we're importing data, set the space holding the migration data
             // as the default
             default_space_id = migrate_space_id.clone();

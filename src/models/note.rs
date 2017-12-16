@@ -1,6 +1,7 @@
 use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
+use ::models::validate::Validate;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::file::{File, FileData};
@@ -64,6 +65,7 @@ protected! {
 
 make_storable!(Note, "notes");
 impl SyncModel for Note {}
+impl Validate for Note {}
 
 impl Note {
     /// Remove the files attached to this note, if any.

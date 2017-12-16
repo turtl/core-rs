@@ -2,6 +2,7 @@ use ::error::{TResult, TError};
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::{SyncRecord, SyncAction};
+use ::models::validate::Validate;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming;
 use ::lib_permissions::Role;
@@ -58,6 +59,7 @@ pub struct InviteRequest {
 make_storable!(Invite, "invites");
 impl SyncModel for Invite {}
 impl Keyfinder for Invite {}
+impl Validate for Invite {}
 
 impl MemorySaver for Invite {
     fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {

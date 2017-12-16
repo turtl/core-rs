@@ -6,6 +6,7 @@ use ::models::invite::{Invite, InviteRequest};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::space_member::SpaceMember;
 use ::models::sync_record::{SyncRecord, SyncAction};
+use ::models::validate::{self, Validate};
 use ::models::keychain;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
@@ -89,6 +90,21 @@ impl Space {
 
 make_storable!(Space, "spaces");
 impl SyncModel for Space {}
+
+impl Validate for Space {
+    fn validate(&self) -> Vec<(String, String)> {
+        let mut errors = Vec::new();
+        match self.title.as_ref() {
+            Some(x) => {
+                if x == "" {
+                    errors.push(validate::entry("title", t!("Please give your space a title.")));
+                }
+            }
+            None => errors.push(validate::entry("title", t!("Please give your space a title."))),
+        }
+        errors
+    }
+}
 
 impl Keyfinder for Space {
     // We definitely want to save space keys to the keychain

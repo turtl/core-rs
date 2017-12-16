@@ -5,6 +5,7 @@ use ::crypto::Key;
 use ::models::model::Model;
 use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::{SyncRecord, SyncAction};
+use ::models::validate::Validate;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::jedi::{self, Value};
@@ -118,6 +119,8 @@ protected! {
 make_storable!(KeychainEntry, "keychain");
 impl SyncModel for KeychainEntry {}
 impl Keyfinder for KeychainEntry {}
+impl Validate for KeychainEntry {}
+
 impl MemorySaver for KeychainEntry {
     fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
         let action = sync_item.action.clone();
