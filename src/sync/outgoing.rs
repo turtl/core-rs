@@ -36,6 +36,9 @@ pub struct SyncOutgoing {
     /// for polling the "outgoing" table for local changes that need to be
     /// synced to our heroic API.
     db: Arc<Mutex<Option<Storage>>>,
+
+    /// Stores our syn run version
+    run_version: i64,
 }
 
 impl SyncOutgoing {
@@ -45,6 +48,7 @@ impl SyncOutgoing {
             config: config,
             api: api,
             db: db,
+            run_version: 0,
         }
     }
 
@@ -101,6 +105,14 @@ impl Syncer for SyncOutgoing {
 
     fn get_delay(&self) -> u64 {
         1000
+    }
+
+    fn set_run_version(&mut self, run_version: i64) {
+        self.run_version = run_version;
+    }
+
+    fn get_run_version(&self) -> i64 {
+        self.run_version
     }
 
     fn run_sync(&mut self) -> TResult<()> {

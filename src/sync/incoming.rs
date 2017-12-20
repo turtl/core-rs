@@ -83,6 +83,9 @@ pub struct SyncIncoming {
     /// determine whether we should check sync immediate (if disconnected) or
     /// long-poll (if connected).
     connected: bool,
+
+    /// Stores our syn run version
+    run_version: i64,
 }
 
 impl SyncIncoming {
@@ -104,6 +107,7 @@ impl SyncIncoming {
             db: db,
             handlers: handlers,
             connected: false,
+            run_version: 0,
         }
     }
 
@@ -313,6 +317,14 @@ impl Syncer for SyncIncoming {
 
     fn get_config(&self) -> Arc<RwLock<SyncConfig>> {
         self.config.clone()
+    }
+
+    fn set_run_version(&mut self, run_version: i64) {
+        self.run_version = run_version;
+    }
+
+    fn get_run_version(&self) -> i64 {
+        self.run_version
     }
 
     fn init(&mut self) -> TResult<()> {

@@ -342,6 +342,12 @@ impl Turtl {
         // our heroic db, error out ='[
         self.check_db_exists()?;
 
+        // increment our run version to catch rogue sync threads
+        {
+            let mut sync_config_guard = lockw!(self.sync_config);
+            sync_config_guard.run_version += 1;
+        }
+
         // lock down incoming syncs so we have a chance to load our profile
         // before dealing with a bunch of sync records
         let sync_lock = self.incoming_sync_lock.lock();
@@ -713,7 +719,8 @@ impl Turtl {
     /// Log out the current user (if logged in) and wipe ALL local SQL databases
     /// from our data folder.
     pub fn wipe_app_data(&self) -> TResult<()> {
-        self.sync_shutdown(true)?;
+        self.sync_shutdown(false)?;
+        util::sleep(5000);
         self.logout()?;
 
         let mut kv_guard = lockw!(self.kv);
@@ -750,7 +757,8 @@ impl Turtl {
     /// Wipe any local database(s) for the current user (and log them out)
     pub fn wipe_user_data(&self) -> TResult<()> {
         let user_id = self.user_id()?;
-        self.sync_shutdown(true)?;
+        self.sync_shutdown(false)?;
+        util::sleep(5000);
         self.logout()?;
 
         let db_loc = self.get_user_db_location()?;

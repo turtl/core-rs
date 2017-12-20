@@ -23,6 +23,9 @@ pub struct FileSyncOutgoing {
     /// Holds our user-specific db. This is mainly for persisting k/v data and
     /// for polling for file records that need uploading.
     db: Arc<Mutex<Option<Storage>>>,
+
+    /// Stores our syn run version
+    run_version: i64,
 }
 
 impl FileSyncOutgoing {
@@ -32,6 +35,7 @@ impl FileSyncOutgoing {
             config: config,
             api: api,
             db: db,
+            run_version: 0,
         }
     }
 
@@ -153,6 +157,14 @@ impl Syncer for FileSyncOutgoing {
 
     fn get_delay(&self) -> u64 {
         1000
+    }
+
+    fn set_run_version(&mut self, run_version: i64) {
+        self.run_version = run_version;
+    }
+
+    fn get_run_version(&self) -> i64 {
+        self.run_version
     }
 
     fn run_sync(&mut self) -> TResult<()> {

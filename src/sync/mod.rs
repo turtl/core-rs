@@ -56,6 +56,10 @@ pub struct SyncConfig {
     /// Whether or not to skip calling out to the API on init (useful for
     /// testing)
     pub skip_api_init: bool,
+    /// Tracks which sync run we're on. If a sync thread (for SOME reason)
+    /// doesn't get killed when it should, it can at least check its run version
+    /// and if it doesn't match this value, it will end itself.
+    pub run_version: i64,
     /// A channel we send/recv incoming sync data on. Normally we'd do this via
     /// an app event (and we DO use this to trigger processing an incoming sync),
     /// but we want to run our sync items *in-order* which means using a queue.
@@ -84,6 +88,7 @@ impl SyncConfig {
             enabled: false,
             user_id: None,
             skip_api_init: false,
+            run_version: 0,
             incoming_sync: Arc::new(MsQueue::new()),
         }
     }
@@ -106,6 +111,12 @@ pub trait Syncer {
     /// Get a copy of the current sync config
     fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
 
+    /// Set this sync thread's run version
+    fn set_run_version(&mut self, i64);
+
+    /// Get this sync thread's run version
+    fn get_run_version(&self) -> i64;
+
     /// Run the sync operation for this syncer.
     ///
     /// Essentially, this is the meat of the syncer. This is the entry point for
@@ -126,7 +137,10 @@ pub trait Syncer {
     fn should_quit(&self) -> bool {
         let local_config = self.get_config();
         let guard = lockr!(local_config);
-        guard.quit.clone()
+        let quit = guard.quit.clone();
+        let run_version = self.get_run_version();
+        let run_mismatch = guard.run_version != run_version;
+        run_mismatch || quit
     }
 
     /// Check to see if we're enabled
@@ -144,7 +158,9 @@ pub trait Syncer {
         };
         let local_config = self.get_config();
         let guard = lockr!(local_config);
-        guard.enabled.clone() && config_enabled
+        let run_version = self.get_run_version();
+        let run_mismatch = guard.run_version != run_version;
+        guard.enabled.clone() && config_enabled && !run_mismatch
     }
 
     /// Get our sync_id key (for our k/v store)
@@ -161,7 +177,15 @@ pub trait Syncer {
 
     /// Runs our syncer, with some quick checks on run status.
     fn runner(&mut self, init_tx: mpsc::Sender<TResult<()>>) {
-        info!("sync::runner() -- {} init", self.get_name());
+        // pull our run version from the config
+        {
+            let local_config = self.get_config();
+            let guard = lockr!(local_config);
+            self.set_run_version(guard.run_version);
+        }
+
+        info!("sync::runner() -- {} init (run {})", self.get_name(), self.get_run_version());
+
         let init_res = self.init();
         macro_rules! send_or_return {
             ($sendex:expr) => {
@@ -242,7 +266,7 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
                 let mut sync = $synctype(config_c, api_c, db_c);
                 let handle = thread::Builder::new().name(format!("sync:{}", sync.get_name())).spawn(move || {
                     sync.runner(tx);
-                    info!("sync::start() -- {} shut down", sync.get_name());
+                    info!("sync::start() -- {} shut down (run {})", sync.get_name(), sync.get_run_version());
                 })?;
                 // push our handle/rx onto their respective holder vecs
                 join_handles.push(handle);
