@@ -160,7 +160,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(Value::Bool(turtl.sync_running()))
         }
         "sync:shutdown" => {
-            turtl.sync_shutdown(true)?;
+            let wait: bool = jedi::get_opt(&["2"], &data).unwrap_or(true);
+            turtl.sync_shutdown(wait)?;
             Ok(json!({}))
         }
         "sync:get-pending" => {
