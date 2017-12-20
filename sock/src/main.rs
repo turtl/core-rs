@@ -27,6 +27,8 @@ pub fn main() {
             info!("* new connection!");
             let mut client = connection.accept().unwrap();
             client.set_nonblocking(true).unwrap();
+            turtl_core::send(String::from(r#"["0","sync:shutdown",false]"#)).unwrap();
+            turtl_core::send(String::from(r#"["0","user:logout",false]"#)).unwrap();
             loop {
                 let msg_res = client.recv_message();
                 match msg_res {
