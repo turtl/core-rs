@@ -109,6 +109,41 @@ impl SyncModel for FileData {
         }
         Ok(())
     }
+
+    // override the sync model's outgoing default fn. we need to set our sync
+    // type by hand.
+    fn outgoing(&self, action: SyncAction, user_id: &String, db: &mut Storage, skip_remote_sync: bool) -> TResult<()> {
+        let ty = match action {
+            SyncAction::Delete => {
+                self.db_delete(db, None)?;
+                SyncType::File
+            }
+            _ => {
+                self.db_save(db, None)?;
+                SyncType::FileOutgoing
+            }
+        };
+        if skip_remote_sync { return Ok(()); }
+
+        let mut sync_record = SyncRecord::default();
+        sync_record.generate_id()?;
+        sync_record.action = action;
+        sync_record.user_id = user_id.clone();
+        sync_record.ty = ty;
+        sync_record.item_id = self.id_or_else()?;
+
+        match sync_record.action {
+            SyncAction::Delete => {
+                sync_record.data = Some(json!({
+                    "id": self.id().unwrap().clone(),
+                }));
+            }
+            _ => {
+                sync_record.data = Some(self.data_for_storage()?);
+            }
+        }
+        sync_record.db_save(db, None)
+    }
 }
 
 impl Keyfinder for FileData {}

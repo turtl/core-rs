@@ -51,7 +51,7 @@ impl FileSyncOutgoing {
         match next {
             Some(x) => {
                 match x.ty {
-                    SyncType::File => Ok(Some(x)),
+                    SyncType::FileOutgoing => Ok(Some(x)),
                     _ => Ok(None),
                 }
             }

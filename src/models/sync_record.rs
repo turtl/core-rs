@@ -43,11 +43,10 @@ pub enum SyncType {
     Note,
     #[serde(rename = "file")]
     File,
-    // we could have a type for FileOutgoing, but since almost all syncs that
-    // use the `sync` table are outgoing, we can just assume the "File" means
-    // "FileOutgoing"
     #[serde(rename = "file:incoming")]
     FileIncoming,
+    #[serde(rename = "file:outgoing")]
+    FileOutgoing,
     #[serde(rename = "invite")]
     Invite,
 }

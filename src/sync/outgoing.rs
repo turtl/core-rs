@@ -55,7 +55,7 @@ impl SyncOutgoing {
     /// Grab all non-file outgoing sync items, in order
     fn get_outgoing_syncs(&self) -> TResult<Vec<SyncRecord>> {
         let syncs = with_db!{ db, self.db,
-            SyncRecord::allbut(db, &vec![SyncType::File, SyncType::FileIncoming])
+            SyncRecord::allbut(db, &vec![SyncType::FileOutgoing, SyncType::FileIncoming])
         }?;
 
         // stop at our first frozen record! this creates a "block" that must be

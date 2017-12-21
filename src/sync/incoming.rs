@@ -299,6 +299,7 @@ impl SyncIncoming {
             SyncType::Note => self.handlers.note.incoming(db, sync_item),
             SyncType::File | SyncType::FileIncoming => self.handlers.file.incoming(db, sync_item),
             SyncType::Invite => self.handlers.invite.incoming(db, sync_item),
+            SyncType::FileOutgoing => Ok(()),
         }?;
 
         Ok(())
