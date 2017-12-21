@@ -31,6 +31,7 @@ use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
 use ::migrate;
+use ::crypto;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -313,11 +314,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 "total": total,
             }))
         }
-        "profile:get-file" => {
+        "profile:note:get-file" => {
             let note_id = jedi::get(&["2"], &data)?;
             let notes: Vec<Note> = turtl.load_notes(&vec![note_id])?;
-            FileData::load_file(turtl, &notes[0])?;
-            Ok(Value::Null)
+            let bin = FileData::load_file(turtl, &notes[0])?;
+            let base64 = crypto::to_base64(&bin)?;
+            Ok(Value::String(base64))
         }
         "profile:export" => {
             let export = Profile::export(turtl)?;
