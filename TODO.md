@@ -1,4 +1,11 @@
 v0.7:
+- memory leak??
+  - running sock continuously seems to add mem indefinitely
+  - things to look at:
+    - sync threads/data?
+    - in-mem sqlite (search) being disposed of properly?
+    - profile being cleared?
+
 - integration tests
   - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!
   - sync:pause
