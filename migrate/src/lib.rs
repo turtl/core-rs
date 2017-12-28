@@ -501,7 +501,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         match find_key(&profiled.keychain, &keysearch, note) {
             Ok(note_key) => {
                 keysearch.insert(note_id.clone(), note_key.clone());
-                let dec = match decrypt_val(&note_key, note) {
+                let mut dec = match decrypt_val(&note_key, note) {
                     Ok(x) => x,
                     Err(e) => {
                         evfn("error", &json!({
@@ -513,6 +513,21 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                         continue;
                     }
                 };
+                if let Some(filemeta) = jedi::get_opt::<Value>(&["file"], &note) {
+                    match decrypt_val(&note_key, &filemeta) {
+                        Ok(filedec) => {
+                            deep_merge(&mut dec, &json!({"file": filedec}))?;
+                        }
+                        Err(e) => {
+                            evfn("error", &json!({
+                                "msg": format!("cannot decrypt not file meta: {}", e),
+                                "type": "decrypt",
+                                "subtype": "note",
+                                "item_id": note_id,
+                            }));
+                        }
+                    }
+                }
                 evfn("decrypt-item", &Value::String(String::from("note")));
                 fn get_file(note_id: &String, note_key: &Key, notedata: &Value) -> Option<String> {
                     if jedi::get_opt::<Value>(&["file"], &notedata).is_none() { return None; }
