@@ -180,7 +180,7 @@ impl MemorySaver for Note {
     fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
         let action = sync_item.action.clone();
         match action {
-            SyncAction::Add | SyncAction::Edit => {
+            SyncAction::Add | SyncAction::Edit | SyncAction::MoveSpace => {
                 let note_id = match self.id() {
                     Some(x) => x.clone(),
                     // silent fail
