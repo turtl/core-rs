@@ -269,9 +269,11 @@ impl Turtl {
         {
             let mut profile_guard = lockw!(self.profile);
             profile_guard.wipe();
+            *profile_guard = Profile::new();
         }
         self.sync_shutdown(false)?;
         self.close_user_db()?;
+        self.close_search();
         self.clear_user_id();
         User::logout(self)?;
         let mut connguard = lockw!(self.connected);
@@ -453,6 +455,12 @@ impl Turtl {
         }
         *db_guard = None;
         Ok(())
+    }
+
+    /// Shut down the search system
+    pub fn close_search(&self) {
+        let mut search_guard = lock!(self.search);
+        *search_guard = None;
     }
 
     /// Get the physical location of the per-user database file we will use for
