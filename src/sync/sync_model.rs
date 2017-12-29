@@ -396,11 +396,14 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     };
                     Space::permission_check(turtl, &from_space_id, &Permission::DeleteBoard)?;
                     Space::permission_check(turtl, &to_space_id, &Permission::AddBoard)?;
-                    let mut profile_guard = lockw!(turtl.profile);
-                    let boards = &mut profile_guard.boards;
-                    let board = match Profile::finder(boards, &item_id) {
-                        Some(m) => m,
-                        None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
+                    let mut board = {
+                        let mut profile_guard = lockw!(turtl.profile);
+                        let boards = &mut profile_guard.boards;
+                        let board = match Profile::finder(boards, &item_id) {
+                            Some(m) => m,
+                            None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
+                        };
+                        board.clone()?
                     };
                     board.move_spaces(turtl, to_space_id)?;
                 }
