@@ -16,7 +16,6 @@ protected! {
     pub struct Note {
         #[protected_field(public)]
         pub space_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub board_id: Option<String>,
         #[serde(with = "::util::ser::int_converter")]
