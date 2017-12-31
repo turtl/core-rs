@@ -276,8 +276,14 @@ impl Turtl {
         self.close_search();
         self.clear_user_id();
         User::logout(self)?;
-        let mut connguard = lockw!(self.connected);
-        *connguard = false;
+        {
+            let mut userguard = lockw!(self.user);
+            *userguard = User::default();
+        }
+        {
+            let mut connguard = lockw!(self.connected);
+            *connguard = false;
+        }
         messaging::ui_event("user:logout", &Value::Null)?;
         Ok(())
     }

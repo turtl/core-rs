@@ -335,6 +335,17 @@ impl Search {
     }
 }
 
+impl Drop for Search {
+    fn drop(&mut self) {
+        match self.idx.close() {
+            Ok(_) => {},
+            Err(e) => {
+                warn!("Search.drop() -- problem closing search index, oh well... {}", e);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,6 +9,7 @@ extern crate quick_error;
 extern crate rusqlite;
 
 use ::std::error::Error;
+use ::std::mem;
 
 use ::rusqlite::Connection;
 
@@ -124,6 +125,14 @@ impl Clouseau {
         let mut ids: Vec<String> = Vec::new();
         for id in rows { ids.push(id?) }
         Ok(ids)
+    }
+
+    /// Close this Clouseau instance
+    pub fn close(&mut self) -> CResult<()> {
+        let mut conn = Connection::open_in_memory()?;
+        mem::swap(&mut self.conn, &mut conn);
+        conn.close()?;
+        Ok(())
     }
 }
 
