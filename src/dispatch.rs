@@ -99,6 +99,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.delete_account()?;
             Ok(json!({}))
         }
+        "user:resend-confirmation" => {
+            User::resend_confirmation(turtl)?;
+            Ok(json!({}))
+        }
         "user:find-by-email" => {
             let email: String = jedi::get(&["2"], &data)?;
             let user = User::find_by_email(turtl, &email)?;

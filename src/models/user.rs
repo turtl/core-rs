@@ -34,6 +34,9 @@ protected! {
         #[protected_field(public)]
         pub storage_mb: Option<i64>,
 
+        #[protected_field(public)]
+        pub confirmed: bool,
+
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
         pub name: Option<String>,
@@ -491,6 +494,12 @@ impl User {
             user_guard.id_or_else()?
         };
         turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
+        Ok(())
+    }
+
+    /// Resend a user's confirmation email
+    pub fn resend_confirmation(turtl: &Turtl) -> TResult<()> {
+        turtl.api.post::<bool>("/users/confirmation/resend", ApiReq::new())?;
         Ok(())
     }
 
