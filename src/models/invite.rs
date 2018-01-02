@@ -94,6 +94,12 @@ impl Invite {
     /// Convert an invite request+key into an invite, sealed and ready to send
     pub fn from_invite_request(from_user_id: &String, from_username: &String, space_key: &Key, req: InviteRequest) -> TResult<Self> {
         let InviteRequest { space_id, to_user, role, title, their_pubkey, passphrase } = req;
+        if title.trim() == "" {
+            return TErr!(TError::MissingField(String::from("title")));
+        }
+        if !to_user.contains("@") {
+            return TErr!(TError::BadValue(String::from("email")));
+        }
         let mut invite: Invite = Default::default();
         Model::generate_id(&mut invite)?;
         invite.space_id = space_id;
