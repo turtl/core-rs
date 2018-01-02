@@ -34,6 +34,7 @@ protected! {
         #[protected_field(public)]
         pub storage_mb: Option<i64>,
 
+        #[serde(default)]
         #[protected_field(public)]
         pub confirmed: bool,
 

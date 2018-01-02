@@ -772,8 +772,7 @@ impl Turtl {
     pub fn wipe_user_data(&self) -> TResult<()> {
         let user_id = self.user_id()?;
         self.sync_shutdown(false)?;
-        util::sleep(5000);
-        self.logout()?;
+        util::sleep(2000);
 
         let db_loc = self.get_user_db_location()?;
         if db_loc != ":memory:" {
@@ -786,6 +785,7 @@ impl Turtl {
             fs::remove_file(&file)?;
             info!("turtl.wipe_user_data() -- removing {}", file.display());
         }
+        self.logout()?;
 
         Ok(())
     }
