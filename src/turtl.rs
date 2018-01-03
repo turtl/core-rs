@@ -291,10 +291,13 @@ impl Turtl {
     /// Change the current user's username/password
     pub fn change_user_password(&self, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
         self.assert_connected()?;
-        let mut user_guard = lockw!(self.user);
-        user_guard.change_password(self, current_username, current_password, new_username, new_password)?;
-        drop(user_guard);
-        self.logout()?;
+        {
+            let mut user_guard = lockw!(self.user);
+            user_guard.change_password(self, current_username, current_password, new_username, new_password)?;
+        }
+        // all the local data is WRONG. clear it out, after shutting down sync.
+        self.sync_shutdown(true)?;
+        self.wipe_user_data()?;
         Ok(())
     }
 
@@ -448,7 +451,8 @@ impl Turtl {
 
     /// Create a new per-user database for the current user.
     pub fn create_user_db(&self) -> TResult<Storage> {
-        let db_location = self.get_user_db_location()?;
+        let user_id = self.user_id()?;
+        let db_location = self.get_user_db_location(&user_id)?;
         let dumpy_schema = schema::get_schema();
         Storage::new(&db_location, dumpy_schema)
     }
@@ -471,12 +475,7 @@ impl Turtl {
 
     /// Get the physical location of the per-user database file we will use for
     /// the current logged-in user.
-    pub fn get_user_db_location(&self) -> TResult<String> {
-        let user_id = {
-            let user_guard = lockr!(self.user);
-            user_guard.id_or_else()?
-        };
-
+    pub fn get_user_db_location(&self, user_id: &String) -> TResult<String> {
         lazy_static! {
             static ref RE_API_FORMAT: Regex = Regex::new(r"(?i)[^a-z0-9]").unwrap();
         }
@@ -772,9 +771,10 @@ impl Turtl {
     pub fn wipe_user_data(&self) -> TResult<()> {
         let user_id = self.user_id()?;
         self.sync_shutdown(false)?;
-        util::sleep(2000);
+        util::sleep(5000);
+        self.logout()?;
 
-        let db_loc = self.get_user_db_location()?;
+        let db_loc = self.get_user_db_location(&user_id)?;
         if db_loc != ":memory:" {
             info!("turtl.wipe_user_data() -- removing {}", db_loc);
             fs::remove_file(&db_loc)?;
@@ -785,7 +785,6 @@ impl Turtl {
             fs::remove_file(&file)?;
             info!("turtl.wipe_user_data() -- removing {}", file.display());
         }
-        self.logout()?;
 
         Ok(())
     }
@@ -850,11 +849,11 @@ pub mod tests {
             let mut user_guard = lockw!(turtl.user);
             *user_guard = user;
             drop(user_guard);
+            turtl.set_user_id();
             let db = turtl.create_user_db().unwrap();
             let mut db_guard = lock!(turtl.db);
             *db_guard = Some(db);
             drop(db_guard);
-            turtl.set_user_id();
         }
         turtl
     }
