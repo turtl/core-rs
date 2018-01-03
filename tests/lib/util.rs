@@ -37,6 +37,7 @@ pub fn init() -> thread::JoinHandle<()> {
         env::set_var("TURTL_CONFIG_FILE", "config.yaml");
     }
     config::set(&["integration_tests", "incoming_sync_timeout"], &5).unwrap();
+    config::set(&["wrap_errors"], &true).unwrap();
     carrier::wipe();
 
     thread::spawn(|| {
