@@ -260,12 +260,6 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             space.send_invite(turtl, req)?;
             Ok(space.data()?)
         }
-        "profile:space:accept-invite" => {
-            let mut invite: Invite = jedi::get(&["2"], &data)?;
-            let passphrase: Option<String> = jedi::get_opt(&["3"], &data);
-            let space = Space::accept_invite(turtl, &mut invite, passphrase)?;
-            Ok(space.data()?)
-        }
         "profile:space:edit-invite" => {
             let mut invite: Invite = jedi::get(&["2"], &data)?;
             let mut profile_guard = lockw!(turtl.profile);
@@ -285,6 +279,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 None => return TErr!(TError::MissingData(format!("couldn't find space {}", space_id))),
             };
             space.delete_invite(turtl, &invite_id)?;
+            Ok(space.data()?)
+        }
+        "profile:accept-invite" => {
+            let mut invite: Invite = jedi::get(&["2"], &data)?;
+            let passphrase: Option<String> = jedi::get_opt(&["3"], &data);
+            let space = Space::accept_invite(turtl, &mut invite, passphrase)?;
             Ok(space.data()?)
         }
         "profile:delete-invite" => {

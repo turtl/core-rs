@@ -69,7 +69,7 @@ mod tests {
 
     fn accept_invite(invite: &Value) -> Value {
         let space_id: String = jedi::get(&["space_id"], invite).unwrap();
-        dispatch_ass(json!(["profile:space:accept-invite", invite]));
+        dispatch_ass(json!(["profile:accept-invite", invite]));
 
         // ok, the space should come through in a sync:update event now, and it
         // should be decrypted (so we check the title, a private field)
