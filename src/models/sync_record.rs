@@ -107,6 +107,9 @@ protected! {
         #[serde(default)]
         #[protected_field(public)]
         pub frozen: bool,
+        #[serde(default)]
+        #[protected_field(public)]
+        pub blocked: bool,
     }
 }
 make_storable!(SyncRecord, "sync");
@@ -163,7 +166,13 @@ impl SyncRecord {
             Some(x) => x,
             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
         };
-        SyncRecord::find(db, None)
+        let mut pending = SyncRecord::find(db, None)?;
+        let mut blocked = false;
+        for sync in &mut pending {
+            sync.blocked = blocked;
+            if sync.frozen { blocked = true; }
+        }
+        Ok(pending)
     }
 
     /// Increment this SyncRecord's errcount. If it's above a magic number, we
