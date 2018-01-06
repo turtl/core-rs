@@ -36,8 +36,15 @@ pub fn init() -> thread::JoinHandle<()> {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "config.yaml");
     }
+
+    // hardcode some settings that make our test$$ go TO THE MOON
     config::set(&["integration_tests", "incoming_sync_timeout"], &5).unwrap();
     config::set(&["wrap_errors"], &true).unwrap();
+    config::set(&["sync", "enable_incoming"], &true).unwrap();
+    config::set(&["sync", "enable_outgoing"], &true).unwrap();
+    config::set(&["sync", "enable_files_incoming"], &true).unwrap();
+    config::set(&["sync", "enable_files_outgoing"], &true).unwrap();
+
     carrier::wipe();
 
     thread::spawn(|| {
