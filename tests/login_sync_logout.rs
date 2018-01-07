@@ -15,6 +15,8 @@ mod tests {
         dispatch_ass(json!(["app:wipe-app-data"]));
         dispatch_ass(json!(["user:login", username, password]));
         wait_on("user:login");
+        let token_val = dispatch_ass(json!(["user:get-login-token", "I understand this token contains the user's master key and their account may be compromised if the token is misplaced."]));
+        let token: String = jedi::from_val(token_val).unwrap();
         dispatch_ass(json!(["sync:start"]));
 
         wait_on("profile:loaded");
@@ -53,7 +55,11 @@ mod tests {
 
         // i don't want a fucking email every time someone runs the tests
         //dispatch_ass(json!(["feedback:send", {"body": "I FORGOT MY PASSWORD CAN U PLEASE RESET IT?!?!?!"}]));
-        dispatch_ass(json!(["sync:shutdown"]));
+        dispatch_ass(json!(["user:logout"]));
+        sleep(10);
+
+        dispatch_ass(json!(["user:login-from-token", token]));
+        wait_on("user:login");
         dispatch_ass(json!(["user:logout"]));
         dispatch_ass(json!(["app:wipe-app-data"]));
         end(handle);

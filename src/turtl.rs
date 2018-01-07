@@ -215,10 +215,8 @@ impl Turtl {
         }
     }
 
-    /// Log a user in
-    pub fn login(&self, username: String, password: String) -> TResult<()> {
-        let version = user::CURRENT_AUTH_VERSION;
-        User::login(self, username, password, version)?;
+    /// Call me after a user logs in
+    fn post_login(&self) -> TResult<()> {
         self.set_user_id();
         let db = self.create_user_db()?;
         let mut db_guard = lock!(self.db);
@@ -226,6 +224,18 @@ impl Turtl {
         drop(db_guard);
         messaging::ui_event("user:login", &Value::Null)?;
         Ok(())
+    }
+
+    /// Log a user in
+    pub fn login(&self, username: String, password: String) -> TResult<()> {
+        User::login(self, username, password, user::CURRENT_AUTH_VERSION)?;
+        self.post_login()
+    }
+
+    /// Log a user in using a login token
+    pub fn login_token(&self, token: String) -> TResult<()> {
+        User::login_token(self, token)?;
+        self.post_login()
     }
 
     /// DO Create a new user account

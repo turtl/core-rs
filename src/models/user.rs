@@ -1,7 +1,7 @@
 use ::std::collections::HashMap;
 use ::jedi::{self, Value, Serialize};
 use ::error::{TResult, TError};
-use ::crypto::{self, Key};
+use ::crypto::{self, Key, CryptoOp};
 use ::api::Status;
 use ::models::model::{self, Model};
 use ::models::space::Space;
@@ -53,6 +53,25 @@ protected! {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(private)]
         pub privkey: Option<Key>,
+    }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct LoginToken {
+    id: String,
+    key: Key,
+    auth: String,
+    username: String,
+}
+
+impl LoginToken {
+    fn new(id: String, key: Key, auth: String, username: String) -> LoginToken {
+        LoginToken {
+            id: id,
+            key: key,
+            auth: auth,
+            username: username,
+        }
     }
 }
 
@@ -140,8 +159,7 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
 /// A function that tries authenticating a username/password against various
 /// versions, starting from latest to earliest until it runs out of versions or
 /// we get a match.
-fn do_login(turtl: &Turtl, username: &String, password: &String, version: u16) -> TResult<()> {
-    let (key, auth) = generate_auth(username, password, version)?;
+fn do_login(turtl: &Turtl, username: &String, key: Key, auth: String) -> TResult<()> {
     turtl.api.set_auth(username.clone(), auth.clone())?;
     let user_id = turtl.api.post("/auth", ApiReq::new())?;
 
@@ -193,7 +211,8 @@ impl User {
     /// Given a turtl, a username, and a password, see if we can log this user
     /// in.
     pub fn login(turtl: &Turtl, username: String, password: String, version: u16) -> TResult<()> {
-        do_login(turtl, &username, &password, version)
+        let (key, auth) = generate_auth(&username, &password, version)?;
+        do_login(turtl, &username, key, auth)
             .or_else(|e| {
                 turtl.api.clear_auth();
                 let e = e.shed();
@@ -215,6 +234,18 @@ impl User {
                     _ => Err(e)
                 }
             })
+    }
+
+    /// Log the user in given a token returned from get_login_token()
+    pub fn login_token(turtl: &Turtl, token: String) -> TResult<()> {
+        let key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
+        let token_encrypted = crypto::from_base64(&token)?;
+        let token_raw = crypto::decrypt(&key, token_encrypted)?;
+        let tokenjson = String::from_utf8(token_raw)?;
+        let token: LoginToken = jedi::parse(&tokenjson)?;
+        let LoginToken {id: _id, key, auth, username} = token;
+        do_login(turtl, &username, key, auth)?;
+        Ok(())
     }
 
     pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
@@ -502,6 +533,26 @@ impl User {
     pub fn resend_confirmation(turtl: &Turtl) -> TResult<()> {
         turtl.api.post::<bool>("/users/confirmation/resend", ApiReq::new())?;
         Ok(())
+    }
+
+    /// Returns a string that can be saved and used to log back in later.
+    ///
+    /// WARNING: this token contains the user's master key!!
+    pub fn get_login_token(turtl: &Turtl) -> TResult<String> {
+        let user_guard = lockr!(turtl.user);
+        let auth = match user_guard.auth.as_ref() {
+            Some(auth) => auth.clone(),
+            None => return TErr!(TError::MissingField(String::from("turtl.user.auth"))),
+        };
+        let token = LoginToken::new(turtl.user_id()?, user_guard.key_or_else()?, auth, user_guard.username.clone());
+        let tokenstr = jedi::stringify(&token)?;
+        // add a little bit more protection obviously, an attacker can just grab
+        // this key from the source, but this might stop some less motivated
+        // folks.
+        let key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
+        let token_encrypted = crypto::encrypt(&key, Vec::from(tokenstr.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
+        let token = crypto::to_base64(&token_encrypted)?;
+        Ok(token)
     }
 
     /// We have a successful key/auth pair. Log the user in.

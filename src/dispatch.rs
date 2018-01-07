@@ -43,6 +43,12 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let user_guard = lockr!(turtl.user);
             user_guard.data()
         }
+        "user:login-from-token" => {
+            let token: String = jedi::get(&["2"], &data)?;
+            turtl.login_token(token)?;
+            let user_guard = lockr!(turtl.user);
+            user_guard.data()
+        }
         "user:join" => {
             let username: String = jedi::get(&["2"], &data)?;
             let password: String = jedi::get(&["3"], &data)?;
@@ -102,6 +108,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "user:resend-confirmation" => {
             User::resend_confirmation(turtl)?;
             Ok(json!({}))
+        }
+        "user:get-login-token" => {
+            let confirmation: String = jedi::get(&["2"], &data)?;
+            if confirmation != "I understand this token contains the user's master key and their account may be compromised if the token is misplaced." {
+                return TErr!(TError::PermissionDenied(String::from("Please send the confirmation string to get the token")));
+            }
+            let token = User::get_login_token(turtl)?;
+            Ok(Value::String(token))
         }
         "user:find-by-email" => {
             let email: String = jedi::get(&["2"], &data)?;
