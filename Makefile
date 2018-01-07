@@ -1,39 +1,38 @@
-.PHONY: all clean
+.PHONY: all clean release build test test-panic test-st doc macros
 
 # non-versioned include
 -include vars.mk
 
 CARGO := $(shell which cargo)
-CARGO_BUILD_ARGS ?=
 
 all: build
-
-release: CARGO_BUILD_ARGS := $(CARGO_BUILD_ARGS) --release
-release: all
 
 build: 
 	cargo build $(CARGO_BUILD_ARGS)
 
+release: override CARGO_BUILD_ARGS += --release
+release: build
+
 test:
-	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
+	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
 test-panic:
 	RUST_BACKTRACE=1 \
 	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) \
-		cargo test \
+		$(CARGO) test \
 			--features "panic-on-error" \
 			$(TEST) \
 			$(CARGO_BUILD_ARGS) -- \
 			--nocapture
 
 test-st:
-	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
+	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
 
 doc:
-	cargo doc -p turtl-core --no-deps
+	$(CARGO) doc -p turtl-core --no-deps
 
 macros:
-	cargo rustc -- -Z unstable-options --pretty=expanded
+	$(CARGO) rustc -- -Z unstable-options --pretty=expanded
 
 clean:
 	rm -rf target/
