@@ -18,6 +18,9 @@ use ::messaging;
 use ::migrate::MigrateResult;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
+lazy_static! {
+    static ref TOKEN_KEY: Key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
+}
 
 protected! {
     #[derive(Serialize, Deserialize)]
@@ -238,9 +241,8 @@ impl User {
 
     /// Log the user in given a token returned from get_login_token()
     pub fn login_token(turtl: &Turtl, token: String) -> TResult<()> {
-        let key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
         let token_encrypted = crypto::from_base64(&token)?;
-        let token_raw = crypto::decrypt(&key, token_encrypted)?;
+        let token_raw = crypto::decrypt(&(*TOKEN_KEY), token_encrypted)?;
         let tokenjson = String::from_utf8(token_raw)?;
         let token: LoginToken = jedi::parse(&tokenjson)?;
         let LoginToken {id: _id, key, auth, username} = token;
@@ -546,11 +548,10 @@ impl User {
         };
         let token = LoginToken::new(turtl.user_id()?, user_guard.key_or_else()?, auth, user_guard.username.clone());
         let tokenstr = jedi::stringify(&token)?;
-        // add a little bit more protection obviously, an attacker can just grab
-        // this key from the source, but this might stop some less motivated
-        // folks.
-        let key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
-        let token_encrypted = crypto::encrypt(&key, Vec::from(tokenstr.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
+        // add a little bit more protection. obviously, an attacker can just
+        // grab this key from the source, but this might stop some less
+        // motivated folks.
+        let token_encrypted = crypto::encrypt(&(*TOKEN_KEY), Vec::from(tokenstr.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
         let token = crypto::to_base64(&token_encrypted)?;
         Ok(token)
     }
