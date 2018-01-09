@@ -213,7 +213,7 @@ pub fn recv_event_nb() -> TResult<Option<String>> {
 
 /// Start Turtl
 #[no_mangle]
-pub extern fn turtlc_start(config_c: *const c_char) -> i32 {
+pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
     let res = panic::catch_unwind(|| -> i32 {
         if config_c.is_null() { return -1; }
         let config_res = unsafe { CStr::from_ptr(config_c).to_str() };
@@ -232,12 +232,15 @@ pub extern fn turtlc_start(config_c: *const c_char) -> i32 {
             },
         }
 
-        match start(String::from(&config[..])).join() {
-            Ok(_) => (),
-            Err(e) => {
-                println!("turtl_start() -- error: start().join(): {:?}", e);
-                return -4;
-            },
+        let handle = start(String::from(&config[..]));
+        if threaded == 0 {
+            match handle.join() {
+                Ok(_) => (),
+                Err(e) => {
+                    println!("turtl_start() -- error: start().join(): {:?}", e);
+                    return -4;
+                },
+            }
         }
         0
     });

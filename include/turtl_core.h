@@ -15,11 +15,11 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-TURTL_EXPORT int32_t TURTL_CONV turtl_start(const char *);
-TURTL_EXPORT int32_t TURTL_CONV carrier_send(const char*, uint8_t*, size_t);
-TURTL_EXPORT uint8_t* TURTL_CONV carrier_recv_nb(char*, uint64_t*);
-TURTL_EXPORT uint8_t* TURTL_CONV carrier_recv(char*, uint64_t*);
-TURTL_EXPORT int32_t TURTL_CONV carrier_free(uint8_t*);
+TURTL_EXPORT int32_t TURTL_CONV turtlc_start(const char*, uint8_t);
+TURTL_EXPORT int32_t TURTL_CONV turtlc_send(const uint8_t*, size_t);
+TURTL_EXPORT uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*);
+TURTL_EXPORT uint8_t* TURTL_CONV turtlc_recv_event(uint8_t, size_t*);
+TURTL_EXPORT int32_t TURTL_CONV turtlc_free(const uint8_t*, size_t);
 
 #ifdef __cplusplus
 }		// extern "C" { ... }
