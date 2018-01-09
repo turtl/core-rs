@@ -40,6 +40,7 @@ pub fn init() -> thread::JoinHandle<()> {
     // hardcode some settings that make our test$$ go TO THE MOON
     config::set(&["integration_tests", "incoming_sync_timeout"], &5).unwrap();
     config::set(&["wrap_errors"], &true).unwrap();
+    config::set(&["messaging", "reqres_append_mid"], &true).unwrap();
     config::set(&["sync", "enable_incoming"], &true).unwrap();
     config::set(&["sync", "enable_outgoing"], &true).unwrap();
     config::set(&["sync", "enable_files_incoming"], &true).unwrap();
