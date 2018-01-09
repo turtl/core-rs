@@ -12,6 +12,7 @@ use ::std::time::Duration;
 use ::std::fs;
 use ::std::io::{Read, Write};
 use ::jedi::{self, Value};
+use ::util;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {
@@ -79,6 +80,11 @@ impl FileSyncIncoming {
             // test if the file can be created before we run off blasting API
             // calls in every direction)
             let file = FileData::new_file(user_id, note_id)?;
+            let parent = match file.parent() {
+                Some(path) => path.clone(),
+                None => return TErr!(TError::BadValue(format!("bad file path: {:?}", file))),
+            };
+            util::create_dir(parent)?;
             let mut file = fs::File::create(&file)?;
 
             // start our API call to the note file attachment endpoint
