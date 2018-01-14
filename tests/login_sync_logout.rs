@@ -53,6 +53,15 @@ mod tests {
         assert_eq!(note, r#"{"board_id":null,"body":"AAYBAAzChZjAOGoAQ0MMjLofXXHarNfUu9Eqlv/063dUH4kbrp8Mnmw+XIn7LxAHloxdMpdiVDz5SAcLyy5DftjOjEEwKfylexz+C9zq5CQSjsQzuRQYMxD7TAwiJZLd+CsM1msek0kkhIB2whG6plMC8Hlyu1bMdcvWJ3B7Oonp89V57ycedVsSMWE28ablc3X3aKO8LRjCnoZlOK/UbZZYQnkm4roGV8dWlbKziTHm8R9ctBrxceo5ky3molooQ6GPKIPbm+lomsyrGDBG4DBDd7KlMJ1LCcsXzYWLnqvQyYny2ly37l5x3Y4dOcZVZ0gxkSzvHe37AzQl","has_file":false,"id":"015caf78be502af6297cf0cc29180f9cc45f4c80e5b30238581f845367f9c404ef3fb8fb0a5a018e","keys":[{"k":"AAYBAAzuWB81LF46TLQ0b9aibwlL4lT5FTxw1UNxtUNKA2zuzW91drujc53uMQipFhcq6s6Ff9mDQr0Ew5H7Guw=","s":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e"}],"mod":1497592545,"space_id":"015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e","tags":["free market","america","fuck yeah"],"text":"COMMIES, AMIRITE?\n\n#PRIVATIZEEVERYTHING #FREEMARKET #TOLLROADS #LIBCUCKS","title":"YOU KNOW WUT I HATE?!","type":"text","user_id":51}"#);
         sleep(10);
 
+        let tagval = dispatch_ass(json!([
+            "profile:find-tags", {
+                "space_id": "015bac22440a4944baee41b88207731eaeb7e2cc5c955fb8a05b028c1409aaf55024f5d26fa3001e",
+                "sort_direction": "asc",
+            }
+        ]));
+        let tags: Vec<(String, i32)> = jedi::get(&["tags"], &tagval).unwrap();
+        assert_eq!(tags, vec![(String::from("fuck yeah"), 2), (String::from("america"), 1), (String::from("cult"), 1), (String::from("free market"), 1)]);
+
         // i don't want a fucking email every time someone runs the tests
         //dispatch_ass(json!(["feedback:send", {"body": "I FORGOT MY PASSWORD CAN U PLEASE RESET IT?!?!?!"}]));
         dispatch_ass(json!(["user:logout"]));

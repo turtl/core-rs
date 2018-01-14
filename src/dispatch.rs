@@ -332,6 +332,23 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
                 "total": total,
             }))
         }
+        "profile:find-tags" => {
+            let qry: Query = match jedi::get(&["2"], &data) {
+                Ok(x) => x,
+                Err(e) => {
+                    return TErr!(TError::BadValue(format!("error deserializing search query: {}", e)));
+                }
+            };
+            let search_guard = lock!(turtl.search);
+            if search_guard.is_none() {
+                return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
+            }
+            let search = search_guard.as_ref().unwrap();
+            let tags: Vec<(String, i32)> = search.find_tags(&qry)?;
+            Ok(json!({
+                "tags": tags,
+            }))
+        }
         "profile:note:get-file" => {
             let note_id = jedi::get(&["2"], &data)?;
             let notes: Vec<Note> = turtl.load_notes(&vec![note_id])?;
