@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate quick_error;
 extern crate serde;
+#[allow(unused_imports)]
 #[macro_use]
 extern crate serde_json;
 extern crate serde_yaml;

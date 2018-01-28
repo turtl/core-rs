@@ -32,3 +32,6 @@ or bug reports on it yet. Use at your own risk.
 make
 ```
 
+NOTE: If your system uses OpenSSL 1.1.0, you need to install OpenSSL 1.0.0 and
+tell `make` to use it with `OPENSSL_LIB_DIR=/usr/lib/openssl-1.0 OPENSSL_INCLUDE_DIR=/usr/include/openssl-1.0 make`
+for example.

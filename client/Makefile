@@ -26,4 +26,4 @@ macros:
 clean:
 	rm -rf target/
 	rm -f Cargo.lock
-
+	cargo clean

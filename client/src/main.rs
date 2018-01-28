@@ -1,7 +1,4 @@
-extern crate jedi;
-
-include!("../../tests/_lib.rs");
-use ::jedi::Value;
+include!("../../tests/lib/util.rs");
 use ::std::io::{self, Write};
 
 fn repl() -> TResult<()> {
