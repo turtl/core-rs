@@ -6,7 +6,11 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 [dependencies]
 log = "0.3.6"
 turtl_core = { path = ".." }
-websocket = "0.20.2"
+
+[dependencies.websocket]
+version = "0.20.2"
+default-features = false
+features = ["sync"]
 
 [features]
 panic-on-error = ["turtl_core/panic-on-error"]
