@@ -64,7 +64,7 @@ impl Default for SyncType {
 }
 
 /// A helpful struct for dealing with sync errors
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SyncError {
     #[serde(with = "::util::ser::int_converter")]
     pub code: String,
@@ -189,6 +189,7 @@ impl SyncRecord {
                 } else {
                     rec.errcount += 1;
                 }
+                rec.error = failure.error.clone();
                 // save our heroic sync record with our mods (errcount/frozen)
                 db.save(&rec)?;
             }
