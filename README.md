@@ -35,3 +35,16 @@ make
 NOTE: If your system uses OpenSSL 1.1.0, you need to install OpenSSL 1.0.0 and
 tell `make` to use it with `OPENSSL_LIB_DIR=/usr/lib/openssl-1.0 OPENSSL_INCLUDE_DIR=/usr/include/openssl-1.0 make`
 for example.
+
+NOTE 2: If your system has libsodium version different than 1.0.12 and your build fails, do this:
+```
+cargo build
+wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz
+tar xzf libsodium-1.0.12.tar.gz
+cd libsodium-1.0.12
+./configure
+make
+cp -r src/libsodium/.libs/* ../target/debug/deps/
+cargo build
+```
+After every `cargo clean` or `make clean` you should do the last command
