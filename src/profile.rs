@@ -24,6 +24,7 @@ use ::sync::sync_model;
 use ::lib_permissions::Permission;
 use ::config;
 use ::crypto;
+use ::messaging;
 
 /// A structure holding a collection of objects that represent's a user's
 /// Turtl data profile.
@@ -252,6 +253,7 @@ impl Profile {
                 info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
                 result.actions.push(simple_sync_action(&id, sync_record.action.clone(), sync_record.ty.clone()));
                 sync_model::dispatch(turtl, sync_record)?;
+                messaging::ui_event("profile:import:tally", &1)?;
             }
             Ok(())
         }
