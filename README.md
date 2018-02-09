@@ -40,7 +40,7 @@ make run
 ```
 
 The `Makefile` includes (optionally) a non-versioned file called `vars.mk` which
-can be used to house any environment variables specific to your environment:
+can be used to house any ENV vars specific to your build environment:
 
 ```makefile
 # Example vars.mk
