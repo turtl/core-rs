@@ -29,11 +29,12 @@ test-st:
 	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
 
 doc:
-	$(CARGO) doc -p turtl-core --no-deps
+	$(CARGO) doc -p turtl_core --no-deps
 
 macros:
 	$(CARGO) rustc -- -Z unstable-options --pretty=expanded
 
 clean:
 	rm -rf target/
+	cargo clean
 

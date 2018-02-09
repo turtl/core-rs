@@ -1,11 +1,20 @@
 extern crate jedi;
+extern crate turtl_core;
 
-include!("../../tests/_lib.rs");
-use ::jedi::Value;
+use ::std::env;
+use ::std::thread;
+use ::std::time::Duration;
 use ::std::io::{self, Write};
+use jedi::Value;
+use turtl_core::error::TResult;
+
+pub fn sleep(millis: u64) {
+    thread::sleep(Duration::from_millis(millis));
+}
 
 fn repl() -> TResult<()> {
     let mut req_id = 1;
+
     loop {
         let req_str = format!("{}", req_id);
         io::stdout().write(&String::from("> ").as_bytes())?;
@@ -23,7 +32,8 @@ fn repl() -> TResult<()> {
 
         // i GUESS i'll let you exit
         if cmd == "quit" || cmd == "q" {
-            send(format!("[\"{}\",\"app:shutdown\"]", req_id).as_str());
+            turtl_core::send(String::from(r#"["0","sync:shutdown",false]"#)).unwrap();
+            turtl_core::send(String::from(r#"["0","user:logout",false]"#)).unwrap();
             break;
         }
 
@@ -39,8 +49,8 @@ fn repl() -> TResult<()> {
         msg_parts.append(&mut args);
 
         let msg = jedi::stringify(&msg_parts)?;
-        send_msg(&msg.as_str())?;
-        let response = recv_msg(req_str.as_str())?;
+        turtl_core::send(msg).unwrap();
+        let response = turtl_core::recv(None).unwrap();
         println!("response: {}", response);
         req_id += 1;
     }
@@ -51,7 +61,7 @@ fn main() {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
-    let handle = init();
+    let handle = turtl_core::start(String::from(r#"{"messaging":{"reqres_append_mid":false}}"#));
 
     sleep(1000);
     println!("");

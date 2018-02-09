@@ -8,4 +8,7 @@ carrier = { path = "../carrier" }
 config = { path = "../config" }
 jedi = { path = "../jedi" }
 turtl_core = { path = ".." }
-
+lazy_static = "0.2.1"
+serde = "1.0.8"
+serde_derive = "1.0.8"
+serde_json = "1.0.2"
