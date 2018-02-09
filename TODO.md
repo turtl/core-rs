@@ -1,4 +1,5 @@
 v0.7:
+- `join_delete_acount` test is failing intermittently
 - integration tests
   - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!
   - sync:pause
