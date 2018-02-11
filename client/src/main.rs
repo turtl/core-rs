@@ -1,4 +1,5 @@
 extern crate jedi;
+extern crate regex;
 extern crate rustyline;
 extern crate turtl_core;
 
@@ -6,6 +7,7 @@ use ::std::env;
 use ::std::thread;
 use ::std::time::Duration;
 use jedi::Value;
+use regex::Regex;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use turtl_core::error::TResult;
@@ -20,6 +22,7 @@ fn exit() {
 }
 
 fn repl() -> TResult<()> {
+    let re = Regex::new(r#"'.+?'|".+?"|[^ ]+"#).unwrap();
     let mut req_id = 1;
     let mut rl = Editor::<()>::new();
     // TODO: Find a good path for history
@@ -37,9 +40,9 @@ fn repl() -> TResult<()> {
 
                 rl.add_history_entry(&line);
 
-                let mut parts: Vec<String> = line.split(" ")
-                    .filter(|x| x != &"")
-                    .map(|x| String::from(x.trim()))
+                let mut parts: Vec<String> = re.find_iter(&line)
+                    .map(|x| String::from(x.as_str().trim()
+                        .trim_matches('"').trim_matches('\'')))
                     .collect::<Vec<_>>();
 
                 if parts.len() == 0 {
@@ -48,7 +51,7 @@ fn repl() -> TResult<()> {
 
                 let cmd = parts.remove(0);
 
-                // i GUESS i'll let you exit
+                // I GUESS I'll let you exit
                 if cmd == "quit" || cmd == "q" {
                     exit();
                     break;
@@ -71,11 +74,7 @@ fn repl() -> TResult<()> {
                 println!("response: {}", response);
                 req_id += 1;
             },
-            Err(ReadlineError::Interrupted) => {
-                exit();
-                break;
-            },
-            Err(ReadlineError::Eof) => {
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 exit();
                 break;
             },
