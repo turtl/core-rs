@@ -32,12 +32,35 @@ or bug reports on it yet. Use at your own risk.
 make
 ```
 
+core-rs and any of its executable sub-projects (`sock`, `client`) provide a
+wrapper around running:
+
+```bash
+make run
+```
+
+The `Makefile` includes (optionally) a non-versioned file called `vars.mk` which
+can be used to house any ENV vars specific to your build environment:
+
+```makefile
+# Example vars.mk
+export PATH := $(PATH):/your/custom/path
+export RUSTFLAGS := -L/opt/lib64 -lmylib
+export SQLITE3_LIB_DIR := /home/andrew/src/sqlite3
+export SODIUM_LIB_DIR := /home/andrew/src/libsodium
+export SODIUM_STATIC := static
+export TURTL_LOGLEVEL ?= off
+export OPENSSL_LIB_DIR=/usr/lib/openssl-1.0
+export OPENSSL_INCLUDE_DIR=/usr/include/openssl-1.0
+```
+
 NOTE: If your system uses OpenSSL 1.1.0, you need to install OpenSSL 1.0.0 and
 tell `make` to use it with `OPENSSL_LIB_DIR=/usr/lib/openssl-1.0 OPENSSL_INCLUDE_DIR=/usr/include/openssl-1.0 make`
-for example.
+for example. This would be a good place to use `vars.mk`.
 
 NOTE 2: If your system has libsodium version different than 1.0.12 and your build fails, do this:
-```
+
+```bash
 cargo build
 wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz
 tar xzf libsodium-1.0.12.tar.gz
