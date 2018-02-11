@@ -1,5 +1,7 @@
 v0.7:
 - `join_delete_acount` test is failing intermittently
+- found in CI (`join_delete`):
+  - [2018-02-09][16:55:27][ERROR] dispatch::process() -- error processing: {"err":{"message":"key for `user` not found (Some(\"7\"))","type":"not_found"},"file":"src/turtl.rs","line":507,"wrapped":true}
 - integration tests
   - !! test sync after logout WITHOUT clearing app data (need to test incremental sync) !!
   - sync:pause
@@ -38,7 +40,7 @@ later:
   - thinking core should NOT own i18n, it should be owned by each interface
   - we can port the few translations over from js we need (space/board names,
     validation errors) and leave it at that.
-- move Turtl.find_model_key(s) et al to protected model (or wherever appropriate)
+- move `Turtl.find_model_key(s)` et al to protected model (or wherever appropriate)
   - profile loading
   - messaging
   - key management
