@@ -21,6 +21,33 @@ mod tests {
 
         let profile_res = dispatch(json!(["profile:load"]));
 
+        let user_id: String = jedi::get(&["user", "id"], &profile_res.d).unwrap();
+        let space_id: String = jedi::get(&["user", "settings", "default_space"], &profile_res.d).unwrap();
+
+        dispatch_ass(json!([
+            "profile:sync:model",
+            "add",
+            "note",
+            {
+                "user_id": user_id,
+                "space_id": space_id,
+                "title": "get a job",
+                "body": "do it",
+            }
+        ]));
+
+        dispatch_ass(json!([
+            "profile:sync:model",
+            "add",
+            "note",
+            {
+                "user_id": user_id,
+                "space_id": space_id,
+                "title": "my bookmark",
+                "url": "http://howtobepunk.com",
+            }
+        ]));
+
         // change our password. this will log us out, so we need to log in again
         // to delete the account
         dispatch_ass(json!([
@@ -41,8 +68,18 @@ mod tests {
         wait_on("profile:loaded");
         wait_on("profile:indexed");
 
+        let note_search = dispatch_ass(json!([
+            "profile:find-notes", {
+                "space_id": space_id,
+                "url": "http://howtobepunk.com",
+            }
+        ]));
+
         dispatch_ass(json!(["user:delete-account"]));
         end(handle);
+
+        let num_notes: u32 = jedi::get(&["total"], &note_search).unwrap();
+        assert_eq!(num_notes, 1);
 
         // verify our profile AFTER the account is deleted. this keeps profile
         // assert failures from making me have to delete the user by hand on
@@ -50,8 +87,8 @@ mod tests {
         let spaces: Vec<Value> = jedi::get(&["spaces"], &profile_res.d).unwrap();
         let boards: Vec<Value> = jedi::get(&["boards"], &profile_res.d).unwrap();
         let ptitle: String = jedi::get(&["spaces", "0", "title"], &profile_res.d).unwrap();
-        assert_eq!(spaces.len(), 3);
-        assert_eq!(boards.len(), 3);
+        assert!(spaces.len() > 0);
+        assert!(boards.len() > 0);
         assert_eq!(ptitle, "Personal");
     }
 }
