@@ -18,7 +18,6 @@ test:
 
 test-panic:
 	RUST_BACKTRACE=1 \
-	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) \
 		$(CARGO) test \
 			--features "panic-on-error" \
 			$(TEST) \
