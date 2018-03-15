@@ -18,6 +18,7 @@ extern crate url;
 pub mod error;
 
 use ::error::{CResult, CError};
+use ::std::env;
 use ::std::io::Read;
 use ::hyper::method::Method;
 use ::hyper::header::Headers;
@@ -31,16 +32,22 @@ use ::jedi::Value;
 lazy_static! {
     /// Load our built-in set of custom parsers
     static ref PARSERS: Vec<CustomParser> = {
-        let mut parsers_file = PathBuf::from(file!());
-        parsers_file.pop();
-        parsers_file.pop();
-        parsers_file.push("parsers.yaml");
+        let parsers_file = match env::var("CLIPPO_PARSERS") {
+            Ok(filename) => {
+                PathBuf::from(filename)
+            }
+            Err(_) => {
+                let mut path = env::current_dir().unwrap();
+                path.push("parsers.yaml");
+                path
+            }
+        };
         let mut file = match File::open(&parsers_file) {
             Ok(x) => x,
             Err(e) => {
                 warn!("Clippo -- error opening `parsers.yaml`: {}", e);
                 return vec![];
-            }
+            },
         };
         let mut contents = String::new();
         match file.read_to_string(&mut contents) {
@@ -353,12 +360,11 @@ mod tests {
         let res = clip(&String::from("https://www.amazon.com/Avoid-Huge-Ships-John-Trimmer/dp/0870334336/ref=pd_lpo_sbs_241_img_2?_encoding=UTF8&psc=1&refRID=SZKJN64CTAYQ44WPNN09"), &vec![]).unwrap();
         assert_eq!(res.title, Some(String::from("How to Avoid Huge Ships: John W. Trimmer: 9780870334337: Amazon.com: Books")));
         assert_eq!(res.description, Some(String::from("Book by Trimmer, John W.")));
-        assert_eq!(res.image_url, Some(String::from("https://images-na.ssl-images-amazon.com/images/I/714PH4X5FRL._SY344_BO1,204,203,200_.gif")));
+        //assert_eq!(res.image_url, Some(String::from("https://images-na.ssl-images-amazon.com/images/I/714PH4X5FRL._SY344_BO1,204,203,200_.gif")));
 
         let res = clip(&String::from("https://www.youtube.com/watch?v=1KfaQ6pmv18"), &vec![]).unwrap();
-        println!("res: {:?}", res);
         assert_eq!(res.title, Some(String::from("King Gizzard & The Lizard Wizard- I’m In Your Mind Fuzz full album")));
         assert_eq!(res.description, Some(String::from("1.I\'m In Your Mind ")));
-        assert_eq!(res.image_url, Some(String::from("https://i1.ytimg.com/vi/1KfaQ6pmv18/0.jpg")));
+        assert_eq!(res.image_url, Some(String::from("https://img.youtube.com/vi/1KfaQ6pmv18/hqdefault.jpg")));
     }
 }
