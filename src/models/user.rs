@@ -33,9 +33,9 @@ protected! {
         #[protected_field(public)]
         pub username: String,
 
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         #[protected_field(public)]
-        pub storage_mb: Option<i64>,
+        pub account_type: i64,
 
         #[serde(default)]
         #[protected_field(public)]
@@ -277,7 +277,7 @@ impl User {
         let mut user_guard_w = lockw!(turtl.user);
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
         user_guard_w.id = Some(user_id);
-        user_guard_w.storage_mb = jedi::get(&["storage_mb"], &joindata)?;
+        user_guard_w.account_type = jedi::get(&["account_type"], &joindata)?;
         user_guard_w.do_login(key, auth);
         drop(user_guard_w);
 
