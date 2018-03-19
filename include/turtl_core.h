@@ -65,7 +65,7 @@ TURTL_EXPORT int32_t TURTL_CONV turtlc_send(const uint8_t*, size_t);
 // -----------------------------------------------------------------------------
 // Receive a response from the core. This will always be a response to a message
 // that was sent with `turtlc_send()`.
-TURTL_EXPORT uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*);
+TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*);
 
 // -----------------------------------------------------------------------------
 // turtlc_recv_event(non_block, &msg_len) -> *uint8_t
@@ -82,7 +82,7 @@ TURTL_EXPORT uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*);
 // because you can have many (or none) while the core is processing a command.
 // Events are used to notify the UI of certain stages of execution being
 // completed or certain conditions being met.
-TURTL_EXPORT uint8_t* TURTL_CONV turtlc_recv_event(uint8_t, size_t*);
+TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv_event(uint8_t, size_t*);
 
 // -----------------------------------------------------------------------------
 // turtlc_free(msg_ptr, len) -> i32
