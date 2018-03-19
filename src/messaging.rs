@@ -186,6 +186,7 @@ pub fn start<F>(process: F) -> TResult<()>
     // create our messenger!
     let mut messenger = Messenger::new();
     info!("messaging::start() -- main loop");
+    ui_event("messaging:ready", &true)?;
     while messenger.is_bound() {
         // grab a message from our remote
         match messenger.recv() {
