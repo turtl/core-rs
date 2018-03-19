@@ -9,7 +9,6 @@
 //! when responding so the client knows which request we are responding to.
 
 use ::jedi::{self, Value};
-
 use ::error::{TResult, TError};
 use ::config;
 use ::util;
