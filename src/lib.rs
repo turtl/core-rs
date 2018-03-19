@@ -77,7 +77,10 @@ pub fn init() -> TResult<()> {
 fn process_runtime_config(config_str: String) -> TResult<()> {
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
-        Err(_) => json!({}),
+        Err(e) => {
+            error!("Problem parsing runtime config: {}", e);
+            json!({})
+        }
     };
     config::merge(&runtime_config)?;
     Ok(())
