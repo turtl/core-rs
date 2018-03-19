@@ -37,22 +37,23 @@ pub fn init() -> thread::JoinHandle<()> {
         env::set_var("TURTL_CONFIG_FILE", "config.yaml");
     }
 
-    // hardcode some settings that make our test$$ go TO THE MOON
-    config::set(&["integration_tests", "incoming_sync_timeout"], &5).unwrap();
-    config::set(&["wrap_errors"], &true).unwrap();
-    config::set(&["messaging", "reqres_append_mid"], &true).unwrap();
-    config::set(&["sync", "enable_incoming"], &true).unwrap();
-    config::set(&["sync", "enable_outgoing"], &true).unwrap();
-    config::set(&["sync", "enable_files_incoming"], &true).unwrap();
-    config::set(&["sync", "enable_files_outgoing"], &true).unwrap();
-
     carrier::wipe();
 
     thread::spawn(|| {
         turtl_core::init().unwrap();
-        // this is more or less ignored when testing, we use in-memory dbs and
-        // config.integration_tests.data_folder for file storage
-        let app_config = String::from(r#"{"data_folder":":memory:"}"#);
+        // send in a the config options we need for our tests
+        let app_config = String::from(r#"{
+            "data_folder": ":memory:",
+            "integration_tests": {"incoming_sync_timeout": 5},
+            "wrap_errors": true,
+            "messaging": {"reqres_append_mid": true},
+            "sync": {
+                "enable_incoming": true,
+                "enable_outgoing": true,
+                "enable_files_incoming": true,
+                "enable_files_outgoing": true
+            }
+        }"#);
         let handle = turtl_core::start(app_config);
         sleep(100);
         handle.join().unwrap();
