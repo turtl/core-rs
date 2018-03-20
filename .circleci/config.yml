@@ -87,7 +87,7 @@ jobs:
           at: /tmp/turtl
 
       - run: mkdir -p target/release/
-      - run: cp ../workspace/turtl_core.so target/release/
+      - run: cp ../workspace/libturtl_core.so target/release/
       - run: cp ../workspace/config.yaml .
 
       # set up/run server
