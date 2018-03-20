@@ -7,6 +7,4 @@ export TURTL_CONFIG_FILE := ../config.yaml
 CARGO := $(shell which cargo)
 
 test:
-	@echo "Paths $(LD_LIBRARY_PATH)"
-	ls -al $(shell realpath ../target/release)
-	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
+	RUST_BACKTRACE=1 $(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
