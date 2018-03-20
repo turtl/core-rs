@@ -116,8 +116,6 @@ jobs:
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.24.1
 
-      # initially had cache here. doesn't make much difference because rust
-      # recompiles everything anyway.
       - run: cd integration-tests && make test
 
       - run: cp config.yaml.default ../workspace/config.yaml
