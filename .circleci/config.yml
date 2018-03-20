@@ -1,18 +1,79 @@
 defaults: &defaults
   working_directory: /tmp/turtl/core
-  docker:
-    - image: circleci/node:4.8.3
-    - image: circleci/postgres:9.6.2-alpine
-      environment:
-        - POSTGRES_USER=turtl
-        - POSTGRES_DB=turtl
 
 version: 2
 jobs:
-  test:
+  build:
     <<: *defaults
+
+    docker:
+      - image: circleci/node:4.8.3
+
     steps:
       - checkout
+
+      # install our apt deps
+      - run: sudo apt-get update
+      - run: sudo apt-get install --fix-missing gpgv2
+
+      # install libsodium
+      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O /tmp/libsodium.tar.gz
+      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O /tmp/libsodium.tar.gz.sig
+
+      # verify sodium
+      - run: gpg --import build-tools/libsodium.gpg.pub
+      - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
+      - restore_cache:
+          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
+      - run: cd /tmp && tar -xvf ./libsodium.tar.gz && cd libsodium-1.0.12 && ./configure --enable-shared --enable-static && make
+      - save_cache:
+          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
+          paths:
+            - /tmp/libsodium-1.0.12
+      - run: cd /tmp/libsodium-1.0.12 && sudo make install
+
+      # install rust
+      - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
+      - run: sudo /tmp/rustup.sh --revision=1.24.1
+
+      # build the release
+      - restore_cache:
+          key: core-build-v1-{{ checksum "Cargo.lock" }}
+      - run: make SODIUM_STATIC=static release
+      - run: make CARGO_BUILD_ARGS="--release -p carrier -p jedi -p dumpy -p turtl_core" test
+      - save_cache:
+          key: core-build-v1-{{ checksum "Cargo.lock" }}
+          paths:
+            - target/release/build/
+            - target/release/deps/
+            - target/release/incremental/
+            - target/release/native/
+
+      - run: mkdir -p ../workspace
+      - run: cp target/release/turtl_core.so ../workspace
+      - persist_to_workspace:
+          root: /tmp/turtl/
+          paths:
+            - workspace
+
+  test:
+    <<: *defaults
+
+    docker:
+      - image: circleci/node:4.8.3
+      - image: circleci/postgres:9.6.2-alpine
+        environment:
+          - POSTGRES_USER=turtl
+          - POSTGRES_DB=turtl
+
+    steps:
+      - checkout
+
+      - attach_workspace:
+          at: /tmp/turtl
+
+      - run: mkdir -p target/release/
+      - run: cp ../workspace/turtl_core.so target/release/
 
       # set up config
       - run: cp config.yaml.default config.yaml
@@ -46,37 +107,42 @@ jobs:
           command: node ../server/server.js
           background: true
 
-      # install our apt deps
-      - run: sudo apt-get update
-      - run: sudo apt-get install --fix-missing gpgv2
-
-      # install libsodium
-      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O /tmp/libsodium.tar.gz
-      - run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O /tmp/libsodium.tar.gz.sig
-
-      # verify sodium
-      - run: gpg --import build-tools/libsodium.gpg.pub
-      - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
-      - restore_cache:
-          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
-      - run: cd /tmp && tar -xvf ./libsodium.tar.gz && cd libsodium-1.0.12 && ./configure --enable-shared --enable-static && make
-      - save_cache:
-          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
-          paths:
-            - /tmp/libsodium-1.0.12
-      - run: cd /tmp/libsodium-1.0.12 && sudo make install
-
       # install rust
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
-      - run: sudo /tmp/rustup.sh --revision=1.21.0
+      - run: sudo /tmp/rustup.sh --revision=1.24.1
 
       # initially had cache here. doesn't make much difference because rust
       # recompiles everything anyway.
-      - run: make TURTL_CONFIG_FILE=/tmp/turtl/core/config.yaml SODIUM_STATIC=static RUST_BACKTRACE=1 TEST_LOGLEVEL=info CARGO_BUILD_ARGS="-p carrier -p jedi -p dumpy -p turtl_core" test
+      - run: cd integration-tests && make test
+
+      - run: cp config.yaml.default ../workspace/config.yaml
+      - run: cp clippo/parsers.yaml ../workspace/
+      - persist_to_workspace:
+          root: /tmp/turtl/
+          paths:
+            - workspace
+
+  deploy:
+    <<: *defaults
+
+    docker:
+      - image: circleci/node:4.8.3
+
+    steps:
+      - attach_workspace:
+          at: /tmp/turtl
+      - run: echo "ALL DONE LOL"
 
 workflows:
   version: 2
   build_test_deploy:
     jobs:
-      - test
+      - build
+      - test:
+          requires: 
+            - build
+      - deploy:
+          requires:
+            - build
+            - test
 
