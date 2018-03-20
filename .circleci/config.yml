@@ -56,8 +56,8 @@ jobs:
       # build the release
       - restore_cache:
           key: core-build-v3-{{ checksum "Cargo.lock" }}
+      - run: make SODIUM_STATIC=static RUST_BACKTRACE=1 CARGO_BUILD_ARGS="--release -p carrier -p jedi -p dumpy -p turtl_core" test
       - run: make SODIUM_STATIC=static release
-      - run: make RUST_BACKTRACE=1 CARGO_BUILD_ARGS="--release -p carrier -p jedi -p dumpy -p turtl_core" test
       - save_cache:
           key: core-build-v3-{{ checksum "Cargo.lock" }}
           paths:
