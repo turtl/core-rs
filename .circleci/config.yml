@@ -56,14 +56,14 @@ jobs:
       - save_cache:
           key: core-build-v1-{{ checksum "Cargo.lock" }}
           paths:
+            - ~/.cargo/
             - target/release/build/
             - target/release/deps/
             - target/release/incremental/
             - target/release/native/
 
       - run: mkdir -p ../workspace
-      - run: ls target/release/
-      - run: cp target/release/turtl_core.so ../workspace
+      - run: cp target/release/libturtl_core.so ../workspace
       - run: cp config.yaml ../workspace
       - persist_to_workspace:
           root: /tmp/turtl/
