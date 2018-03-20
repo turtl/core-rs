@@ -83,10 +83,10 @@ jobs:
           - POSTGRES_DB=turtl
 
     steps:
-      - checkout
-
       - attach_workspace:
           at: /tmp/turtl
+
+      - checkout
 
       - run: mkdir -p target/release/
       - run: cp ../workspace/libturtl_core.so target/release/
