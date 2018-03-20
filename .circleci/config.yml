@@ -12,6 +12,18 @@ jobs:
     steps:
       - checkout
 
+      # set up config
+      - run: cp config.yaml.default config.yaml
+      - run:
+          # needs to be multi-line or the yaml parser barfs
+          command: |
+            sed -i 's|^data_folder:.*|data_folder: "/tmp/turtl-data"|g' config.yaml
+      - run: sed -i "s|https://api\.turtlapp\.com/v3|http://127.0.0.1:8181|g" config.yaml
+      - run: sed -i "s/slappy\@turtlapp.com/${INTEGRATION_TEST_LOGIN}/g" config.yaml
+      - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
+      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_LOGIN}/g" config.yaml
+      - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+
       # install our apt deps
       - run: sudo apt-get update
       - run: sudo apt-get install --fix-missing gpgv2
@@ -51,6 +63,7 @@ jobs:
 
       - run: mkdir -p ../workspace
       - run: cp target/release/turtl_core.so ../workspace
+      - run: cp config.yaml ../workspace
       - persist_to_workspace:
           root: /tmp/turtl/
           paths:
@@ -74,18 +87,7 @@ jobs:
 
       - run: mkdir -p target/release/
       - run: cp ../workspace/turtl_core.so target/release/
-
-      # set up config
-      - run: cp config.yaml.default config.yaml
-      - run: 
-          # needs to be multi-line or the yaml parser barfs
-          command: |
-            sed -i 's|^data_folder:.*|data_folder: "/tmp/turtl-data"|g' config.yaml
-      - run: sed -i "s|https://api\.turtlapp\.com/v3|http://127.0.0.1:8181|g" config.yaml
-      - run: sed -i "s/slappy\@turtlapp.com/${INTEGRATION_TEST_LOGIN}/g" config.yaml
-      - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
-      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_LOGIN}/g" config.yaml
-      - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+      - run: cp ../workspace/config.yaml .
 
       # set up/run server
       - run: git clone https://github.com/turtl/server ../server
