@@ -37,11 +37,11 @@ jobs:
       - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
       - restore_cache:
           key: sodium-v3-{{ checksum "/tmp/libsodium.tar.gz" }}
-      - run: \
-          cd /tmp && \
-          tar -xvf ./libsodium.tar.gz && \
-          cd libsodium-1.0.12 && \
-          ./configure --disable-shared --enable-static && \
+      - run: |
+          cd /tmp
+          tar -xvf ./libsodium.tar.gz
+          cd libsodium-1.0.12
+          ./configure --disable-shared --enable-static
           make
       - save_cache:
           key: sodium-v3-{{ checksum "/tmp/libsodium.tar.gz" }}
