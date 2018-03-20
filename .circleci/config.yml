@@ -118,9 +118,7 @@ jobs:
 
       # initially had cache here. doesn't make much difference because rust
       # recompiles everything anyway.
-      - run:
-          command: make test
-          working_directory: integration-tests
+      - run: cd integration-tests && make test
 
       - run: cp config.yaml.default ../workspace/config.yaml
       - run: cp clippo/parsers.yaml ../workspace/
