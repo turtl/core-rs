@@ -36,10 +36,15 @@ jobs:
       - run: gpg --import build-tools/libsodium.gpg.pub
       - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
       - restore_cache:
-          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
-      - run: cd /tmp && tar -xvf ./libsodium.tar.gz && cd libsodium-1.0.12 && ./configure --enable-shared --enable-static && make
+          key: sodium-v3-{{ checksum "/tmp/libsodium.tar.gz" }}
+      - run: \
+          cd /tmp && \
+          tar -xvf ./libsodium.tar.gz && \
+          cd libsodium-1.0.12 && \
+          ./configure --disable-shared --enable-static && \
+          make
       - save_cache:
-          key: sodium-v2-{{ checksum "/tmp/libsodium.tar.gz" }}
+          key: sodium-v3-{{ checksum "/tmp/libsodium.tar.gz" }}
           paths:
             - /tmp/libsodium-1.0.12
       - run: cd /tmp/libsodium-1.0.12 && sudo make install
@@ -50,17 +55,14 @@ jobs:
 
       # build the release
       - restore_cache:
-          key: core-build-v2-{{ checksum "Cargo.lock" }}
+          key: core-build-v3-{{ checksum "Cargo.lock" }}
       - run: make SODIUM_STATIC=static release
       - run: make RUST_BACKTRACE=1 CARGO_BUILD_ARGS="--release -p carrier -p jedi -p dumpy -p turtl_core" test
       - save_cache:
-          key: core-build-v2-{{ checksum "Cargo.lock" }}
+          key: core-build-v3-{{ checksum "Cargo.lock" }}
           paths:
             - ~/.cargo/
-            - target/release/build/
-            - target/release/deps/
-            - target/release/incremental/
-            - target/release/native/
+            - target/
 
       - run: mkdir -p ../workspace
       - run: cp target/release/libturtl_core.so ../workspace
