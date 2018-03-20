@@ -1,4 +1,4 @@
-.PHONY: all clean release build test test-unit test-panic test-st doc macros
+.PHONY: all clean release build test test-panic test-st doc macros
 
 # non-versioned include
 -include vars.mk
@@ -13,16 +13,8 @@ build:
 release: override CARGO_BUILD_ARGS += --release
 release: build
 
-test-unit:
+test:
 	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
-
-test-int: override CARGO_BUILD_ARGS += --release
-test-int:
-	$(CARGO) test $(TEST) \
-		-p integration-tests \
-		$(CARGO_BUILD_ARGS) -- --nocapture
-
-test: test-unit test-int
 
 test-panic:
 	RUST_BACKTRACE=1 \
