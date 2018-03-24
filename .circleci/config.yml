@@ -143,6 +143,8 @@ jobs:
     steps:
       - attach_workspace:
           at: /tmp/turtl
+      - run: sudo apt-get update
+      - run: sudo apt-get install --fix-missing gpgv2 jq
       - run: echo "ALL DONE LOL"
 
 workflows:
@@ -159,5 +161,5 @@ workflows:
             - test
           filters:
             tags:
-              only: /^v[0-9]/
+              only: /^v[0-9].*/
 
