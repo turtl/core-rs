@@ -157,4 +157,7 @@ workflows:
           requires:
             - build
             - test
+          filters:
+            tags:
+              only: /^v[0-9]/
 
