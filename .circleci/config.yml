@@ -151,7 +151,7 @@ jobs:
               -s \
               -u "${GITHUB_API_USER}:${GITHUB_API_KEY}" \
               "https://api.github.com/repos/${repo}/releases" | \
-              jq -Mr 'map(select(.tag_name == "'"${CIRCLE_TAG}"'" and .draft == true)) | map(.upload_url)[]' | \
+              jq -r 'map(select(.tag_name == "'"${CIRCLE_TAG}"'" and .draft == true)) | map(.upload_url)[]' | \
               head -1 | \
               sed -r 's|\{\?.*||')
           curl \
