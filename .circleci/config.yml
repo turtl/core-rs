@@ -49,6 +49,7 @@ jobs:
       - run: cd /tmp/libsodium-1.0.12 && sudo make install
 
       # install rust
+      - run: gpg --import build-tools/rust.gpg.pub
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.24.1
 
@@ -112,6 +113,7 @@ jobs:
           background: true
 
       # install rust
+      - run: gpg --import build-tools/rust.gpg.pub
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.24.1
 
