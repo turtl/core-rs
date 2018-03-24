@@ -30,13 +30,10 @@ jobs:
 
       # install libsodium
       - run: wget 'https://github.com/jedisct1/libsodium/releases/download/1.0.12/libsodium-1.0.12.tar.gz' -O /tmp/libsodium.tar.gz
-      - run: wget 'https://github.com/jedisct1/libsodium/releases/download/1.0.12/libsodium-1.0.12.tar.gz.minisig' -O /tmp/libsodium.tar.gz.sig
-      #- run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz -O /tmp/libsodium.tar.gz
-      #- run: wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.12.tar.gz.sig -O /tmp/libsodium.tar.gz.sig
 
       # verify sodium
       - run: gpg --import build-tools/libsodium.gpg.pub
-      - run: gpg --verify /tmp/libsodium.tar.gz.sig /tmp/libsodium.tar.gz
+      - run: gpg --verify build-tools/libsodium-1.0.12.tar.gz.sig /tmp/libsodium.tar.gz
       - restore_cache:
           key: sodium-v4-{{ checksum "/tmp/libsodium.tar.gz" }}
       - run: |
