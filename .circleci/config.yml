@@ -115,7 +115,14 @@ jobs:
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
       - run: sudo /tmp/rustup.sh --revision=1.24.1
 
-      - run: cd integration-tests && make RUST_BACKTRACE=1 TURTL_LOGLEVEL=info LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:../target/release" test
+      - run: |
+          cd integration-tests
+          make \
+            RUST_BACKTRACE=1 \
+            TURTL_LOGLEVEL=info \
+            TURTL_CONFIG_FILE=../config.yaml \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:../target/release" \
+            test
 
       - run: cp config.yaml.default ../workspace/config.yaml
       - run: cp clippo/parsers.yaml ../workspace/

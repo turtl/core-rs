@@ -94,7 +94,7 @@ pub fn sleep(millis: u64) {
 
 pub fn init() -> thread::JoinHandle<()> {
     if env::var("TURTL_CONFIG_FILE").is_err() {
-        env::set_var("TURTL_CONFIG_FILE", "config.yaml");
+        env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
 
     let handle = thread::spawn(|| {
