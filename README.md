@@ -71,3 +71,17 @@ cp -r src/libsodium/.libs/* ../target/debug/deps/
 cargo build
 ```
 After every `cargo clean` or `make clean` you should do the last command
+
+## Using
+
+This section is a work in progress. To use the Turtl core embedded library,
+you'll have to know two things:
+
+- How to interface: [see turtl_core.h](https://github.com/turtl/core-rs/blob/master/include/turtl_core.h)
+- How to use: [see dispatch.rs](https://github.com/turtl/core-rs/blob/master/src/dispatch.rs)
+for a list of commands you can send the core, and also check the [integration tests](https://github.com/turtl/core-rs/tree/master/integration-tests/tests)
+for example usage. The integration tests strive for complete coverage of all the
+publicly-exported capabilities of the core library, so they should help somewhat
+with documentation (I know it's not a substitute, but I'd rather release the
+project then toil away on docs than the other way around).
+
