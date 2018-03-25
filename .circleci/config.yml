@@ -12,6 +12,9 @@ jobs:
     steps:
       - checkout
 
+      # update lib type
+      - run: sed -i 's|crate-type = .*|crate-type = ["cdylib"]|' Cargo.toml
+
       # set up config
       - run: cp config.yaml.default config.yaml
       - run:
