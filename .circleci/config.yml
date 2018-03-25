@@ -150,7 +150,7 @@ jobs:
           upload_url=$(curl \
               -s \
               -u "${GITHUB_API_USER}:${GITHUB_API_KEY}" \
-              "https://api.github.com/repos/${repo}/releases" | \
+              "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/releases" | \
               jq -r 'map(select(.tag_name == "'"${CIRCLE_TAG}"'" and .draft == true)) | map(.upload_url)[]' | \
               head -1 | \
               sed -r 's|\{\?.*||')
