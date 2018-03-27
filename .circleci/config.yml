@@ -17,7 +17,7 @@ jobs:
       - run: sed -i 's|crate-type = .*|crate-type = ["cdylib"]|' Cargo.toml
 
       # set up config
-      - run: ./.circleci/prepare-config.sh
+      - run: bash ./.circleci/prepare-config.sh
 
       # install our apt deps
       - run: sudo apt-get update
