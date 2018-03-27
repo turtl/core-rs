@@ -1,9 +1,6 @@
 aliases:
   - &defaults
     working_directory: /tmp/turtl/core
-  - &prepare_config
-    - run: echo "hi"
-    - run: echo "there"
 
 version: 2
 jobs:
@@ -15,22 +12,12 @@ jobs:
 
     steps:
       - checkout
-      <<: *prepare_config
 
       # update lib type
       - run: sed -i 's|crate-type = .*|crate-type = ["cdylib"]|' Cargo.toml
 
       # set up config
-      - run: cp config.yaml.default config.yaml
-      - run:
-          # needs to be multi-line or the yaml parser barfs
-          command: |
-            sed -i 's|^data_folder:.*|data_folder: "/tmp/turtl-data"|g' config.yaml
-      - run: sed -i "s|https://api\.turtlapp\.com/v3|http://127.0.0.1:8181|g" config.yaml
-      - run: sed -i "s/slappy\@turtlapp.com/${INTEGRATION_TEST_LOGIN}/g" config.yaml
-      - run: sed -i "s/turtlesallthewaydown/${INTEGRATION_TEST_PASSWORD}/g" config.yaml
-      - run: sed -i "s/duck duck/${INTEGRATION_TEST_V6_LOGIN}/g" config.yaml
-      - run: sed -i "s/juice/${INTEGRATION_TEST_V6_PASSWORD}/g" config.yaml
+      - run: ./.circleci/prepare-config.sh
 
       # install our apt deps
       - run: sudo apt-get update
