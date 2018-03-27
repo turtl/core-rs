@@ -1,5 +1,9 @@
-defaults: &defaults
-  working_directory: /tmp/turtl/core
+aliases:
+  - &defaults
+    working_directory: /tmp/turtl/core
+  - &prepare_config
+    - run: echo "hi"
+    - run: echo "there"
 
 version: 2
 jobs:
@@ -11,6 +15,7 @@ jobs:
 
     steps:
       - checkout
+      <<: *prepare_config
 
       # update lib type
       - run: sed -i 's|crate-type = .*|crate-type = ["cdylib"]|' Cargo.toml
