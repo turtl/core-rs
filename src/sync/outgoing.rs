@@ -541,7 +541,6 @@ mod tests {
                         "id": "363",
                         "keys": [],
                         "pubkey": "NO/1u3IcXViFSOz4EF94uuLfVd8MoFlIZFBX5tkdqmg=",
-                        "account_type": 0,
                         "username": "slippyslappy@turtlapp.com"
                     },
                     "errcount": 0,
