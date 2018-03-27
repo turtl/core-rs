@@ -35,8 +35,8 @@ jobs:
           cd /tmp
           tar -xvf ./libsodium.tar.gz
           cd libsodium-1.0.12
-          CFLAGS="-fPIC" ./configure --disable-shared --enable-static
-          make CFLAGS="-fPIC"
+          CFLAGS="-fPIC -O2" ./configure --disable-shared --enable-static
+          make CFLAGS="-fPIC -O2"
       - save_cache:
           key: sodium-v4-{{ checksum "/tmp/libsodium.tar.gz" }}
           paths:
@@ -154,14 +154,14 @@ jobs:
               -XPOST \
               -u "${GITHUB_API_USER}:${GITHUB_API_KEY}" \
               -H 'Content-Type: application/octet-stream' \
-              "${upload_url}?name=libturtl_core.so" \
+              "${upload_url}?name=libturtl_core.x86_64.so" \
               --data-binary @../workspace/libturtl_core.so
           curl \
               -s \
               -XPOST \
               -u "${GITHUB_API_USER}:${GITHUB_API_KEY}" \
               -H 'Content-Type: text/plain' \
-              "${upload_url}?name=libturtl_core.so.sha256" \
+              "${upload_url}?name=libturtl_core.x86_64.so.sha256" \
               --data-binary @../workspace/libturtl_core.so.sha256
       - run: echo "ALL DONE LOL"
 
@@ -183,13 +183,13 @@ workflows:
               only: master
             tags:
               only: /.*/
-      - deploy:
-          requires:
-            - build
-            - test
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v[0-9].*/
+#      - deploy:
+#          requires:
+#            - build
+#            - test
+#          filters:
+#            branches:
+#              ignore: /.*/
+#            tags:
+#              only: /^v[0-9].*/
 
