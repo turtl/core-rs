@@ -36,6 +36,7 @@ use ::api::{Api, ApiReq};
 use ::error::{MError, MResult};
 use ::jedi::Value;
 pub use crypto::Key;
+use ::std::time::Duration;
 use ::std::path::PathBuf;
 use ::std::fs;
 use ::std::collections::HashMap;
@@ -72,9 +73,8 @@ pub struct Profile {
     files: Vec<File>,
 }
 
-fn download_file(url: &String, auth: &String) -> MResult<Vec<u8>> {
+fn download_file(url: &String, auth: &String, tries: u8) -> MResult<Vec<u8>> {
     let mut headers = hyper::header::Headers::new();
-    let client = hyper::Client::new();
     let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
     if url.contains(api_endpoint.as_str()) {
         let auth_str = String::from("user:") + &auth;
@@ -82,10 +82,17 @@ fn download_file(url: &String, auth: &String) -> MResult<Vec<u8>> {
         let auth_header = String::from("Basic ") + &base_auth;
         headers.set_raw("Authorization", vec![Vec::from(auth_header.as_bytes())]);
     }
-    client
-        .request(hyper::method::Method::Get, url.as_str())
-        .headers(headers)
-        .send()
+    let mut req = hyper::client::Request::new(hyper::method::Method::Get, hyper::Url::parse(url.as_str())?)?;
+    req.set_read_timeout(Some(Duration::new(120, 0)))?;
+    {
+        // ridiculous. there has to be a better way??
+        let reqheaders = req.headers_mut();
+        for header in headers.iter() {
+            let name_string = String::from(header.name());
+            reqheaders.set_raw(name_string, vec![Vec::from(header.value_string().as_bytes())]);
+        }
+    }
+    let res = req.start()?.send()
         .map_err(|e| {
             match e {
                 hyper::Error::Io(err) => MError::Io(err),
@@ -100,7 +107,17 @@ fn download_file(url: &String, auth: &String) -> MResult<Vec<u8>> {
                 return Err(MError::Api(res.status, errmsg));
             }
             Ok(out)
-        })
+        });
+    match res {
+        Ok(x) => Ok(x),
+        Err(e) => {
+            if tries < 3 {
+                download_file(url, auth, tries + 1)
+            } else {
+                Err(e)
+            }
+        }
+    }
 }
 
 fn save_file(note_id: &String, contents: Vec<u8>) -> MResult<PathBuf> {
@@ -186,7 +203,7 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
     for note_id in files {
         let url = api.get::<String>(format!("/notes/{}/file?disable_redirect=1", note_id).as_str(), ApiReq::new())?;
         evfn("file-pre-download", &json!([note_id, url]));
-        match download_file(&url, auth) {
+        match download_file(&url, auth, 0) {
             Ok(filedata) => {
                 evfn("file-download", &jedi::to_val(&note_id)?);
                 let filepath_new = save_file(&note_id, filedata)?;
@@ -256,6 +273,8 @@ pub fn migrate<F>(v6_login: Login, mut evfn: F) -> MResult<MigrateResult>
 {
     let profile = get_profile(&v6_login.user_id, &v6_login.auth, &mut evfn)?;
     let decrypted = decrypt_profile(&v6_login.key, profile, &mut evfn)?;
+    // cleanup
+    fs::remove_dir_all(util::file_folder()?)?;
 
     let mut result = MigrateResult::default();
     result.boards = decrypted.boards.iter().map(|x| x.clone()).collect::<Vec<_>>();
