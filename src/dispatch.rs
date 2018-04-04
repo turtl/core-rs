@@ -157,6 +157,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let endpoint: String = config::get(&["api", "v6", "endpoint"])?;
             Ok(Value::String(endpoint))
         }
+        "app:get-config" => {
+            Ok(config::dump()?)
+        }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
             messaging::stop();

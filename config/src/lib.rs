@@ -88,3 +88,10 @@ pub fn merge<T: Serialize>(obj: &T) -> TResult<()> {
     Ok(())
 }
 
+/// Send the entire config back as a val
+pub fn dump() -> TResult<Value> {
+    let config = (*CONFIG).read().unwrap();
+    let json = config.clone();
+    Ok(json)
+}
+
