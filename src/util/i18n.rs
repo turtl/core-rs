@@ -4,7 +4,7 @@
 #[macro_export]
 macro_rules! t {
     ($label:expr) => {
-        ($label)
+        $label
     }
 }
 

@@ -10,7 +10,7 @@ license = "GPL-3.0"
 
 [lib]
 name = "turtl_core"
-crate-type = ["dylib", "cdylib"]		# ["cdylib", "staticlib"]
+crate-type = ["dylib"]		# ["cdylib", "staticlib"]
 doctest = false				# these annoy me
 
 [dependencies]
