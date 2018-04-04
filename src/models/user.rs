@@ -210,6 +210,7 @@ impl User {
     /// Given a turtl, a username, and a password, see if we can log this user
     /// in.
     pub fn login(turtl: &Turtl, username: String, password: String, version: u16) -> TResult<()> {
+        let username = username.to_lowercase();
         let (key, auth) = generate_auth(&username, &password, version)?;
         do_login(turtl, &username, key, auth)
             .or_else(|e| {
@@ -242,12 +243,14 @@ impl User {
         let tokenjson = String::from_utf8(token_raw)?;
         let token: LoginToken = jedi::parse(&tokenjson)?;
         let LoginToken {id: _id, key, auth, username} = token;
+        let username = username.to_lowercase();
         do_login(turtl, &username, key, auth)?;
         Ok(())
     }
 
     pub fn join(turtl: &Turtl, username: String, password: String) -> TResult<()> {
         validate_user(&username, &password)?;
+        let username = username.to_lowercase();
         let (key, auth) = generate_auth(&username, &password, CURRENT_AUTH_VERSION)?;
         let (pk, sk) = crypto::asym::keygen()?;
         let userdata = {
@@ -292,6 +295,7 @@ impl User {
     /// a delicate procedure and you really want everything to work or nothing.
     pub fn change_password(&mut self, turtl: &Turtl, current_username: String, current_password: String, new_username: String, new_password: String) -> TResult<()> {
         validate_user(&new_username, &new_password)?;
+        let new_username = new_username.to_lowercase();
         let user_id = self.id_or_else()?;
         let (_, auth) = generate_auth(&current_username, &current_password, CURRENT_AUTH_VERSION)?;
         if Some(auth) != self.auth {
@@ -586,7 +590,7 @@ impl User {
 
     /// Given an email address, find a matching user (pubkey and all)
     pub fn find_by_email(turtl: &Turtl, email: &String) -> TResult<Option<User>> {
-        let url = format!("/users/email/{}", email);
+        let url = format!("/users/email/{}", email.to_lowercase());
         turtl.api.get(url.as_str(), ApiReq::new())
     }
 }
