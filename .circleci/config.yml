@@ -46,7 +46,7 @@ jobs:
       # install rust
       - run: gpg --import build-tools/rust.gpg.pub
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
-      - run: sudo /tmp/rustup.sh --revision=1.24.1
+      - run: sudo /tmp/rustup.sh --revision=1.25.0
 
       # build the release
       - restore_cache:
