@@ -5,7 +5,7 @@
 
 CARGO := $(shell which cargo)
 FEATURES ?= sqlite-static
-CARGO_BUILD_ARGS += --features "$(FEATURES)"
+override CARGO_BUILD_ARGS += --features "$(FEATURES)"
 
 all: build
 
