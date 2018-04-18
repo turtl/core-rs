@@ -8,6 +8,7 @@ use ::jedi::{Value, JSONError};
 use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
 use ::migrate::error::MError as MigrateError;
+use ::rusqlite;
 
 use ::crypto::CryptoError;
 use ::util;
@@ -256,6 +257,15 @@ impl From<Box<::std::any::Any + Send>> for TError {
             panic!("{:?}", err);
         } else {
             TError::Msg(format!("{:?}", err))
+        }
+    }
+}
+impl From<(rusqlite::Connection, rusqlite::Error)> for TError {
+    fn from(err: (rusqlite::Connection, rusqlite::Error)) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err.1);
+        } else {
+            TError::Boxed(Box::new(err.1))
         }
     }
 }

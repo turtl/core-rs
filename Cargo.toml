@@ -34,7 +34,7 @@ num_cpus = "1.1.0"
 protected_derive = { path = "protected_derive" }
 quick-error = "1.1.0"
 regex = "0.1.77"
-rusqlite = "0.7.4"
+rusqlite = "0.13.0"
 rustc-serialize = "0.3.19"
 serde = "1.0.8"
 serde_derive = "1.0.8"
@@ -56,6 +56,7 @@ time = "0.1.35"
 #gdi32-sys = "*"
 
 [features]
+sqlite-static = ["rusqlite/bundled"]
 panic-on-error = []
 public-api-tests = []
 

@@ -4,6 +4,8 @@
 -include vars.mk
 
 CARGO := $(shell which cargo)
+FEATURES ?= sqlite-static
+CARGO_BUILD_ARGS += --features "$(FEATURES)"
 
 all: build
 
@@ -16,10 +18,10 @@ release: build
 test:
 	$(CARGO) test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
+test-panic: override FEATURES += panic-on-error
 test-panic:
 	RUST_BACKTRACE=1 \
 		$(CARGO) test \
-			--features "panic-on-error" \
 			$(TEST) \
 			$(CARGO_BUILD_ARGS) -- \
 			--nocapture

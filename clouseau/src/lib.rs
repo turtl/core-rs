@@ -84,7 +84,13 @@ macro_rules! from_err {
         }
     )
 }
-from_err!(::rusqlite::Error);
+from_err!(rusqlite::Error);
+
+impl From<(rusqlite::Connection, rusqlite::Error)> for CError {
+    fn from(err: (rusqlite::Connection, rusqlite::Error)) -> CError {
+        CError::Boxed(Box::new(err.1))
+    }
+}
 type CResult<T> = Result<T, CError>;
 
 /// The Clouseau object stores all of our search state

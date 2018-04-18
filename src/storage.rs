@@ -59,10 +59,10 @@ impl Storage {
         // threads as long as each thread has its own connection:
         //   https://www.sqlite.org/threadsafe.html
         let flags =
-            rusqlite::SQLITE_OPEN_READ_WRITE |
-            rusqlite::SQLITE_OPEN_CREATE |
-            rusqlite::SQLITE_OPEN_NO_MUTEX |
-            rusqlite::SQLITE_OPEN_URI;
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE |
+            rusqlite::OpenFlags::SQLITE_OPEN_CREATE |
+            rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX |
+            rusqlite::OpenFlags::SQLITE_OPEN_URI;
         let conn = if location == ":memory:" {
             Connection::open_in_memory_with_flags(flags)
         } else {

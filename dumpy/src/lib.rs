@@ -26,11 +26,9 @@ extern crate quick_error;
 extern crate rusqlite;
 extern crate serde_json;
 
-use ::libc::c_int;
-
 use ::rusqlite::Connection;
 use ::rusqlite::types::Value as SqlValue;
-use ::rusqlite::types::{ToSql, sqlite3_stmt};
+use ::rusqlite::types::{ToSql, ToSqlOutput};
 use ::rusqlite::Error as SqlError;
 use ::jedi::{Value, JSONError};
 
@@ -48,12 +46,19 @@ pub enum SearchVal {
     Int(i32),
 }
 impl ToSql for SearchVal {
-    unsafe fn bind_parameter(&self, stmt: *mut sqlite3_stmt, col: c_int) -> c_int {
-        match *self {
-            SearchVal::Bool(ref x) => x.bind_parameter(stmt, col),
-            SearchVal::Int(ref x) => x.bind_parameter(stmt, col),
-            SearchVal::String(ref x) => x.bind_parameter(stmt, col),
-        }
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput> {
+        let res = match *self {
+            SearchVal::Bool(ref x) => {
+                ToSqlOutput::from(x.clone())
+            }
+            SearchVal::String(ref x) => {
+                ToSqlOutput::from(x.as_str())
+            }
+            SearchVal::Int(ref x) => {
+                ToSqlOutput::from(x.clone())
+            }
+        };
+        Ok(res)
     }
 }
 
