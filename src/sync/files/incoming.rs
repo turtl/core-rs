@@ -13,6 +13,7 @@ use ::std::fs;
 use ::std::io::{Read, Write};
 use ::jedi::{self, Value};
 use ::util;
+use ::config;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {
@@ -92,7 +93,11 @@ impl FileSyncIncoming {
             // grab the location of the file we'll be downloading
             let file_url: String = self.api.get(&url[..], ApiReq::new())?;
             let mut headers = Headers::new();
-            self.api.set_auth_headers(&mut headers);
+            let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+            // only add our auth junk if we're calling back to the turtl api!
+            if file_url.contains(turtl_api_url.as_str()) {
+                self.api.set_auth_headers(&mut headers);
+            }
             let mut client = hyper::Client::new();
             client.set_read_timeout(Some(Duration::new(30, 0)));
             let mut res = client
