@@ -51,8 +51,9 @@ pub fn send(msg: &str) {
     }
 }
 
-/// Receive a message from the core, blocking (note that this *requires*
-/// {"reqres_append_mid": true} in the app config!)
+/// Receive a message from the core, blocking (note that if you are not using
+/// {"reqres_append_mid": true} in the app config, you should pass "" for the
+/// `mid` arg here).
 pub fn recv(mid: &str) -> String {
     let mut len: usize = 0;
     let raw_len = &mut len as *mut usize;
@@ -70,6 +71,26 @@ pub fn recv(mid: &str) -> String {
     ret
 }
 
+/// Like recv, but non-blocking
+pub fn recv_nb(mid: &str) -> Option<String> {
+    let mut len: usize = 0;
+    let raw_len = &mut len as *mut usize;
+    let mid_c = CString::new(mid).unwrap();
+    let msg_c = unsafe {
+        turtlc_recv(1, mid_c.as_ptr(), raw_len)
+    };
+    if msg_c.is_null() {
+        return None;
+    }
+    let slice = unsafe { slice::from_raw_parts(msg_c, len) };
+    let res_str = str::from_utf8(slice).unwrap();
+    let ret = String::from(res_str);
+    unsafe {
+        turtlc_free(msg_c, len);
+    }
+    Some(ret)
+}
+
 /// Receive a core event (blocks)
 pub fn recv_event() -> String {
     let mut len: usize = 0;
@@ -85,5 +106,24 @@ pub fn recv_event() -> String {
         turtlc_free(msg_c, len);
     }
     ret
+}
+
+/// Receive a core event (non blocking)
+pub fn recv_event_nb() -> Option<String> {
+    let mut len: usize = 0;
+    let raw_len = &mut len as *mut usize;
+    let msg_c = unsafe {
+        turtlc_recv_event(1, raw_len)
+    };
+    if msg_c.is_null() {
+        return None;
+    }
+    let slice = unsafe { slice::from_raw_parts(msg_c, len) };
+    let res_str = str::from_utf8(slice).unwrap();
+    let ret = String::from(res_str);
+    unsafe {
+        turtlc_free(msg_c, len);
+    }
+    Some(ret)
 }
 
