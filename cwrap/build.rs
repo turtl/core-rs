@@ -8,3 +8,4 @@ fn main() {
     println!("cargo:rustc-link-search={}", path.display());
     println!("cargo:rustc-link-lib=turtl_core");
 }
+

@@ -1,4 +1,5 @@
 extern crate config;
+extern crate cwrap;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
@@ -10,13 +11,14 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use ::std::{env, thread, slice, str};
+use ::std::{env, thread, str};
 use ::std::time::Duration;
 use ::std::sync::RwLock;
 use ::std::error::Error;
 use ::std::convert::From;
-use ::std::ffi::CString;
 use ::jedi::{Value, JSONError};
+
+pub use ::cwrap::{send, recv, recv_event};
 
 // -----------------------------------------------------------------------------
 // Error object
@@ -69,11 +71,6 @@ impl From<JSONError> for TError {
 from_err!(::std::string::FromUtf8Error);
 
 // -----------------------------------------------------------------------------
-// Turtl C wrapper
-// -----------------------------------------------------------------------------
-include!("./bindings.rs");
-
-// -----------------------------------------------------------------------------
 // General test functions
 // -----------------------------------------------------------------------------
 #[derive(Serialize, Deserialize, Debug)]
@@ -96,29 +93,18 @@ pub fn init() -> thread::JoinHandle<()> {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
-
-    let handle = thread::spawn(|| {
-        // send in a the config options we need for our tests
-        let app_config = r#"{
-            "data_folder": ":memory:",
-            "integration_tests": {"incoming_sync_timeout": 5},
-            "wrap_errors": true,
-            "messaging": {"reqres_append_mid": true},
-            "sync": {
-                "enable_incoming": true,
-                "enable_outgoing": true,
-                "enable_files_incoming": true,
-                "enable_files_outgoing": true
-            }
-        }"#;
-        let app_config_c = CString::new(app_config).unwrap();
-        let ret = unsafe {
-            turtlc_start(app_config_c.as_ptr(), 0)
-        };
-        if ret != 0 {
-            panic!("Error running turtl: err {}", ret);
+    let handle = cwrap::init(r#"{
+        "data_folder": ":memory:",
+        "integration_tests": {"incoming_sync_timeout": 5},
+        "wrap_errors": true,
+        "messaging": {"reqres_append_mid": true},
+        "sync": {
+            "enable_incoming": true,
+            "enable_outgoing": true,
+            "enable_files_incoming": true,
+            "enable_files_outgoing": true
         }
-    });
+    }"#);
     wait_on("messaging:ready");
     handle
 }
@@ -126,49 +112,6 @@ pub fn init() -> thread::JoinHandle<()> {
 pub fn end(handle: thread::JoinHandle<()>) {
     dispatch(json!(["app:shutdown"]));
     handle.join().unwrap();
-}
-
-pub fn send(msg: &str) {
-    let msg_vec = Vec::from(String::from(msg).as_bytes());
-    let ret = unsafe {
-        turtlc_send(msg_vec.as_ptr(), msg_vec.len())
-    };
-    if ret != 0 {
-        panic!("Error sending msg: err {}", ret);
-    }
-}
-
-pub fn recv(mid: &str) -> String {
-    let mut len: usize = 0;
-    let raw_len = &mut len as *mut usize;
-    let mid_c = CString::new(mid).unwrap();
-    let msg_c = unsafe {
-        turtlc_recv(0, mid_c.as_ptr(), raw_len)
-    };
-    assert!(!msg_c.is_null());
-    let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
-    let ret = String::from(res_str);
-    unsafe {
-        turtlc_free(msg_c, len);
-    }
-    ret
-}
-
-pub fn recv_event() -> String {
-    let mut len: usize = 0;
-    let raw_len = &mut len as *mut usize;
-    let msg_c = unsafe {
-        turtlc_recv_event(0, raw_len)
-    };
-    assert!(!msg_c.is_null());
-    let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
-    let ret = String::from(res_str);
-    unsafe {
-        turtlc_free(msg_c, len);
-    }
-    ret
 }
 
 pub fn dispatch(args: Value) -> Response {

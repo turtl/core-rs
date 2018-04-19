@@ -1,6 +1,6 @@
 [workspace]
 members = ["carrier", "clippo", "config", "client", "clouseau", "dumpy", "jedi", "migrate", "sock"]
-exclude = ["integration-tests"]
+exclude = ["integration-tests", "cwrap"]
 
 [package]
 name = "turtl_core"

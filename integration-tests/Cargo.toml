@@ -3,11 +3,10 @@ name = "integration-tests"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 license = "GPL-3.0"
-links = "turtl_core"
-build = "build.rs"
 
 [dependencies]
 config = { path = "../config" }
+cwrap = { path = "../cwrap" }
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
 quick-error = "1.1.0"
