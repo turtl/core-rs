@@ -141,6 +141,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cwrap"
+version = "0.1.0"
+
+[[package]]
 name = "debug_unreachable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -949,8 +953,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "sock"
 version = "0.1.0"
 dependencies = [
+ "cwrap 0.1.0",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "turtl_core 0.1.0",
  "websocket 0.20.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

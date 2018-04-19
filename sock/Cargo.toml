@@ -4,14 +4,11 @@ version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
+cwrap = { path = "../cwrap" }
 log = "0.3.6"
-turtl_core = { path = ".." }
 
 [dependencies.websocket]
 version = "0.20.2"
 default-features = false
 features = ["sync"]
-
-[features]
-panic-on-error = ["turtl_core/panic-on-error"]
 

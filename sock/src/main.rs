@@ -1,6 +1,6 @@
+extern crate cwrap;
 #[macro_use]
 extern crate log;
-extern crate turtl_core;
 extern crate websocket;
 
 use ::std::thread;
@@ -19,8 +19,7 @@ pub fn main() {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
-    turtl_core::init().unwrap();
-    let handle = turtl_core::start(String::from(r#"{"messaging":{"reqres_append_mid":false}}"#));
+    let handle = cwrap::init(r#"{"messaging":{"reqres_append_mid":false}}"#);
     let server = Server::bind("127.0.0.1:7472").unwrap();
     info!("* sock server bound, listening");
     let conn_id: Arc<RwLock<u32>> = Arc::new(RwLock::new(0));
@@ -48,8 +47,8 @@ pub fn main() {
             info!("* new connection! {}", get_conn_id!(cid));
             let mut client = connection.accept().unwrap();
             client.set_nonblocking(true).unwrap();
-            turtl_core::send(String::from(r#"["0","sync:shutdown",false]"#)).unwrap();
-            turtl_core::send(String::from(r#"["0","user:logout",false]"#)).unwrap();
+            cwrap::send(r#"["0","sync:shutdown",false]"#);
+            cwrap::send(r#"["0","user:logout",false]"#);
             loop {
                 // make sure that if our stupid lazy connection has been left
                 // behind that it is forgotten forever and ever and ever and
@@ -64,11 +63,11 @@ pub fn main() {
                             OwnedMessage::Binary(x) => {
                                 info!("* ui -> core ({})", x.len());
                                 let msg_str = String::from_utf8(x).unwrap();
-                                turtl_core::send(msg_str).unwrap();
+                                cwrap::send(msg_str.as_str());
                             }
                             OwnedMessage::Text(x) => {
                                 info!("* ui -> core ({})", x.len());
-                                turtl_core::send(x).unwrap();
+                                cwrap::send(x.as_str());
                             }
                             _ => {}
                         }
@@ -77,7 +76,7 @@ pub fn main() {
                     }
                 }
 
-                let msg_turtl = turtl_core::recv_nb(None).unwrap();
+                let msg_turtl = cwrap::recv_nb("");
                 match msg_turtl {
                     Some(x) => {
                         info!("* core -> ui ({})", x.len());
@@ -87,7 +86,7 @@ pub fn main() {
                     None => {}
                 }
 
-                let msg_turtl = turtl_core::recv_event_nb().unwrap();
+                let msg_turtl = cwrap::recv_event_nb();
                 match msg_turtl {
                     Some(x) => {
                         info!("* core -> ui ({})", x.len());

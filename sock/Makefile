@@ -20,15 +20,6 @@ build:
 test:
 	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture
 
-test-panic:
-	RUST_BACKTRACE=1 \
-	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) \
-		cargo test \
-			--features "panic-on-error" \
-			$(TEST) \
-			$(CARGO_BUILD_ARGS) -- \
-			--nocapture
-
 test-st:
 	TURTL_LOGLEVEL=$(TEST_LOGLEVEL) cargo test $(TEST) $(CARGO_BUILD_ARGS) -- --nocapture --test-threads 1
 
