@@ -98,6 +98,7 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
 /// those keys that exist in the config.yaml (app config). this gives the entire
 /// app access to our runtime config.
 pub fn start(config_str: String) -> thread::JoinHandle<()> {
+    info!("main::start() -- init with user config {}", config_str);
     // load our configuration
     process_runtime_config(config_str).unwrap();
 
