@@ -92,6 +92,7 @@ impl FileSyncIncoming {
             let url = format!("/notes/{}/attachment", note_id);
             // grab the location of the file we'll be downloading
             let file_url: String = self.api.get(&url[..], ApiReq::new())?;
+            info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
             let mut headers = Headers::new();
             let turtl_api_url: String = config::get(&["api", "endpoint"])?;
             // only add our auth junk if we're calling back to the turtl api!
