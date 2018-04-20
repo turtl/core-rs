@@ -73,27 +73,38 @@ pub struct Profile {
     files: Vec<File>,
 }
 
-fn download_file(url: &String, auth: &String, tries: u8) -> MResult<Vec<u8>> {
+fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
+    // how many imes we try to download a file before we peace out
+    const MAX_FILE_TRIES: u8 = 5;
+
+    info!("migrate::download_file() -- grabbing note file url {}", note_id);
+    // sometimes it's the grabbing of the note's file url that fails (more so
+    // than S3 itself, go figure). so we implement some retry logic here as well
+    // as down below where the actual download occurz.
+    let url = match api.get::<String>(format!("/notes/{}/file?disable_redirect=1", note_id).as_str(), ApiReq::new()) {
+        Ok(x) => x,
+        Err(e) => {
+            warn!("migrate::download_file() -- error grabbing file url: {}", e);
+            if tries < MAX_FILE_TRIES {
+                return download_file(note_id, api, tries + 1);
+            } else {
+                return Err(e);
+            }
+        }
+    };
+    info!("migrate::download_file() -- grabbing file {}", url);
     let mut headers = hyper::header::Headers::new();
     let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
     if url.contains(api_endpoint.as_str()) {
-        let auth_str = String::from("user:") + &auth;
-        let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
-        let auth_header = String::from("Basic ") + &base_auth;
+        let auth_header = api.get_auth().unwrap();
         headers.set_raw("Authorization", vec![Vec::from(auth_header.as_bytes())]);
     }
-    let mut req = hyper::client::Request::new(hyper::method::Method::Get, hyper::Url::parse(url.as_str())?)?;
-    req.set_read_timeout(Some(Duration::new(120, 0)))?;
-    {
-        // ridiculous. there has to be a better way??
-        let reqheaders = req.headers_mut();
-        for header in headers.iter() {
-            let name_string = String::from(header.name());
-            reqheaders.set_raw(name_string, vec![Vec::from(header.value_string().as_bytes())]);
-        }
-    }
-    let res = req.start()?.send()
+    let mut client = hyper::client::Client::new();
+    client.set_read_timeout(Some(Duration::new(120, 0)));
+    let req = client.get(url.as_str()).headers(headers);
+    let res = req.send()
         .map_err(|e| {
+            warn!("migrate::download_file() -- download error: {}", e);
             match e {
                 hyper::Error::Io(err) => MError::Io(err),
                 _ => tomerr!(e),
@@ -111,8 +122,9 @@ fn download_file(url: &String, auth: &String, tries: u8) -> MResult<Vec<u8>> {
     match res {
         Ok(x) => Ok(x),
         Err(e) => {
-            if tries < 3 {
-                download_file(url, auth, tries + 1)
+            warn!("migrate::download_file() -- download error: {}", e);
+            if tries < MAX_FILE_TRIES {
+                download_file(note_id, api, tries + 1)
             } else {
                 Err(e)
             }
@@ -147,8 +159,10 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
         #[serde(default)]
         records: Vec<SyncRecord>,
     }
+    info!("migrate::get_profile() -- grab profile (/sync/full)");
     let syncdata: SyncResponse = api.get("/sync/full", ApiReq::new().timeout(120))?;
     let SyncResponse { records } = syncdata;
+    info!("migrate::get_profile() -- got profile, processing");
     evfn("profile-download", &Value::Null);
     let mut profile = Profile::default();
     let mut files: Vec<String> = Vec::new();
@@ -196,17 +210,19 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
     }
 
     evfn("profile-items", &jedi::to_val(&num_items)?);
-
     evfn("files-pre-download", &jedi::to_val(&files.len())?);
+    info!("migrate::get_profile() -- profile processed (got {} items, {} files)", num_items, jedi::to_val(&files.len())?);
+
     let filepath = PathBuf::from(util::file_folder()?);
     util::create_dir(&filepath)?;
     for note_id in files {
-        let url = api.get::<String>(format!("/notes/{}/file?disable_redirect=1", note_id).as_str(), ApiReq::new())?;
-        evfn("file-pre-download", &json!([note_id, url]));
-        match download_file(&url, auth, 0) {
+        evfn("file-pre-download", &json!([note_id]));
+        match download_file(&note_id, &api, 0) {
             Ok(filedata) => {
                 evfn("file-download", &jedi::to_val(&note_id)?);
-                let filepath_new = save_file(&note_id, filedata)?;
+                info!("migrate::get_profile() -- got file data, saving (note {})", note_id);
+                let filepath_new = save_file(&note_id, filedata)
+                    .map_err(|e| { warn!("Migration::get_profile() -- failed to save file to disk (note {}): {}", note_id, e); e })?;
                 profile.files.push(File {
                     note_id: note_id,
                     data: None,
@@ -214,11 +230,11 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
                 });
             }
             Err(e) => {
+                error!("migrate::get_profile() -- error downloading file (note {}): {}", note_id, e);
                 evfn("error", &json!({
                     "msg": format!("{}", e),
                     "type": "file-download",
                     "note_id": note_id,
-                    "url": url,
                 }));
             }
         }
@@ -362,6 +378,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
             Ok(x) => x,
             Err(e) => {
                 let keychain_id: Option<String> = jedi::get_opt(&["id"], keychain);
+                warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}", keychain_id.clone().unwrap_or(String::from("<no id>")));
                 evfn("error", &json!({
                     "msg": format!("{}", e),
                     "type": "decrypt",
@@ -443,6 +460,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         let board_id = match jedi::get(&["id"], board) {
             Ok(x) => x,
             Err(e) => {
+                warn!("migrate::decrypt_profile() -- missing board id? weird: {}", e);
                 evfn("error", &json!({
                     "msg": format!("board id not present: {}", e),
                     "type": "decrypt",
@@ -480,6 +498,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 let dec = match decrypt_val(&x, board) {
                     Ok(x) => x,
                     Err(e) => {
+                        warn!("migrate::decrypt_profile() -- cannot decrypt board {}: {}", board_id, e);
                         evfn("error", &json!({
                             "msg": format!("{}", e),
                             "type": "decrypt",
@@ -493,6 +512,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 profiled.boards.push(deep_merge(&mut board.clone(), &dec)?);
             }
             Err(e) => {
+                warn!("migrate::decrypt_profile() -- cannot find key for board {}: {}", board_id, e);
                 evfn("error", &json!({
                     "msg": format!("can't find board key: {}", e),
                     "type": "decrypt",
@@ -508,6 +528,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         let note_id: String = match jedi::get(&["id"], note) {
             Ok(x) => x,
             Err(e) => {
+                warn!("migrate::decrypt_profile() -- missing note id? weird: {}", e);
                 evfn("error", &json!({
                     "msg": format!("note id not present: {}", e),
                     "type": "decrypt",
@@ -523,6 +544,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 let mut dec = match decrypt_val(&note_key, note) {
                     Ok(x) => x,
                     Err(e) => {
+                        warn!("migrate::decrypt_profile() -- cannot decrypt note {}: {}", note_id, e);
                         evfn("error", &json!({
                             "msg": format!("{}", e),
                             "type": "decrypt",
@@ -538,8 +560,9 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                             deep_merge(&mut dec, &json!({"file": filedec}))?;
                         }
                         Err(e) => {
+                            warn!("migrate::decrypt_profile() -- cannot decrypt note {} file meta: {}", note_id, e);
                             evfn("error", &json!({
-                                "msg": format!("cannot decrypt not file meta: {}", e),
+                                "msg": format!("cannot decrypt note file meta: {}", e),
                                 "type": "decrypt",
                                 "subtype": "note",
                                 "item_id": note_id,
@@ -570,6 +593,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                     match jedi::set(&["file", "filedata"], &mut merged_note, &json!({"data": filebase64})) {
                         Ok(_) => {},
                         Err(e) => {
+                            warn!("migrate::decrypt_profile() -- cannot decrypt note {} file: {}", note_id, e);
                             evfn("error", &json!({
                                 "msg": format!("{}", e),
                                 "type": "decrypt",
@@ -582,6 +606,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 profiled.notes.push(merged_note);
             }
             Err(e) => {
+                warn!("migrate::decrypt_profile() -- cannot find key for note {}: {}", note_id, e);
                 evfn("error", &json!({
                     "msg": format!("can't find note key: {}", e),
                     "type": "decrypt",

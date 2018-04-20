@@ -106,6 +106,11 @@ impl Api {
         Ok(())
     }
 
+    /// Grab the auth our of the API object
+    pub fn get_auth(&self) -> Option<String> {
+        self.config.auth.as_ref().map(|x| x.clone())
+    }
+
     /// Write our auth headers into a header collection
     pub fn set_auth_headers(&self, headers: &mut Headers) {
         let auth = self.config.auth.clone();
