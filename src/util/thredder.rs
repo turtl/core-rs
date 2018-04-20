@@ -18,7 +18,10 @@ pub struct Thredder {
 
 impl Thredder {
     /// Create a new thredder
-    pub fn new(name: &str, workers: u32) -> Thredder {
+    pub fn new(name: &str, mut workers: u32) -> Thredder {
+        if workers <= 0 {
+            workers = 1;
+        }
         Thredder {
             name: String::from(name),
             pool: CpuPool::new(workers as usize),
