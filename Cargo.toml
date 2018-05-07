@@ -55,6 +55,9 @@ time = "0.1.35"
 #user32-sys = "*"
 #gdi32-sys = "*"
 
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android-gcc"
+
 [features]
 sqlite-static = ["rusqlite/bundled"]
 panic-on-error = []
