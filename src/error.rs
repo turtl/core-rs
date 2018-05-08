@@ -281,6 +281,7 @@ from_err!(::regex::Error);
 from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
+from_err!(::log::SetLoggerError);
 
 pub type BoxFuture<T, E> = Box<::futures::Future<Item = T, Error = E> + Send>;
 pub type TResult<T> = Result<T, TError>;

@@ -10,11 +10,11 @@ doctest = false				# these annoy me
 
 [dependencies]
 config = { path = "../config" }
-fern = "0.3.5"
+fern = "0.5.5"
 hyper = "0.9.18"
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
-log = "0.3.6"
+log = "0.4.1"
 quick-error = "1.1.0"
 rand = "0.3.18"
 rust-crypto = { path = "rust-crypto" }
