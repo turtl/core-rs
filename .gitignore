@@ -5,4 +5,5 @@ config.yaml
 *.exe
 *.stackdump
 *.un~
+/scripts/cross/
 
