@@ -184,6 +184,10 @@ impl SyncIncoming {
                             }
                         }
                     }
+                    TError::Api(status, msg) => {
+                        self.set_connected(false);
+                        return TErr!(TError::Api(status, msg));
+                    }
                     _ => return Err(e),
                 }
             },
