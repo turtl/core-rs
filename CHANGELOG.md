@@ -1,3 +1,30 @@
+# v0.1.1
+
+Features: 
+
+- Converting to crate type cdylib, which bundles rust-std and makes it so we
+don't have to jump through a bunch of hoops when bundling the app. Also keeps
+the compiled binary size down. This required building a (much-needed) core
+abstraction (cwrap) that loads the core's chared lib and lets us use it from
+Rust (very handy for integration tests, the websocket server, etc).
+- New dispatch command (`app:get-config`) to grab core config.
+- Migration crate is now much more resilient to file download failures.
+- Upgrade to rusqlite 0.13.0.
+- Upgrading logging crates (log/fern) to latest versions (0.4.1/0.5.5). The idea
+was this would fix a linking problem when cross compiling to Android, but it did
+not. Oh well, newer crates are nice!
+
+Fixes:
+
+- Always lowercase username (email) for login/join/etc.
+- Updating some CircleCI routines (including rust 1.25).
+- Fixing auth bug when grabbing files from S3 (or any non-turtl-api source).
+- Fixing bug where Thredder blindly accepts `0` for # pollers (and also upgraded
+num\_cpus crate).
+- Fixing bug where if the API responds but returns an HTTP error, we were not
+marking sync as disconnected. Now, basically anything other than an HTTP 2xx
+will mark us as not syncing.
+
 # v0.1.0
 
 Built the turtl core project.
