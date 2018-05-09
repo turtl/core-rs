@@ -24,6 +24,7 @@ num\_cpus crate).
 - Fixing bug where if the API responds but returns an HTTP error, we were not
 marking sync as disconnected. Now, basically anything other than an HTTP 2xx
 will mark us as not syncing.
+- Adjusting build to exclude some unneeded libraries.
 
 # v0.1.0
 
