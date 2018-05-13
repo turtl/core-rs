@@ -224,14 +224,14 @@ pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
         let config = match config_res {
             Ok(x) => x,
             Err(e) => {
-                println!("turtl_start() -- error: parsing config: {}", e);
+                println!("turtlc_start() -- error: parsing config: {}", e);
                 return -3;
             },
         };
         match init() {
             Ok(_) => (),
             Err(e) => {
-                println!("turtl_start() -- error: init(): {}", e);
+                println!("turtlc_start() -- error: init(): {}", e);
                 return -3;
             },
         }
@@ -241,7 +241,7 @@ pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
             match handle.join() {
                 Ok(_) => (),
                 Err(e) => {
-                    println!("turtl_start() -- error: start().join(): {:?}", e);
+                    println!("turtlc_start() -- error: start().join(): {:?}", e);
                     return -4;
                 },
             }
@@ -251,7 +251,7 @@ pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
     match res {
         Ok(x) => x,
         Err(e) => {
-            println!("turtl_start() -- panic: {:?}", e);
+            println!("turtlc_start() -- panic: {:?}", e);
             return -5;
         },
     }
@@ -262,14 +262,14 @@ pub extern fn turtlc_send(message_bytes: *const u8, message_len: usize) -> i32 {
     let channel: String = match config::get(&["messaging", "reqres"]) {
         Ok(x) => x,
         Err(e) => {
-            error!("turtl_send() -- problem grabbing address (messaging.reqres) from config: {}", e);
+            error!("turtlc_send() -- problem grabbing address (messaging.reqres) from config: {}", e);
             return -5;
         }
     };
     let cstr = match CString::new(format!("{}-core-in", channel)) {
         Ok(x) => x,
         Err(e) => {
-            error!("turtl_send() -- bad channel passed: {}", e);
+            error!("turtlc_send() -- bad channel passed: {}", e);
             return -6;
         }
     };
@@ -284,7 +284,7 @@ fn turtlc_recv_any(non_block: u8, event: u8, msgid_c: *const c_char, len_c: *mut
     let channel: String = match config::get(&["messaging", chan_switch]) {
         Ok(x) => x,
         Err(e) => {
-            error!("turtl_recv() -- problem grabbing address (messaging.reqres) from config: {}", e);
+            error!("turtlc_recv() -- problem grabbing address (messaging.reqres) from config: {}", e);
             return null;
         }
     };
@@ -295,7 +295,7 @@ fn turtlc_recv_any(non_block: u8, event: u8, msgid_c: *const c_char, len_c: *mut
         match cstr_suffix {
             Ok(x) => x,
             Err(e) => {
-                error!("turtl_recv() -- bad suffix given: {}", e);
+                error!("turtlc_recv() -- bad suffix given: {}", e);
                 return null;
             }
         }
@@ -306,7 +306,7 @@ fn turtlc_recv_any(non_block: u8, event: u8, msgid_c: *const c_char, len_c: *mut
     let cstr = match CString::new(channel) {
         Ok(x) => x,
         Err(e) => {
-            error!("turtl_recv() -- bad channel passed: {}", e);
+            error!("turtlc_recv() -- bad channel passed: {}", e);
             return null;
         }
     };
@@ -330,6 +330,145 @@ pub extern fn turtlc_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
 #[no_mangle]
 pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
     carrier::c::carrier_free(msg, len)
+}
+
+// -----------------------------------------------------------------------------
+// our STUPID JAVA API
+// -----------------------------------------------------------------------------
+#[cfg(feature = "build-jni")]
+#[allow(non_snake_case)]
+pub mod android {
+    extern crate jni;
+
+    use super::*;
+    use self::jni::JNIEnv;
+    use self::jni::objects::{JObject, JClass, JString};
+    use self::jni::sys::{jint, jbyteArray};
+    use ::std::ffi::CString;
+    use ::std::slice;
+
+    macro_rules! to_c_string {
+        ($fn:expr, $env:ident, $str:ident, $ret:expr) => {{
+            let rust_string: String = match $env.get_string($str) {
+                Ok(x) => x.into(),
+                Err(e) => {
+                    println!("{} -- error converting config string: {}", $fn, e);
+                    return $ret;
+                }
+            };
+            match CString::new(rust_string) {
+                Ok(x) => x,
+                Err(e) => {
+                    println!("{} -- error converting string to C type: {}", $fn, e);
+                    return $ret;
+                }
+            }
+        }}
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_start(env: JNIEnv, _class: JClass, config: JString) -> jint {
+        let config_cstring = to_c_string!("main::jni::start()", env, config, -5);
+        turtlc_start(config_cstring.as_ptr(), 1)
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_send(env: JNIEnv, _class: JClass, msg: jbyteArray) -> jint {
+        let msg_vec = match env.convert_byte_array(msg) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("main::jni::send() -- failed to convert message to vector: {}", e);
+                return -5;
+            }
+        };
+        turtlc_send(msg_vec.as_ptr(), msg_vec.len())
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_recv(env: JNIEnv, _class: JClass, mid: JString) -> jbyteArray {
+        let null_array = JObject::null().into_inner();
+        let mid_cstring = to_c_string!("main::jni::recv()", env, mid, null_array);
+        let mut len: usize = 0;
+        let raw_len = &mut len as *mut usize;
+        let msg_c = turtlc_recv(0, mid_cstring.as_ptr(), raw_len);
+        if msg_c.is_null() {
+            return null_array;
+        }
+        let slice = slice::from_raw_parts(msg_c, len);
+        let byte_array = match env.byte_array_from_slice(slice) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("main::jni::recv() -- could not convert message to java byte array: {}", e);
+                null_array
+            }
+        };
+        turtlc_free(msg_c, len);
+        byte_array
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_recv_1nb(env: JNIEnv, _class: JClass, mid: JString) -> jbyteArray {
+        let null_array = JObject::null().into_inner();
+        let mid_cstring = to_c_string!("main::jni::recv()", env, mid, null_array);
+        let mut len: usize = 0;
+        let raw_len = &mut len as *mut usize;
+        let msg_c = turtlc_recv(1, mid_cstring.as_ptr(), raw_len);
+        if msg_c.is_null() {
+            return null_array;
+        }
+        let slice = slice::from_raw_parts(msg_c, len);
+        let byte_array = match env.byte_array_from_slice(slice) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("main::jni::recv_nb() -- could not convert message to java byte array: {}", e);
+                null_array
+            }
+        };
+        turtlc_free(msg_c, len);
+        byte_array
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_recv_1event(env: JNIEnv, _class: JClass) -> jbyteArray {
+        let null_array = JObject::null().into_inner();
+        let mut len: usize = 0;
+        let raw_len = &mut len as *mut usize;
+        let msg_c = turtlc_recv_event(0, raw_len);
+        if msg_c.is_null() {
+            return null_array;
+        }
+        let slice = slice::from_raw_parts(msg_c, len);
+        let byte_array = match env.byte_array_from_slice(slice) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("main::jni::recv_event() -- could not convert message to java byte array: {}", e);
+                null_array
+            }
+        };
+        turtlc_free(msg_c, len);
+        byte_array
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_recv_1event_1nb(env: JNIEnv, _class: JClass) -> jbyteArray {
+        let null_array = JObject::null().into_inner();
+        let mut len: usize = 0;
+        let raw_len = &mut len as *mut usize;
+        let msg_c = turtlc_recv_event(1, raw_len);
+        if msg_c.is_null() {
+            return null_array;
+        }
+        let slice = slice::from_raw_parts(msg_c, len);
+        let byte_array = match env.byte_array_from_slice(slice) {
+            Ok(x) => x,
+            Err(e) => {
+                error!("main::jni::recv_event() -- could not convert message to java byte array: {}", e);
+                null_array
+            }
+        };
+        turtlc_free(msg_c, len);
+        byte_array
+    }
 }
 
 #[cfg(test)]
