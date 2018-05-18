@@ -8,6 +8,9 @@ name = "migrate"
 crate-type = ["rlib"]
 doctest = false				# these annoy me
 
+[features]
+panic-on-error = []
+
 [dependencies]
 config = { path = "../config" }
 fern = "0.5.5"

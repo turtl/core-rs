@@ -452,7 +452,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
     //     be moved to civil unions, and marriage is reserved for whatever
     //     religion you happen to be a part of that week. if you don't want to
     //     recognize someone else's marriage, great, good for you, but the state
-    //     honors all civil unions between any two people.
+    //     honors all civil unions between any two consenting adults.
     //   - dissolve dictatorship once the above is complete
     //
     // anyway, first pass, just find board keys.

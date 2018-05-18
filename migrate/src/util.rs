@@ -26,11 +26,11 @@ pub fn create_dir<P: AsRef<Path>>(dir: P) -> MResult<()> {
 pub fn file_folder() -> MResult<String> {
     let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
     if cfg!(test) {
-        return Ok(integration);
+        return Ok(format!("{}/migration", integration));
     }
     let data_folder = config::get::<String>(&["data_folder"])?;
     let file_folder = if data_folder == ":memory:" {
-        integration
+        format!("{}/migration", integration)
     } else {
         format!("{}/migration", data_folder)
     };
