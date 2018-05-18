@@ -23,6 +23,9 @@ lazy_static! {
 pub fn load_config(location: Option<String>) -> TResult<()> {
     let path_env = location
         .unwrap_or(env::var("TURTL_CONFIG_FILE").unwrap_or(String::from("config.yaml")));
+    if path_env == ":null:" {
+        return Ok(())
+    }
     let path = Path::new(&path_env[..]);
     let mut file = File::open(&path)?;
     let mut contents = String::new();
