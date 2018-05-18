@@ -3,6 +3,7 @@
 //! each fing time. Great for integration tests or a websocket wrapper etc etc.
 use ::std::{env, thread, slice, str};
 use ::std::ffi::CString;
+use ::std::time::Duration;
 
 // -----------------------------------------------------------------------------
 // Turtl C wrapper
@@ -14,6 +15,8 @@ extern "C" {
     pub fn turtlc_recv(non_block: u8, msgid: *const ::std::os::raw::c_char, len: *mut usize) -> *const u8;
     pub fn turtlc_recv_event(non_block: u8, len: *mut usize) -> *const u8;
     pub fn turtlc_free(msg: *const u8, len: usize) -> i32;
+    pub fn turtlc_lasterr() -> *mut ::std::os::raw::c_char;
+    pub fn turtlc_free_err(lasterr: *mut ::std::os::raw::c_char) -> i32;
 }
 
 // -----------------------------------------------------------------------------
@@ -37,6 +40,9 @@ pub fn init(app_config: &str) -> thread::JoinHandle<()> {
             panic!("Error running turtl: err {}", ret);
         }
     });
+    // since we're starting our own thread here, we need to wait for the stinkin
+    // core to load its config before we start asking it for stuff.
+    thread::sleep(Duration::from_millis(500));
     handle
 }
 
@@ -61,7 +67,12 @@ pub fn recv(mid: &str) -> String {
     let msg_c = unsafe {
         turtlc_recv(0, mid_c.as_ptr(), raw_len)
     };
-    assert!(!msg_c.is_null());
+    if msg_c.is_null() && len > 0 {
+        match lasterr() {
+            Some(x) => panic!("recv() -- error getting event: {}", x),
+            None => panic!("recv() -- got empty msg and couldn't grab lasterr"),
+        }
+    }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
     let res_str = str::from_utf8(slice).unwrap();
     let ret = String::from(res_str);
@@ -98,7 +109,12 @@ pub fn recv_event() -> String {
     let msg_c = unsafe {
         turtlc_recv_event(0, raw_len)
     };
-    assert!(!msg_c.is_null());
+    if msg_c.is_null() && len > 0 {
+        match lasterr() {
+            Some(x) => panic!("recv_event() -- error getting event: {}", x),
+            None => panic!("recv_event() -- got empty msg and couldn't grab lasterr"),
+        }
+    }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
     let res_str = str::from_utf8(slice).unwrap();
     let ret = String::from(res_str);
@@ -125,5 +141,20 @@ pub fn recv_event_nb() -> Option<String> {
         turtlc_free(msg_c, len);
     }
     Some(ret)
+}
+
+pub fn lasterr() -> Option<String> {
+    let ptr = unsafe { turtlc_lasterr() };
+    if ptr.is_null() {
+        return None;
+    }
+    let cstring = unsafe { CString::from_raw(ptr) };
+    match cstring.into_string() {
+        Ok(x) => Some(x),
+        Err(e) => {
+            println!("lasterr() -- error grabbing last error: {}", e);
+            None
+        }
+    }
 }
 

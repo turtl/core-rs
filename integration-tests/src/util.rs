@@ -93,6 +93,8 @@ pub fn init() -> thread::JoinHandle<()> {
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
+    // load the local config
+    config::load_config(None).unwrap();
     let handle = cwrap::init(r#"{
         "data_folder": ":memory:",
         "integration_tests": {"incoming_sync_timeout": 5},
