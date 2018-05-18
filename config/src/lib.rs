@@ -24,7 +24,10 @@ pub fn load_config(location: Option<String>) -> TResult<()> {
     let path_env = location
         .unwrap_or(env::var("TURTL_CONFIG_FILE").unwrap_or(String::from("config.yaml")));
     if path_env == ":null:" {
-        return Ok(())
+        let mut config_guard = (*CONFIG).write().unwrap();
+        *config_guard = json!({});
+        drop(config_guard);
+        return Ok(());
     }
     let path = Path::new(&path_env[..]);
     let mut file = File::open(&path)?;
