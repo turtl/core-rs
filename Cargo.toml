@@ -16,7 +16,7 @@ doctest = false				# these annoy me
 [features]
 sqlite-static = ["rusqlite/bundled"]
 build-jni = ["jni"]
-panic-on-error = []
+panic-on-error = ["migrate/panic-on-error"]
 public-api-tests = []
 
 [dependencies]
