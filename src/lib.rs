@@ -61,6 +61,7 @@ use ::error::TResult;
 
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
+    info!("main::init() -- init with user config {}", config_str);
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
         Err(e) => {
@@ -70,6 +71,8 @@ pub fn init(config_str: String) -> TResult<()> {
     };
     let config_location: Option<String> = jedi::get_opt(&["config_file"], &runtime_config);
     config::load_config(config_location)?;
+    // lay our runtime config over our config file
+    config::merge(&runtime_config)?;
     match util::logger::setup_logger() {
         Ok(_) => {}
         Err(e) => {
@@ -77,21 +80,6 @@ pub fn init(config_str: String) -> TResult<()> {
             return TErr!(toterr!(e));
         }
     };
-    Ok(())
-}
-
-/// This takes a JSON-encoded object, and parses out the values we care about,
-/// and populates them into our app-wide config (overwriting any values we may
-/// have set in config.yaml).
-fn process_runtime_config(config_str: String) -> TResult<()> {
-    let runtime_config: Value = match jedi::parse(&config_str) {
-        Ok(x) => x,
-        Err(e) => {
-            error!("Problem parsing runtime config: {}", e);
-            json!({})
-        }
-    };
-    config::merge(&runtime_config)?;
     Ok(())
 }
 
@@ -106,11 +94,8 @@ fn process_runtime_config(config_str: String) -> TResult<()> {
 /// NOTE: we copy the runtime config into our main config, overwriting any of
 /// those keys that exist in the config.yaml (app config). this gives the entire
 /// app access to our runtime config.
-pub fn start(config_str: String) -> thread::JoinHandle<()> {
-    info!("main::start() -- init with user config {}", config_str);
-    // load our configuration
-    process_runtime_config(config_str).unwrap();
-
+pub fn start() -> thread::JoinHandle<()> {
+    info!("main::start() -- begin");
     let handle = thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
             let data_folder = config::get::<String>(&["data_folder"])?;
@@ -267,7 +252,7 @@ pub mod c_api {
                 },
             }
 
-            let handle = start(String::from(&config[..]));
+            let handle = start();
             if threaded == 0 {
                 match handle.join() {
                     Ok(_) => (),
