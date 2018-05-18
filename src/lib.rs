@@ -546,7 +546,7 @@ pub mod android {
                     Ok(x) => x.into_inner(),
                     Err(_) => null_err,
                 };
-                unsafe { c_api::turtlc_free_err(err_c); }
+                c_api::turtlc_free_err(err_c);
                 return javastr;
             }
         };
@@ -558,7 +558,7 @@ pub mod android {
                     Ok(x) => x.into_inner(),
                     Err(_) => null_err,
                 };
-                unsafe { c_api::turtlc_free_err(err_c); }
+                c_api::turtlc_free_err(err_c);
                 javastr
             }
         }
