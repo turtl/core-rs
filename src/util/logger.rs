@@ -18,12 +18,13 @@ pub fn setup_logger() -> TResult<()> {
         "info" => log::LevelFilter::Info,
         "debug" => log::LevelFilter::Debug,
         "trace" => log::LevelFilter::Trace,
+        "off" => log::LevelFilter::Off,
         _ => {
-            println!("turtl: config: bad `loglevel` value (\"{}\"), defaulting to \"warn\"", levelstr);
+            println!("setup_logger() -- bad `loglevel` value (\"{}\"), defaulting to \"warn\"", levelstr);
             log::LevelFilter::Warn
         }
     };
-    fern::Dispatch::new()
+    let config = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{}[{}][{}] {}",
@@ -34,8 +35,13 @@ pub fn setup_logger() -> TResult<()> {
             ))
         })
         .level(level)
-        .chain(std::io::stdout())
-        .apply()?;
+        .chain(std::io::stdout());
+    match config.apply() {
+        Ok(_) => {}
+        Err(e) => {
+            trace!("setup_logger() -- looks like the logger was already init: {}", e);
+        }
+    }
     Ok(())
 }
 

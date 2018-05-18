@@ -55,6 +55,7 @@ pub extern fn carrier_recv(channel_c: *const c_char, len_c: *mut usize) -> *cons
         },
         Err(e) => {
             println!("carrier: recv: error: {}", e);
+            unsafe { *len_c = 1; }
             return null;
         },
     }
@@ -91,6 +92,7 @@ pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut usize) -> *c
         },
         Err(e) => {
             println!("carrier: recv_nb: error: {}", e);
+            unsafe { *len_c = 1; }
             return null;
         },
     }

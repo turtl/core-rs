@@ -54,21 +54,30 @@ mod turtl;
 
 use ::std::thread;
 use ::std::sync::Arc;
-use ::std::os::raw::c_char;
-use ::std::ptr;
-use ::std::ffi::{CStr, CString};
-use ::std::panic;
 
 use ::jedi::Value;
 
 use ::error::TResult;
 
 /// Init any state/logging/etc the app needs
-pub fn init() -> TResult<()> {
+pub fn init(config_str: String) -> TResult<()> {
+    let runtime_config: Value = match jedi::parse(&config_str) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Problem parsing runtime config: {}", e);
+            json!({})
+        }
+    };
+    let config_location: Option<String> = jedi::get_opt(&["config_file"], &runtime_config);
+    config::load_config(config_location)?;
     match util::logger::setup_logger() {
-        Ok(..) => Ok(()),
-        Err(e) => Err(toterr!(e)),
-    }
+        Ok(_) => {}
+        Err(e) => {
+            println!("Problem setting up logging: {}", e);
+            return TErr!(toterr!(e));
+        }
+    };
+    Ok(())
 }
 
 /// This takes a JSON-encoded object, and parses out the values we care about,
@@ -214,122 +223,173 @@ pub fn recv_event_nb() -> TResult<Option<String>> {
 // -----------------------------------------------------------------------------
 // our C api
 // -----------------------------------------------------------------------------
+pub mod c_api {
+    use super::*;
+    use ::std::os::raw::c_char;
+    use ::std::ptr;
+    use ::std::ffi::{CStr, CString};
+    use ::std::panic;
+    use ::carrier;
+    use ::config;
+    use ::std::sync::RwLock;
 
-/// Start Turtl
-#[no_mangle]
-pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
-    let res = panic::catch_unwind(|| -> i32 {
-        if config_c.is_null() { return -1; }
-        let config_res = unsafe { CStr::from_ptr(config_c).to_str() };
-        let config = match config_res {
-            Ok(x) => x,
-            Err(e) => {
-                println!("turtlc_start() -- error: parsing config: {}", e);
-                return -3;
-            },
-        };
-        match init() {
-            Ok(_) => (),
-            Err(e) => {
-                println!("turtlc_start() -- error: init(): {}", e);
-                return -3;
-            },
-        }
+    lazy_static! {
+        static ref LAST_ERR: RwLock<Option<String>> = RwLock::new(None);
+    }
 
-        let handle = start(String::from(&config[..]));
-        if threaded == 0 {
-            match handle.join() {
+    macro_rules! cerror {
+        ($( $arg:tt ),* ) => {{
+            println!($( $arg ),*);
+            let errstr = format!($( $arg ),*);
+            let mut guard = lockw!(*LAST_ERR);
+            *guard = Some(errstr);
+            drop(guard);
+        }}
+    }
+
+    #[no_mangle]
+    pub extern fn turtlc_start(config_c: *const c_char, threaded: u8) -> i32 {
+        let res = panic::catch_unwind(|| -> i32 {
+            if config_c.is_null() { return -1; }
+            let config_res = unsafe { CStr::from_ptr(config_c).to_str() };
+            let config = match config_res {
+                Ok(x) => x,
+                Err(e) => {
+                    cerror!("turtlc_start() -- error: parsing config: {}", e);
+                    return -3;
+                },
+            };
+            match init(String::from(&config[..])) {
                 Ok(_) => (),
                 Err(e) => {
-                    println!("turtlc_start() -- error: start().join(): {:?}", e);
-                    return -4;
+                    cerror!("turtlc_start() -- error: init(): {}", e);
+                    return -3;
                 },
             }
-        }
-        0
-    });
-    match res {
-        Ok(x) => x,
-        Err(e) => {
-            println!("turtlc_start() -- panic: {:?}", e);
-            return -5;
-        },
-    }
-}
 
-#[no_mangle]
-pub extern fn turtlc_send(message_bytes: *const u8, message_len: usize) -> i32 {
-    let channel: String = match config::get(&["messaging", "reqres"]) {
-        Ok(x) => x,
-        Err(e) => {
-            error!("turtlc_send() -- problem grabbing address (messaging.reqres) from config: {}", e);
-            return -5;
-        }
-    };
-    let cstr = match CString::new(format!("{}-core-in", channel)) {
-        Ok(x) => x,
-        Err(e) => {
-            error!("turtlc_send() -- bad channel passed: {}", e);
-            return -6;
-        }
-    };
-    carrier::c::carrier_send(cstr.as_ptr(), message_bytes, message_len)
-}
-
-fn turtlc_recv_any(non_block: u8, event: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
-    let null = ptr::null_mut();
-    let non_block = non_block == 1;
-    let is_ev = event == 1;
-    let chan_switch = if is_ev { "events" } else { "reqres" };
-    let channel: String = match config::get(&["messaging", chan_switch]) {
-        Ok(x) => x,
-        Err(e) => {
-            error!("turtlc_recv() -- problem grabbing address (messaging.reqres) from config: {}", e);
-            return null;
-        }
-    };
-    let suffix = if msgid_c.is_null() {
-        ""
-    } else {
-        let cstr_suffix = unsafe { CStr::from_ptr(msgid_c).to_str() };
-        match cstr_suffix {
+            let handle = start(String::from(&config[..]));
+            if threaded == 0 {
+                match handle.join() {
+                    Ok(_) => (),
+                    Err(e) => {
+                        cerror!("turtlc_start() -- error: start().join(): {:?}", e);
+                        return -4;
+                    },
+                }
+            }
+            0
+        });
+        match res {
             Ok(x) => x,
             Err(e) => {
-                error!("turtlc_recv() -- bad suffix given: {}", e);
+                cerror!("turtlc_start() -- panic: {:?}", e);
+                return -5;
+            },
+        }
+    }
+
+    #[no_mangle]
+    pub extern fn turtlc_send(message_bytes: *const u8, message_len: usize) -> i32 {
+        let channel: String = match config::get(&["messaging", "reqres"]) {
+            Ok(x) => x,
+            Err(e) => {
+                cerror!("turtlc_send() -- problem grabbing address (messaging.reqres) from config: {}", e);
+                return -5;
+            }
+        };
+        let cstr = match CString::new(format!("{}-core-in", channel)) {
+            Ok(x) => x,
+            Err(e) => {
+                cerror!("turtlc_send() -- bad channel passed: {}", e);
+                return -6;
+            }
+        };
+        carrier::c::carrier_send(cstr.as_ptr(), message_bytes, message_len)
+    }
+
+    fn turtlc_recv_any(non_block: u8, event: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
+        let null = ptr::null_mut();
+        let non_block = non_block == 1;
+        let is_ev = event == 1;
+        let chan_switch = if is_ev { "events" } else { "reqres" };
+        let channel: String = match config::get(&["messaging", chan_switch]) {
+            Ok(x) => x,
+            Err(e) => {
+                cerror!("turtlc_recv() -- problem grabbing address (messaging.reqres) from config: {}", e);
+                unsafe { *len_c = 1; }
                 return null;
             }
+        };
+        let suffix = if msgid_c.is_null() {
+            ""
+        } else {
+            let cstr_suffix = unsafe { CStr::from_ptr(msgid_c).to_str() };
+            match cstr_suffix {
+                Ok(x) => x,
+                Err(e) => {
+                    cerror!("turtlc_recv() -- bad suffix given: {}", e);
+                    unsafe { *len_c = 1; }
+                    return null;
+                }
+            }
+        };
+        let suffix = if suffix == "" { String::from("") } else { format!(":{}", suffix) };
+        let append = if is_ev { "" } else { "-core-out" };
+        let channel = format!("{}{}{}", channel, append, suffix);
+        let cstr = match CString::new(channel) {
+            Ok(x) => x,
+            Err(e) => {
+                cerror!("turtlc_recv() -- bad channel passed: {}", e);
+                unsafe { *len_c = 1; }
+                return null;
+            }
+        };
+        if non_block {
+            carrier::c::carrier_recv_nb(cstr.as_ptr(), len_c)
+        } else {
+            carrier::c::carrier_recv(cstr.as_ptr(), len_c)
         }
-    };
-    let suffix = if suffix == "" { String::from("") } else { format!(":{}", suffix) };
-    let append = if is_ev { "" } else { "-core-out" };
-    let channel = format!("{}{}{}", channel, append, suffix);
-    let cstr = match CString::new(channel) {
-        Ok(x) => x,
-        Err(e) => {
-            error!("turtlc_recv() -- bad channel passed: {}", e);
-            return null;
-        }
-    };
-    if non_block {
-        carrier::c::carrier_recv_nb(cstr.as_ptr(), len_c)
-    } else {
-        carrier::c::carrier_recv(cstr.as_ptr(), len_c)
     }
-}
 
-#[no_mangle]
-pub extern fn turtlc_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
-    turtlc_recv_any(non_block, 0, msgid_c, len_c)
-}
+    #[no_mangle]
+    pub extern fn turtlc_recv(non_block: u8, msgid_c: *const c_char, len_c: *mut usize) -> *const u8 {
+        turtlc_recv_any(non_block, 0, msgid_c, len_c)
+    }
 
-#[no_mangle]
-pub extern fn turtlc_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
-    turtlc_recv_any(non_block, 1, ptr::null(), len_c)
-}
+    #[no_mangle]
+    pub extern fn turtlc_recv_event(non_block: u8, len_c: *mut usize) -> *const u8 {
+        turtlc_recv_any(non_block, 1, ptr::null(), len_c)
+    }
 
-#[no_mangle]
-pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
-    carrier::c::carrier_free(msg, len)
+    #[no_mangle]
+    pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
+        carrier::c::carrier_free(msg, len)
+    }
+
+    #[no_mangle]
+    pub extern fn turtlc_lasterr() -> *mut c_char {
+        let errstr_guard = lockr!(*LAST_ERR);
+        static GENERIC_ERR: &'static str = "turtlc_lasterr() -- cannot grab last error (perhaps the string has a null?)";
+        match errstr_guard.as_ref() {
+            Some(errstr) => {
+                match CString::new(String::from(errstr.as_str())) {
+                    Ok(x) => x.into_raw(),
+                    Err(_) => {
+                        let cerr = CString::new(GENERIC_ERR)
+                            .expect("turtlc_lasterr() -- could not convert c string to &str");
+                        return cerr.into_raw();
+                    }
+                }
+            }
+            None => ptr::null_mut(),
+        }
+    }
+
+    #[no_mangle]
+    pub extern fn turtlc_free_err(lasterr: *mut c_char) -> i32 {
+        unsafe { CString::from_raw(lasterr) };
+        0
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -343,8 +403,8 @@ pub mod android {
     use super::*;
     use self::jni::JNIEnv;
     use self::jni::objects::{JObject, JClass, JString};
-    use self::jni::sys::{jint, jbyteArray};
-    use ::std::ffi::CString;
+    use self::jni::sys::{jint, jbyteArray, jstring};
+    use ::std::ffi::{CString, CStr};
     use ::std::slice;
 
     macro_rules! to_c_string {
@@ -368,8 +428,8 @@ pub mod android {
 
     #[no_mangle]
     pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_start(env: JNIEnv, _class: JClass, config: JString) -> jint {
-        let config_cstring = to_c_string!("main::jni::start()", env, config, -5);
-        turtlc_start(config_cstring.as_ptr(), 1)
+        let config_cstring = to_c_string!("main::jni::start()", env, config, -6);
+        c_api::turtlc_start(config_cstring.as_ptr(), 1)
     }
 
     #[no_mangle]
@@ -378,10 +438,10 @@ pub mod android {
             Ok(x) => x,
             Err(e) => {
                 error!("main::jni::send() -- failed to convert message to vector: {}", e);
-                return -5;
+                return -6;
             }
         };
-        turtlc_send(msg_vec.as_ptr(), msg_vec.len())
+        c_api::turtlc_send(msg_vec.as_ptr(), msg_vec.len())
     }
 
     #[no_mangle]
@@ -390,7 +450,7 @@ pub mod android {
         let mid_cstring = to_c_string!("main::jni::recv()", env, mid, null_array);
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
-        let msg_c = turtlc_recv(0, mid_cstring.as_ptr(), raw_len);
+        let msg_c = c_api::turtlc_recv(0, mid_cstring.as_ptr(), raw_len);
         if msg_c.is_null() {
             return null_array;
         }
@@ -402,7 +462,7 @@ pub mod android {
                 null_array
             }
         };
-        turtlc_free(msg_c, len);
+        c_api::turtlc_free(msg_c, len);
         byte_array
     }
 
@@ -412,7 +472,7 @@ pub mod android {
         let mid_cstring = to_c_string!("main::jni::recv()", env, mid, null_array);
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
-        let msg_c = turtlc_recv(1, mid_cstring.as_ptr(), raw_len);
+        let msg_c = c_api::turtlc_recv(1, mid_cstring.as_ptr(), raw_len);
         if msg_c.is_null() {
             return null_array;
         }
@@ -424,7 +484,7 @@ pub mod android {
                 null_array
             }
         };
-        turtlc_free(msg_c, len);
+        c_api::turtlc_free(msg_c, len);
         byte_array
     }
 
@@ -433,7 +493,7 @@ pub mod android {
         let null_array = JObject::null().into_inner();
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
-        let msg_c = turtlc_recv_event(0, raw_len);
+        let msg_c = c_api::turtlc_recv_event(0, raw_len);
         if msg_c.is_null() {
             return null_array;
         }
@@ -445,7 +505,7 @@ pub mod android {
                 null_array
             }
         };
-        turtlc_free(msg_c, len);
+        c_api::turtlc_free(msg_c, len);
         byte_array
     }
 
@@ -454,7 +514,7 @@ pub mod android {
         let null_array = JObject::null().into_inner();
         let mut len: usize = 0;
         let raw_len = &mut len as *mut usize;
-        let msg_c = turtlc_recv_event(1, raw_len);
+        let msg_c = c_api::turtlc_recv_event(1, raw_len);
         if msg_c.is_null() {
             return null_array;
         }
@@ -466,8 +526,42 @@ pub mod android {
                 null_array
             }
         };
-        turtlc_free(msg_c, len);
+        c_api::turtlc_free(msg_c, len);
         byte_array
+    }
+
+    #[no_mangle]
+    pub unsafe extern fn Java_com_lyonbros_turtlcore_TurtlCoreNative_lasterr(env: JNIEnv, _class: JClass) -> jstring {
+        let err_c = c_api::turtlc_lasterr();
+        let null_err = JObject::null().into_inner();
+        if err_c.is_null() {
+            return null_err;
+        }
+        let cstr = CStr::from_ptr(err_c);
+        let errstr = match cstr.to_str() {
+            Ok(x) => x,
+            Err(e) => {
+                println!("main::jni::lasterr() -- problem converting last error string to Java string: {}", e);
+                let javastr = match env.new_string(String::from("main::jni::lasterr() -- error grabbing last error (utf8 problem maybe?)")) {
+                    Ok(x) => x.into_inner(),
+                    Err(_) => null_err,
+                };
+                unsafe { c_api::turtlc_free_err(err_c); }
+                return javastr;
+            }
+        };
+        match env.new_string(String::from(errstr)) {
+            Ok(x) => x.into_inner(),
+            Err(e) => {
+                println!("main::jni::lasterr() -- problem converting last error string to Java string: {}", e);
+                let javastr = match env.new_string(String::from("main::jni::lasterr() -- error grabbing last error (utf8 problem maybe?)")) {
+                    Ok(x) => x.into_inner(),
+                    Err(_) => null_err,
+                };
+                unsafe { c_api::turtlc_free_err(err_c); }
+                javastr
+            }
+        }
     }
 }
 

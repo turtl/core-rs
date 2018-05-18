@@ -30,10 +30,10 @@ extern "C" {
 TURTL_EXPORT int32_t TURTL_CONV turtlc_start(const char*, uint8_t);
 
 // -----------------------------------------------------------------------------
-// turtlc_send(message_bytes, message_len) -> i32
-//   message_bytes:
+// turtlc_send(msg_bytes, msg_len) -> i32
+//   msg_bytes:
 //     a pointer to a block of u8 binary data holding a message to turtl
-//   message_len:
+//   msg_len:
 //     the length in bytes of `message_bytes`
 //   -> returns 0 on success
 // -----------------------------------------------------------------------------
@@ -65,6 +65,9 @@ TURTL_EXPORT int32_t TURTL_CONV turtlc_send(const uint8_t*, size_t);
 // -----------------------------------------------------------------------------
 // Receive a response from the core. This will always be a response to a message
 // that was sent with `turtlc_send()`.
+//
+// Note that if a null message is returned but msg_len > 0, this indicates an
+// error occurred.
 TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*);
 
 // -----------------------------------------------------------------------------
@@ -82,6 +85,9 @@ TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*
 // because you can have many (or none) while the core is processing a command.
 // Events are used to notify the UI of certain stages of execution being
 // completed or certain conditions being met.
+//
+// Note that if a null message is returned but msg_len > 0, this indicates an
+// error occurred.
 TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv_event(uint8_t, size_t*);
 
 // -----------------------------------------------------------------------------
@@ -97,6 +103,27 @@ TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv_event(uint8_t, size_t*);
 // messages to you. You must free these messages when you are done with them
 // by calling `turtlc_free()` on them.
 TURTL_EXPORT int32_t TURTL_CONV turtlc_free(const uint8_t*, size_t);
+
+// -----------------------------------------------------------------------------
+// turtlc_lasterr() -> char*
+//   -> returns a pointer to a null-terminated string of the last error that
+//      occurred (null if no error). Must be freed via `turtlc_free_err`
+// -----------------------------------------------------------------------------
+// Grab the last error that occurred. This is usually used during initialization
+// of the core, and is especially handy when working with platforms that gobble
+// STDOUT (since initialization errors will also be logged). Mainly, you'd call
+// this after getting a non-zero from `turtlc_start()`/`turtlc_send()`, or if
+// `turtlc_recv()`/`turtlc_recv_event()` return a null with an msg_len > 0.
+TURTL_EXPORT char* TURTL_CONV turtlc_lasterr();
+
+// -----------------------------------------------------------------------------
+// turtlc_free_err(lasterr) -> i32
+//   lasterr:
+//     a pointer to an error message returned from `turtlc_lasterr()`
+//   -> returns 0 on success
+// -----------------------------------------------------------------------------
+// Free an error string returned from `turtlc_lasterr()`.
+TURTL_EXPORT int32_t TURTL_CONV turtlc_free_err(char*);
 
 #ifdef __cplusplus
 }		// extern "C" { ... }
