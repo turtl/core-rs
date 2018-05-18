@@ -1,5 +1,7 @@
 # v0.1.1
 
+This is a pre-v0.7 maintenance release.
+
 Features: 
 
 - Converting to crate type cdylib, which bundles rust-std and makes it so we
@@ -13,6 +15,15 @@ Rust (very handy for integration tests, the websocket server, etc).
 - Upgrading logging crates (log/fern) to latest versions (0.4.1/0.5.5). The idea
 was this would fix a linking problem when cross compiling to Android, but it did
 not. Oh well, newer crates are nice!
+- Adding JNI export for java apps (android, mainly, but others should be able to
+take advantage)
+- Adding logging of errors in `turtlc_*` functions, and new function to return
+the last error: `turtlc_lasterr` (see [turtl\_core.h](https://github.com/turtl/core-rs/blob/master/include/turtl_core.h))
+and also `turtlc_free_err`. adding JNI wrapper around this API.
+- Updating `turtlc_recv[_event]` functions to set msglen = 1 if an error occurs.
+- Changing the way global config is loaded, so it can be more customized (and
+also allowed setting the config file via runtime config via the `config_file`
+key).
 
 Fixes:
 
@@ -25,6 +36,9 @@ num\_cpus crate).
 marking sync as disconnected. Now, basically anything other than an HTTP 2xx
 will mark us as not syncing.
 - Adjusting build to exclude some unneeded libraries.
+- Merging [rust-crypto#384](https://github.com/DaGenix/rust-crypto/pull/384) to
+fix an android build issue (aarch64).
+- Migration data path fix
 
 # v0.1.0
 
