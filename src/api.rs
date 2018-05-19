@@ -220,6 +220,10 @@ impl Api {
                 trace!("  api::call() -- body: {}", out);
                 out
             })
+            .map_err(|err| {
+                warn!("api::call() -- call error: {}", err);
+                err
+            })
             .and_then(|out| {
                 jedi::parse(&out).map_err(|e| {
                     warn!("api::call() -- JSON parse error: {}", out);
