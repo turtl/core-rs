@@ -15,7 +15,7 @@ messaging:
   #
   # if this is false, the responses will come back on "turtl-req" and each
   # response message will have a message id you can use to match.
-  reqres_append_mid: true
+  reqres_append_mid: false
 
 # override w/ runtime config! on desktop this should be a subfolder in the user
 # folder. in android it should be the location of the app's data folder.
@@ -30,7 +30,7 @@ logging:
   # log rotation, only applies if `logging.file` is set
   rotation:
     keep: 3
-    size: 10485760
+    size: 1048576
 
 api:
   endpoint: "https://api.turtlapp.com/v3"
