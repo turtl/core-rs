@@ -54,6 +54,7 @@ mod turtl;
 
 use ::std::thread;
 use ::std::sync::Arc;
+use ::std::env;
 
 use ::jedi::Value;
 
@@ -70,9 +71,14 @@ pub fn init(config_str: String) -> TResult<()> {
         }
     };
     let config_location: Option<String> = jedi::get_opt(&["config_file"], &runtime_config);
+    let openssl_cert_file: Option<String> = jedi::get_opt(&["openssl_cert_file"], &runtime_config);
     config::load_config(config_location)?;
     // lay our runtime config over our config file
     config::merge(&runtime_config)?;
+
+    if let Some(cert) = openssl_cert_file {
+        env::set_var("SSL_CERT_FILE", cert);
+    }
 
     // create our data_folder
     let data_folder = config::get::<String>(&["data_folder"])?;
