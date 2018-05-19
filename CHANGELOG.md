@@ -24,6 +24,10 @@ and also `turtlc_free_err`. adding JNI wrapper around this API.
 - Changing the way global config is loaded, so it can be more customized (and
 also allowed setting the config file via runtime config via the `config_file`
 key).
+- can now log to a file, as well as plain old STDOUT. this is going to be more
+than helpful once Turtl is out in the wild...i can just have people send me
+their log file and pick through it. log file is rotated by size via params set
+in the config. very nice/handy.
 
 Fixes:
 
