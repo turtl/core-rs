@@ -28,6 +28,11 @@ key).
 than helpful once Turtl is out in the wild...i can just have people send me
 their log file and pick through it. log file is rotated by size via params set
 in the config. very nice/handy.
+- ability to set openssl root cert file by config param. useful for android,
+which COMPLETELY SCREWS UP THE CERT STORE. yet another hurdle android is tossing
+my way. this config param sets the `SSL_CERT_FILE` env var, which thankfully
+really does work, provided you also create the file via your frontend in the
+android app (ugh).
 
 Fixes:
 
