@@ -1,6 +1,4 @@
 ---
-loglevel: "info"
-
 # set to `true` if you want errors to be wrapped in an object that includes the
 # file/line number. nice for testing, probably annoying when actually using the
 # core
@@ -22,6 +20,17 @@ messaging:
 # override w/ runtime config! on desktop this should be a subfolder in the user
 # folder. in android it should be the location of the app's data folder.
 data_folder: '/tmp/turtl'
+
+# logging configuration
+logging:
+  # the log level (ignore all messages with a log level lower than this)
+  level: 'info'
+  # the file to log to. if missing, logging will just be stdout
+  file: 'core.log'
+  # log rotation, only applies if `logging.file` is set
+  rotation:
+    keep: 3
+    size: 10485760
 
 api:
   endpoint: "https://api.turtlapp.com/v3"

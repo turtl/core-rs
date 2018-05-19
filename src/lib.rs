@@ -73,6 +73,14 @@ pub fn init(config_str: String) -> TResult<()> {
     config::load_config(config_location)?;
     // lay our runtime config over our config file
     config::merge(&runtime_config)?;
+
+    // create our data_folder
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    if data_folder != ":memory:" {
+        util::create_dir(&data_folder)?;
+    }
+
+    // set up the logger now that we have our config and data folder set up
     match util::logger::setup_logger() {
         Ok(_) => {}
         Err(e) => {
@@ -80,6 +88,13 @@ pub fn init(config_str: String) -> TResult<()> {
             return TErr!(toterr!(e));
         }
     };
+    // log this AFTER the logger is set up! note that we need the data_folder to
+    // exist before we set up logging, so this is why things are in this order
+    // (in case the logger wants to use a logfile, which by default lives in the
+    // data_folder).
+    if data_folder != ":memory:" {
+        info!("main::init() -- created data folder: {}", data_folder);
+    }
     Ok(())
 }
 
@@ -98,12 +113,6 @@ pub fn start() -> thread::JoinHandle<()> {
     info!("main::start() -- begin");
     let handle = thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
-            let data_folder = config::get::<String>(&["data_folder"])?;
-            if data_folder != ":memory:" {
-                util::create_dir(&data_folder)?;
-                info!("main::start() -- created data folder: {}", data_folder);
-            }
-
             // create our turtl object
             let turtl = Arc::new(turtl::Turtl::new()?);
 
@@ -224,7 +233,11 @@ pub mod c_api {
 
     macro_rules! cerror {
         ($( $arg:tt ),* ) => {{
-            println!($( $arg ),*);
+            if util::logger::has_init() {
+                error!($( $arg ),*);
+            } else {
+                println!($( $arg ),*);
+            }
             let errstr = format!($( $arg ),*);
             let mut guard = lockw!(*LAST_ERR);
             *guard = Some(errstr);
@@ -395,7 +408,13 @@ pub mod android {
     macro_rules! to_c_string {
         ($fn:expr, $env:ident, $str:ident, $ret:expr) => {{
             let rust_string: String = match $env.get_string($str) {
-                Ok(x) => x.into(),
+                Ok(x) => {
+                    if x.get_raw().is_null() {
+                        String::from("")
+                    } else {
+                        x.into()
+                    }
+                }
                 Err(e) => {
                     println!("{} -- error converting config string: {}", $fn, e);
                     return $ret;
