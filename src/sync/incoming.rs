@@ -179,6 +179,7 @@ impl SyncIncoming {
                         match io.kind() {
                             ErrorKind::TimedOut => return Ok(()),
                             _ => {
+                                warn!("SyncIncoming.sync_from_api() -- unknown IO error kind: {:?}", io.kind());
                                 self.set_connected(false);
                                 return TErr!(TError::Io(io));
                             }
