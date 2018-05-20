@@ -125,7 +125,7 @@ pub fn gen_key(password: &[u8], salt: &[u8], cpu: usize, mem: usize) -> CResult<
 pub mod chacha20poly1305 {
     //! Our chacha20poly1305 wrapper.
 
-    use ::sodiumoxide::crypto::aead::chacha20poly1305 as aead;
+    use ::sodiumoxide::crypto::aead::chacha20poly1305_ietf as aead;
     use ::crypto::{CResult, CryptoError};
 
     /// Get the key length for chacha20poly1305
@@ -158,7 +158,7 @@ pub mod chacha20poly1305 {
             Some(x) => x,
             None => return Err(CryptoError::BadData(format!("crypto::low::encrypt() -- bad nonce given"))),
         };
-        Ok(aead::encrypt(plaintext, auth, &nonce_wrap, &key_wrap))
+        Ok(aead::seal(plaintext, Some(auth), &nonce_wrap, &key_wrap))
     }
 
     /// Decrypt data using chacha20poly1305
@@ -171,7 +171,7 @@ pub mod chacha20poly1305 {
             Some(x) => x,
             None => return Err(CryptoError::BadData(format!("crypto::low::decrypt() -- bad nonce given"))),
         };
-        match aead::decrypt(ciphertext, auth, &nonce_wrap, &key_wrap) {
+        match aead::open(ciphertext, Some(auth), &nonce_wrap, &key_wrap) {
             Ok(x) => Ok(x),
             Err(_) => Err(CryptoError::Authentication(format!("crypto::low::decrypt() -- authentication failed while decrypting"))),
         }
