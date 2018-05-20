@@ -33,6 +33,12 @@ which COMPLETELY SCREWS UP THE CERT STORE. yet another hurdle android is tossing
 my way. this config param sets the `SSL_CERT_FILE` env var, which thankfully
 really does work, provided you also create the file via your frontend in the
 android app (ugh).
+- removing bundled sodiumoxide (with unmerged aead exports) and swapping in
+published 0.0.16 version. this is mainly because the bundled version only ran
+against libsodium v1.0.12, but 1.0.12 has a bug in arm64 which makes the pwhash
+spit out incorrect keys (breaking turtl logins on android). decided to just go
+in and upgrade everything sodium-related, turned out to me much easier than I
+thought it'd be.
 
 Fixes:
 
