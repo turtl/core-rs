@@ -178,8 +178,12 @@ impl SyncIncoming {
                     TError::Io(io) => {
                         match io.kind() {
                             ErrorKind::TimedOut => return Ok(()),
+                            // android throws this at us quite often, would
+                            // be nice to know why, but for now going to just
+                            // ignore it.
+                            ErrorKind::WouldBlock => return Ok(()),
                             _ => {
-                                warn!("SyncIncoming.sync_from_api() -- unknown IO error kind: {:?}", io.kind());
+                                info!("SyncIncoming.sync_from_api() -- unknown IO error kind: {:?}", io.kind());
                                 self.set_connected(false);
                                 return TErr!(TError::Io(io));
                             }
