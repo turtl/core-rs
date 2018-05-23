@@ -116,6 +116,7 @@ jobs:
       - run: |
           cd integration-tests
           mkdir -p /tmp/turtl/integration
+          ls -al ../config.yaml
           make \
             RUST_BACKTRACE=1 \
             TURTL_LOGLEVEL=info \
