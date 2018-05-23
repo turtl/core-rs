@@ -1,7 +1,7 @@
 //! Low-level crypto primitives/modules.
 
-use ::serialize::hex::{ToHex, FromHex};
-use ::serialize::base64::{self, ToBase64, FromBase64};
+use ::hex;
+use ::base64;
 use ::sodiumoxide;
 use ::sodiumoxide::crypto::hash;
 use ::sodiumoxide::crypto::auth as sodium_auth;
@@ -31,24 +31,23 @@ pub fn sha512(data: &[u8]) -> CResult<Vec<u8>> {
 
 /// Convert a byte array into a hex string
 pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
-    Ok(data[..].to_hex())
+    Ok(hex::encode(data))
 }
 
 /// Convert a hex string to a u8 vector.
 #[allow(dead_code)]
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
-    Ok(data.from_hex()?)
+    Ok(hex::decode(data)?)
 }
 
 /// Convert a u8 vector of binary data inot a base64 string.
 pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
-    Ok(data[..].to_base64(base64::STANDARD))
+    Ok(base64::encode(data))
 }
 
 /// Convert a base64 string to a vector of u8 data.
 pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
-    data.from_base64()
-        .map_err(|e| CryptoError::Msg(format!("crypto::low::from_base64() -- {}", e)))
+    Ok(base64::decode(data)?)
 }
 
 /// Given a key (password/secret) and a set of data, run an HMAC-SHA512256 and

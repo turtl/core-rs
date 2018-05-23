@@ -1,5 +1,6 @@
 #![recursion_limit="128"]
 
+extern crate base64;
 extern crate carrier;
 extern crate clippo;
 extern crate clouseau;
@@ -10,6 +11,7 @@ extern crate fern;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate glob;
+extern crate hex;
 extern crate hyper;
 extern crate jedi;
 #[macro_use]
@@ -25,7 +27,6 @@ extern crate protected_derive;
 extern crate quick_error;
 extern crate regex;
 extern crate rusqlite;
-extern crate rustc_serialize as serialize;  // for hex/base64
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

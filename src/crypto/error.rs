@@ -40,7 +40,8 @@ macro_rules! make_boxed_err {
         }
     }
 }
-make_boxed_err!(::serialize::hex::FromHexError);
+make_boxed_err!(::hex::FromHexError);
+make_boxed_err!(::base64::DecodeError);
 
 pub type CResult<T> = Result<T, CryptoError>;
 
