@@ -1,6 +1,8 @@
 # Turtl core-rs
 <a href="https://circleci.com/gh/turtl/core-rs"><img src="https://circleci.com/gh/turtl/core-rs.svg?style=shield&circle-token=:circle-token"></a>
 
+_Opening an issue? See the [Turtl project tracker](https://github.com/turtl/project-tracker/issues)_
+
 This is the Rust core for Turtl. It houses the logic for Turtl's main client
 operations and is meant to be embedded as a shared/static library that is
 standard across all platforms. The idea is, if it *can* go in the core, it
