@@ -246,7 +246,7 @@ impl Profile {
                 sync_record.data = Some(ser(&model, id_change_map, &model_id)?);
                 if exists {
                     // if the model already exists and we're only loading
-                    // missing items, skip importing this space
+                    // missing items, skip importing this model
                     if mode == &ImportMode::Restore { continue; }
                     sync_record.action = SyncAction::Edit;
                 } else {
@@ -255,6 +255,7 @@ impl Profile {
                 info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
                 result.actions.push(simple_sync_action(&id, sync_record.action.clone(), sync_record.ty.clone()));
                 sync_model::dispatch(turtl, sync_record)?;
+                // tally ho, good chap
                 counter.count += 1;
                 messaging::ui_event("profile:import:tally", &counter.count)?;
             }
