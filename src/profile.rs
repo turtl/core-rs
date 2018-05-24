@@ -210,13 +210,15 @@ impl Profile {
 
         // ok, now that we got rid of that dead weight, let's start our import.
         let Export { spaces, boards, notes, files, .. } = export;
+
+        struct Counter { count: u32 }
         
         // define a function that runs our sync dispatcher for the incoming
         // import models. note that this runs all of our permission checks for
         // us! yay, abstraction.
-        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, client_id: &String, models: Vec<T>, ty: SyncType, mut ser: F, id_change_map: &mut HashMap<String, String>, result: &mut ImportResult) -> TResult<()>
+        fn saver<T, F>(turtl: &Turtl, mode: &ImportMode, client_id: &String, models: Vec<T>, ty: SyncType, mut ser: F, id_change_map: &mut HashMap<String, String>, result: &mut ImportResult, counter: &mut Counter) -> TResult<()>
             where T: Protected + Storable,
-                  F: FnMut(&T, &mut HashMap<String, String>) -> TResult<Value>
+                  F: FnMut(&T, &mut HashMap<String, String>, &String) -> TResult<Value>
         {
             for mut model in models {
                 let model_id = model.id_or_else()?;
@@ -241,7 +243,7 @@ impl Profile {
                 }
                 let mut sync_record = SyncRecord::default();
                 sync_record.ty = ty.clone();
-                sync_record.data = Some(ser(&model, id_change_map)?);
+                sync_record.data = Some(ser(&model, id_change_map, &model_id)?);
                 if exists {
                     // if the model already exists and we're only loading
                     // missing items, skip importing this space
@@ -253,7 +255,8 @@ impl Profile {
                 info!("Profile::import() -- import: {}/{}/{}", jedi::stringify(&sync_record.action)?, jedi::stringify(&sync_record.ty)?, id);
                 result.actions.push(simple_sync_action(&id, sync_record.action.clone(), sync_record.ty.clone()));
                 sync_model::dispatch(turtl, sync_record)?;
-                messaging::ui_event("profile:import:tally", &1)?;
+                counter.count += 1;
+                messaging::ui_event("profile:import:tally", &counter.count)?;
             }
             Ok(())
         }
@@ -282,27 +285,29 @@ impl Profile {
             Ok(())
         }
 
-        saver(turtl, &mode, &client_id, spaces, SyncType::Space, |x, _| { x.data() }, &mut id_change_map, &mut result)?;
-        saver(turtl, &mode, &client_id, boards, SyncType::Board, |x, id_change_map| {
+        let mut counter = Counter { count: 0 };
+        saver(turtl, &mode, &client_id, spaces, SyncType::Space, |x, _map, _old_id| { x.data() }, &mut id_change_map, &mut result, &mut counter)?;
+        saver(turtl, &mode, &client_id, boards, SyncType::Board, |x, id_change_map, _old_id| {
             let mut data = x.data()?;
             switch_id_if_needed(id_change_map, &mut data, "space_id")?;
             Ok(data)
-        }, &mut id_change_map, &mut result)?;
-        saver(turtl, &mode, &client_id, notes, SyncType::Note, |x, id_change_map| {
+        }, &mut id_change_map, &mut result, &mut counter)?;
+        saver(turtl, &mode, &client_id, notes, SyncType::Note, |x, id_change_map, old_id| {
             let mut data = x.data()?;
             switch_id_if_needed(id_change_map, &mut data, "space_id")?;
             switch_id_if_needed(id_change_map, &mut data, "board_id")?;
             // it's important to note: at this point, the note's id has not been
             // changed/added to id_change_map, so we don't need to check it
             // against id_change_map when grabbing the note id
-            let note_id = x.id_or_else()?;
-            if let Some(filedata) = file_idx.remove(&note_id) {
+            let new_note_id = x.id_or_else()?;
+
+            if let Some(filedata) = file_idx.remove(old_id) {
                 // NOTE: no need to set/remove `file.id` here since it will be
                 // set when the note is saved.
-                jedi::set(&["file", "filedata"], &mut data, &json!({"data": filedata}))?;
+                jedi::set(&["file", "filedata"], &mut data, &filedata)?;
             }
             Ok(data)
-        }, &mut id_change_map, &mut result)?;
+        }, &mut id_change_map, &mut result, &mut counter)?;
         Ok(result)
     }
 }
