@@ -36,6 +36,9 @@ impl SyncModel for Board {}
 impl Validate for Board {
     fn validate(&self) -> Vec<(String, String)> {
         let mut errors = Vec::new();
+        if self.space_id == "" {
+            errors.push(validate::entry("space_id", t!("Please add a space id to this board")));
+        }
         if self.title.as_ref().map(|x| x == "").unwrap_or(true) {
             errors.push(validate::entry("title", t!("Please give your board a title")));
         }
