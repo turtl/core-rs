@@ -497,6 +497,7 @@ impl Turtl {
 
     /// Given a model that we suspect we have a key entry for, find that model's
     /// key, set it into the model, and return a reference to the key.
+    /// TODO: move this to the protected model, duhh
     pub fn find_model_key<T>(&self, model: &mut T) -> TResult<()>
         where T: Protected + Keyfinder
     {
@@ -528,8 +529,7 @@ impl Turtl {
         let profile_guard = lockr!(self.profile);
         let ref keychain = profile_guard.keychain;
 
-        // check the keychain right off the bat. it's quick and easy, and most
-        // entries are going to be here anyway
+        // check the keychain right off the bat. it's quick and easy.
         if model.id().is_some() {
             match keychain.find_key(model.id().unwrap()) {
                 Some(key) => return found_key(model, key),
@@ -593,7 +593,9 @@ impl Turtl {
                 Some(decrypting_key) => {
                     match protected::decrypt_key(&decrypting_key, encrypted_key) {
                         Ok(key) => return found_key(model, key),
-                        Err(_) => {},
+                        Err(e) => {
+                            warn!("turtl.find_model_key() -- found keychain entry for model {:?} (via item {}) but could not decrypt it: {}", model.id(), object_id, e);
+                        }
                     }
                 },
                 None => {},
@@ -606,7 +608,9 @@ impl Turtl {
                     // it worked!
                     Ok(key) => return found_key(model, key),
                     // got an error...oh well. MUSH
-                    Err(_) => {},
+                    Err(e) => {
+                        warn!("turtl.find_model_key() -- found key for model {:?} (via item {}) but could not decrypt it: {}", model.id(), object_id, e);
+                    }
                 }
             }
         }
