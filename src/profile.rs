@@ -297,11 +297,7 @@ impl Profile {
             let mut data = x.data()?;
             switch_id_if_needed(id_change_map, &mut data, "space_id")?;
             switch_id_if_needed(id_change_map, &mut data, "board_id")?;
-            // it's important to note: at this point, the note's id has not been
-            // changed/added to id_change_map, so we don't need to check it
-            // against id_change_map when grabbing the note id
-            let new_note_id = x.id_or_else()?;
-
+            // note that we grab the file via the old id.
             if let Some(filedata) = file_idx.remove(old_id) {
                 // NOTE: no need to set/remove `file.id` here since it will be
                 // set when the note is saved.
