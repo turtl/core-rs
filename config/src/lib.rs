@@ -30,10 +30,22 @@ pub fn load_config(location: Option<String>) -> TResult<()> {
         return Ok(());
     }
     let path = Path::new(&path_env[..]);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(&path)
+        .map_err(|e| {
+            println!("config::load_config() -- error opening config file: {}: {}", path_env, e);
+            e
+        })?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let data: Value = jedi::parse_yaml(&contents)?;
+    file.read_to_string(&mut contents)
+        .map_err(|e| {
+            println!("config::load_config() -- error reading config file: {}: {}", path_env, e);
+            e
+        })?;
+    let data: Value = jedi::parse_yaml(&contents)
+        .map_err(|e| {
+            println!("config::load_config() -- error parsing config yaml: {}: {}", path_env, e);
+            e
+        })?;
     let mut config_guard = (*CONFIG).write().unwrap();
     *config_guard = data;
     drop(config_guard);
