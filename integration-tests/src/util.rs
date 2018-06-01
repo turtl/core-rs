@@ -100,6 +100,7 @@ pub fn init() -> thread::JoinHandle<()> {
         "integration_tests": {"incoming_sync_timeout": 5},
         "wrap_errors": true,
         "messaging": {"reqres_append_mid": true},
+        "logging": {"file": null},
         "sync": {
             "enable_incoming": true,
             "enable_outgoing": true,
