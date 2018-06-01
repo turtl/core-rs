@@ -18,7 +18,7 @@ use ::std::error::Error;
 use ::std::convert::From;
 use ::jedi::{Value, JSONError};
 
-pub use ::cwrap::{send, recv, recv_event};
+pub use ::cwrap::{send, recv, recv_event, recv_event_nb};
 
 // -----------------------------------------------------------------------------
 // Error object
@@ -153,3 +153,9 @@ pub fn wait_on(evname: &str) -> Value {
     }
 }
 
+pub fn drain_events() {
+    loop {
+        let ev = recv_event_nb();
+        if ev.is_none() { return; }
+    }
+}
