@@ -67,7 +67,7 @@ pub fn init(config_str: String) -> TResult<()> {
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
         Err(e) => {
-            println!("Problem parsing runtime config: {}", e);
+            println!("turtl::init() -- problem parsing runtime config: {}", e);
             json!({})
         }
     };
@@ -84,14 +84,18 @@ pub fn init(config_str: String) -> TResult<()> {
     // create our data_folder
     let data_folder = config::get::<String>(&["data_folder"])?;
     if data_folder != ":memory:" {
-        util::create_dir(&data_folder)?;
+        util::create_dir(&data_folder)
+            .map_err(|e| {
+                println!("turtl::init() -- error creating data_folder: {}: {}", data_folder, e);
+                e
+            })?;
     }
 
     // set up the logger now that we have our config and data folder set up
     match util::logger::setup_logger() {
         Ok(_) => {}
         Err(e) => {
-            println!("Problem setting up logging: {}", e);
+            println!("turtl::init() -- problem setting up logging: {}", e);
             return TErr!(toterr!(e));
         }
     };
