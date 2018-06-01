@@ -48,6 +48,9 @@ mod tests {
             }
         ]));
 
+        // let's make sure these mama jamas get synced before we change the p/w
+        wait_on("sync:outgoing:complete");
+
         // change our password. this will log us out, so we need to log in again
         // to delete the account
         dispatch_ass(json!([
