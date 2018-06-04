@@ -17,7 +17,6 @@ use ::models::space::Space;
 use ::models::board::Board;
 use ::models::note::Note;
 use ::models::file::FileData;
-use ::profile::Profile;
 use ::lib_permissions::Permission;
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
@@ -397,13 +396,18 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     Space::permission_check(turtl, &from_space_id, &Permission::DeleteBoard)?;
                     Space::permission_check(turtl, &to_space_id, &Permission::AddBoard)?;
                     let mut board = {
-                        let mut profile_guard = lockw!(turtl.profile);
-                        let boards = &mut profile_guard.boards;
-                        let board = match Profile::finder(boards, &item_id) {
-                            Some(m) => m,
+                        let mut db_guard = lock!(turtl.db);
+                        let db = match (*db_guard).as_ref() {
+                            Some(x) => x,
+                            None => return TErr!(TError::MissingField(String::from("Turtl.db"))),
+                        };
+                        let mut board: Board = match db.get(Board::tablename(), &item_id)? {
+                            Some(x) => x,
                             None => return TErr!(TError::MissingData(format!("cannot find Board {} in profile", item_id))),
                         };
-                        board.clone()?
+                        turtl.find_model_key(&mut board)?;
+                        board.deserialize()?;
+                        board
                     };
                     board.move_spaces(turtl, to_space_id)?;
                 }
