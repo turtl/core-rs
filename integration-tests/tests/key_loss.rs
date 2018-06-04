@@ -6,7 +6,7 @@ mod tests {
     use ::config;
 
     #[test]
-    fn key_loss() {
+    fn key_loss_board_move_space() {
         let handle = init();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
@@ -37,12 +37,12 @@ mod tests {
             "profile:sync:model",
             "add",
             "board",
-            {"user_id": user_id, "space_id": from_space_id, "title": "he is smart. he makes us strong."},
+            {"user_id": user_id, "space_id": from_space_id, "title": "board is smart. he makes us strong."},
         ]));
         let board_id: String = jedi::get(&["id"], &board).unwrap();
 
         // add a "buttload" of notes
-        for i in 0..50 {
+        for i in 0..20 {
             // i didn't say buttload.......i said assload
             dispatch_ass(json!([
                 "profile:sync:model",
@@ -57,6 +57,7 @@ mod tests {
                 }
             ]));
         }
+
         // note that we'll actually get TWO sync:complete events, since we're
         // adding more notes than the server will allow in a bulk sync (32). so
         // let's wait for the first one, then STRIKE with a board.move_space
