@@ -221,7 +221,7 @@ impl Api {
                 out
             })
             .map_err(|err| {
-                warn!("api::call() -- call error: {}", err);
+                debug!("api::call() -- call error: {}", err);
                 err
             })
             .and_then(|out| {
