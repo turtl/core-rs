@@ -109,7 +109,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(json!({}))
         }
         "user:get-login-token" => {
-            let confirmation: String = jedi::get(&["2"], &data)?;
+            let confirmation: String = jedi::get_opt(&["2"], &data).unwrap_or(String::from("WRONG"));
             if confirmation != "I understand this token contains the user's master key and their account may be compromised if the token is misplaced." {
                 return TErr!(TError::PermissionDenied(String::from("Please send the confirmation string to get the token")));
             }
