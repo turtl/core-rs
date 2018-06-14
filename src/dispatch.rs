@@ -30,7 +30,7 @@ use ::sync::sync_model;
 use ::sync;
 use ::messaging::{self, Event};
 use ::migrate;
-use ::crypto;
+use ::crypto::{self, Key};
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -44,6 +44,14 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "user:login-from-token" => {
             let token: String = jedi::get(&["2"], &data)?;
+            turtl.login_token(token)?;
+            let user_guard = lockr!(turtl.user);
+            user_guard.data()
+        }
+        "user:login-from-saved" => {
+            let user_id: String = jedi::get(&["2"], &data)?;
+            let key: Key = jedi::get(&["3"], &data)?;
+            let token = User::restore_login(user_id, key)?;
             turtl.login_token(token)?;
             let user_guard = lockr!(turtl.user);
             user_guard.data()
@@ -115,6 +123,10 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             }
             let token = User::get_login_token(turtl)?;
             Ok(Value::String(token))
+        }
+        "user:save-login" => {
+            let key = User::save_login(turtl)?;
+            Ok(json!({"user_id": turtl.user_id()?, "key": key}))
         }
         "user:find-by-email" => {
             let email: String = jedi::get(&["2"], &data)?;

@@ -5,6 +5,7 @@ use ::std::io;
 use ::std::fs;
 use ::std::path::Path;
 use ::jedi::{self, Value};
+use ::config;
 
 macro_rules! do_lock {
     ($lock:expr) => {{
@@ -43,6 +44,25 @@ pub mod i18n;
 /// Go to sleeeeep
 pub fn sleep(millis: u64) {
     thread::sleep(Duration::from_millis(millis));
+}
+
+/// Get the app's file folder. This can be different depending on whether we're
+/// running tests or not, so tries to be mindful of that.
+pub fn file_folder(suffix: Option<&str>) -> TResult<String> {
+    let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
+    if cfg!(test) {
+        return Ok(integration);
+    }
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    let file_folder = if data_folder == ":memory:" {
+        integration
+    } else {
+        match suffix {
+            Some(x) => format!("{}/{}", data_folder, x),
+            None => data_folder,
+        }
+    };
+    Ok(file_folder)
 }
 
 /// Create a directory if it doesn't exist

@@ -16,6 +16,9 @@ use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming::SyncIncoming;
 use ::messaging;
 use ::migrate::MigrateResult;
+use ::std::path::PathBuf;
+use ::std::io::prelude::*;
+use ::std::fs;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
 lazy_static! {
@@ -553,6 +556,38 @@ impl User {
         let token_encrypted = crypto::encrypt(&(*TOKEN_KEY), Vec::from(tokenstr.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
         let token = crypto::to_base64(&token_encrypted)?;
         Ok(token)
+    }
+
+    /// Grab the currently logged-in user's login token, encrypt it with a
+    /// random key, save the result to <data_folder>/<user_id>.login, and return
+    /// the key.
+    pub fn save_login(turtl: &Turtl) -> TResult<Key> {
+        let user_id = turtl.user_id()?;
+        let login_token = User::get_login_token(turtl)?;
+        let key: Key = Key::random()?;
+        let enc = crypto::encrypt(&key, Vec::from(login_token.as_bytes()), CryptoOp::new("chacha20poly1305")?)?;
+        let mut filepath = PathBuf::from(util::file_folder(None)?);
+        filepath.push(user_id + ".login");
+        let mut fs_file = fs::File::create(&filepath)?;
+        fs_file.write_all(enc.as_slice())?;
+        info!("User::save_login() -- saved login to {:?}", filepath);
+        Ok(key)
+    }
+
+    /// Restores a login (saved via User::save_login()) given a user_id/key.
+    pub fn restore_login(user_id: String, key: Key) -> TResult<String> {
+        let mut filepath = PathBuf::from(util::file_folder(None)?);
+        filepath.push(user_id + ".login");
+        let enc = {
+            let mut file = fs::File::open(&filepath)?;
+            let mut enc = Vec::new();
+            file.read_to_end(&mut enc)?;
+            enc
+        };
+        let login_token_bytes = crypto::decrypt(&key, enc)?;
+        let login_token = String::from_utf8(login_token_bytes)?;
+        info!("User::restor_login() -- restored login from {:?}", filepath);
+        Ok(login_token)
     }
 
     /// We have a successful key/auth pair. Log the user in.

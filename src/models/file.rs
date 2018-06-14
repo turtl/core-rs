@@ -10,7 +10,6 @@ use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::std::mem;
 use ::crypto;
-use ::config;
 use ::util;
 use ::std::fs;
 use ::std::io::prelude::*;
@@ -19,17 +18,7 @@ use ::glob;
 
 /// Return the location where we store files
 pub fn file_folder() -> TResult<String> {
-    let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
-    if cfg!(test) {
-        return Ok(integration);
-    }
-    let data_folder = config::get::<String>(&["data_folder"])?;
-    let file_folder = if data_folder == ":memory:" {
-        integration
-    } else {
-        format!("{}/files", data_folder)
-    };
-    Ok(file_folder)
+    util::file_folder(Some("files"))
 }
 
 protected! {
