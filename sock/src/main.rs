@@ -1,7 +1,11 @@
 extern crate cwrap;
+extern crate fern;
 #[macro_use]
 extern crate log;
+extern crate time;
 extern crate websocket;
+
+mod logger;
 
 use ::std::thread;
 use ::websocket::{Message, OwnedMessage};
@@ -16,6 +20,8 @@ pub fn sleep(millis: u64) {
 }
 
 pub fn main() {
+    logger::setup_logger();
+
     if env::var("TURTL_CONFIG_FILE").is_err() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }

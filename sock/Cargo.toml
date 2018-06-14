@@ -5,7 +5,9 @@ authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
 [dependencies]
 cwrap = { path = "../cwrap" }
+fern = "0.5.5"
 log = "0.4.1"
+time = "0.1.35"
 
 [dependencies.websocket]
 version = "0.20.2"
