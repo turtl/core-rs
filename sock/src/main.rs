@@ -15,8 +15,17 @@ use ::std::env;
 use ::std::sync::{Arc, RwLock};
 
 /// Go to sleeeeep
-pub fn sleep(millis: u64) {
+fn sleep(millis: u64) {
     thread::sleep(Duration::from_millis(millis));
+}
+
+fn drain_channels() {
+    loop {
+        if cwrap::recv_event_nb().is_none() { break; }
+    }
+    loop {
+        if cwrap::recv_nb("").is_none() { break; }
+    }
 }
 
 pub fn main() {
@@ -53,8 +62,13 @@ pub fn main() {
             info!("* new connection! {}", get_conn_id!(cid));
             let mut client = connection.accept().unwrap();
             client.set_nonblocking(true).unwrap();
+            drain_channels();
             cwrap::send(r#"["0","sync:shutdown",false]"#);
             cwrap::send(r#"["0","user:logout",false]"#);
+            cwrap::recv("");
+            cwrap::recv("");
+            drain_channels();
+            client.send_message(&Message::text(r#"{"e":"messaging:ready","d":true}"#)).unwrap();
             loop {
                 // make sure that if our stupid lazy connection has been left
                 // behind that it is forgotten forever and ever and ever and
@@ -85,7 +99,7 @@ pub fn main() {
                 let msg_turtl = cwrap::recv_nb("");
                 match msg_turtl {
                     Some(x) => {
-                        info!("* core -> ui ({})", x.len());
+                        info!("* core -> ui (ev: {})", x.len());
                         //println!("---\n{}", x);
                         client.send_message(&Message::text(x)).unwrap();
                     }
@@ -95,7 +109,7 @@ pub fn main() {
                 let msg_turtl = cwrap::recv_event_nb();
                 match msg_turtl {
                     Some(x) => {
-                        info!("* core -> ui ({})", x.len());
+                        info!("* core -> ui (res: {})", x.len());
                         //println!("---\n{}", x);
                         client.send_message(&Message::text(x)).unwrap();
                     }
