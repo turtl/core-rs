@@ -155,7 +155,7 @@ impl SyncIncoming {
         let immediate = if poll { "0" } else { "1" };
         let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
         let timeout = if poll {
-            match config::get(&["integration_tests", "incoming_sync_timeout"]) {
+            match config::get(&["sync", "poll_timeout"]) {
                 Ok(x) => x,
                 Err(_) => 60,
             }

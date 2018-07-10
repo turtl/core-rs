@@ -97,7 +97,6 @@ pub fn init() -> thread::JoinHandle<()> {
     config::load_config(None).unwrap();
     let handle = cwrap::init(r#"{
         "data_folder": ":memory:",
-        "integration_tests": {"incoming_sync_timeout": 5},
         "wrap_errors": true,
         "messaging": {"reqres_append_mid": true},
         "logging": {"file": null},
@@ -105,7 +104,8 @@ pub fn init() -> thread::JoinHandle<()> {
             "enable_incoming": true,
             "enable_outgoing": true,
             "enable_files_incoming": true,
-            "enable_files_outgoing": true
+            "enable_files_outgoing": true,
+            "poll_timeout": 5
         }
     }"#);
     wait_on("messaging:ready");
