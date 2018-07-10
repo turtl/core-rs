@@ -8,7 +8,7 @@ jobs:
     <<: *defaults
 
     docker:
-      - image: circleci/node:4.8.3
+      - image: circleci/node:8.11.3
 
     steps:
       - checkout
@@ -46,7 +46,7 @@ jobs:
       # install rust
       - run: gpg --import build-tools/rust.gpg.pub
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
-      - run: sudo /tmp/rustup.sh --revision=1.25.0
+      - run: sudo /tmp/rustup.sh --revision=1.27.1
 
       # build the release
       - restore_cache:
@@ -72,7 +72,7 @@ jobs:
     <<: *defaults
 
     docker:
-      - image: circleci/node:4.8.3
+      - image: circleci/node:8.11.3
       - image: circleci/postgres:9.6.2-alpine
         environment:
           - POSTGRES_USER=turtl
@@ -91,6 +91,7 @@ jobs:
       # set up/run server
       - run: git clone https://github.com/turtl/server ../server
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
+      - run: sleep 5
       - restore_cache:
           key: server-npm-v1-{{ checksum "../server/package.json" }}
           key: server-npm-v1-
@@ -101,8 +102,7 @@ jobs:
             - ../server/node_modules
       - run: mkdir -p ../server/plugins
       - run: mkdir -p ../server/public/uploads
-      - run: sleep 5
-      - run: node ../server/tools/create-db-schema.js
+      - run: cd ../server && ./scripts/init-db.sh
       - run: node ../server/tools/populate-test-data.js
       - run:
           command: node ../server/server.js
@@ -111,7 +111,7 @@ jobs:
       # install rust
       - run: gpg --import build-tools/rust.gpg.pub
       - run: wget https://static.rust-lang.org/rustup.sh -O /tmp/rustup.sh && chmod 0750 /tmp/rustup.sh
-      - run: sudo /tmp/rustup.sh --revision=1.25.0
+      - run: sudo /tmp/rustup.sh --revision=1.27.1
 
       - run: |
           cd integration-tests
@@ -135,7 +135,7 @@ jobs:
     <<: *defaults
 
     docker:
-      - image: circleci/node:4.8.3
+      - image: circleci/node:8.11.3
 
     steps:
       - attach_workspace:
