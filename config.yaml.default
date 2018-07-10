@@ -33,7 +33,7 @@ logging:
     size: 1048576
 
 api:
-  endpoint: "https://api.turtlapp.com/v3"
+  endpoint: "https://apiv3.turtlapp.com"
   # point this at a v0.6 api (the old lisp server) if you want to enable
   # migration from the old system to the new.
   v6:
@@ -44,6 +44,7 @@ sync:
   enable_outgoing: true
   enable_files_incoming: true
   enable_files_outgoing: true
+  poll_timeout: 29
 
 # configuration integration tests
 integration_tests:
