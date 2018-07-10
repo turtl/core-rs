@@ -9,7 +9,7 @@ hyper = "0.9.18"
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
 log = "0.4.1"
-quick-error = "1.1.0"
+quick-error = "1.2.2"
 regex = "0.1.77"
 scraper = { path = "scraper" }
 serde = "1.0.8"

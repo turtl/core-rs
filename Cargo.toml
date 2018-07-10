@@ -41,7 +41,7 @@ log = "0.4.1"
 migrate = { path = "migrate" }
 num_cpus = "1.8.0"
 protected_derive = { path = "protected_derive" }
-quick-error = "1.1.0"
+quick-error = "1.2.2"
 regex = "0.1.77"
 rusqlite = "0.13.0"
 serde = "1.0.8"

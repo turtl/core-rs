@@ -18,7 +18,7 @@ hyper = "0.9.18"
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
 log = "0.4.1"
-quick-error = "1.1.0"
+quick-error = "1.2.2"
 rand = "0.3.18"
 rust-crypto = { path = "rust-crypto" }
 rustc-serialize = "0.3.19"
