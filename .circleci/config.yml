@@ -90,6 +90,7 @@ jobs:
 
       # set up/run server
       - run: git clone https://github.com/turtl/server ../server
+      - run: chmod 755 ../server/scripts/*
       - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
       - run: sleep 5
       - restore_cache:
