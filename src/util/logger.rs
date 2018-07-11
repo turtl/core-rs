@@ -2,8 +2,11 @@ use ::config;
 use ::fern;
 use ::log;
 use ::time;
-use ::error::TResult;
-use ::std::{self, env, fs};
+use ::error::{TResult, TError};
+use ::std::{self, env};
+use ::std::fs::{self, File};
+use ::std::io::BufReader;
+use ::std::io::prelude::*;
 use ::std::sync::{Mutex, RwLock};
 use ::glob;
 use ::std::path::PathBuf;
@@ -32,6 +35,33 @@ pub fn get_logfile() -> Option<String> {
         filedest
     };
     Some(filedest)
+}
+
+/// read the logfile's contents to a string and return. if logging is not set up
+/// then we throw a tantrum. Set `num_lines` to -1 to grab everything.
+pub fn read_log(num_lines: i32) -> TResult<String> {
+    let logfile = match get_logfile() {
+        Some(x) => Ok(x),
+        None => TErr!(TError::MissingField(String::from("logging not set up in config"))),
+    }?;
+    let mut file = File::open(logfile)?;
+    if num_lines < 0 {
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        Ok(contents)
+    } else {
+        let num_lines = num_lines as usize;
+        let reader = BufReader::new(file);
+        let mut lines: Vec<String> = Vec::with_capacity(1024);
+        for line in reader.lines() {
+            lines.push(line?);
+        }
+        let num_log_lines = lines.len();
+        if num_log_lines > num_lines {
+            lines = lines.split_off(num_log_lines - num_lines);
+        }
+        Ok(lines.join("\n"))
+    }
 }
 
 /// rotate a logfile:

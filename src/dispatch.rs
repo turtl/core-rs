@@ -11,7 +11,7 @@
 use ::jedi::{self, Value};
 use ::error::{TResult, TError};
 use ::config;
-use ::util;
+use ::util::{self, logger};
 use ::turtl::Turtl;
 use ::search::Query;
 use ::profile::{Profile, Export, ImportMode};
@@ -171,6 +171,11 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         }
         "app:get-config" => {
             Ok(config::dump()?)
+        }
+        "app:get-log" => {
+            let lines: i32 = jedi::get(&["2"], &data)?;
+            let contents = logger::read_log(lines)?;
+            Ok(Value::String(contents))
         }
         "app:shutdown" => {
             turtl.sync_shutdown(false)?;
