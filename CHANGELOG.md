@@ -39,11 +39,18 @@ against libsodium v1.0.12, but 1.0.12 has a bug in arm64 which makes the pwhash
 spit out incorrect keys (breaking turtl logins on android). decided to just go
 in and upgrade everything sodium-related, turned out to me much easier than I
 thought it'd be.
+- Adding interface to save logins...basically, you call it after you've logged
+in and it encrypts your login data with a random key and saves it to disk. It
+then hands you back the encryption key, and it's the responsbility of the caller
+to store the key somewhere safe and recall it when it's time to log in again.
+This lowers the barrier to entry for "Remember me" features quite a bit.
+- Adding an `app:get-log` endpoint which returns the last N lines of the core
+log. Very nice for debugging.
 
 Fixes:
 
 - Always lowercase username (email) for login/join/etc.
-- Updating some CircleCI routines (including rust 1.25).
+- Updating some CircleCI routines (including rust 1.27.1).
 - Fixing auth bug when grabbing files from S3 (or any non-turtl-api source).
 - Fixing bug where Thredder blindly accepts `0` for # pollers (and also upgraded
 num\_cpus crate).
@@ -54,6 +61,14 @@ will mark us as not syncing.
 - Merging [rust-crypto#384](https://github.com/DaGenix/rust-crypto/pull/384) to
 fix an android build issue (aarch64).
 - Migration data path fix
+- Upgrading quick-error crate (1.1.0 -> 1.2.2)
+- Adding integration test for key loss test case
+- Removing rustc_serialise (deprecated) and replacing it with some specific
+crates
+- Fixing some timing issues with the WebSocket server
+- Centralizing the function that grabs the current storage location for the
+core (so we can use it as a building block to grab the core's files/logs/etc).
+
 
 # v0.1.0
 
