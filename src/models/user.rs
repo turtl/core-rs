@@ -586,7 +586,7 @@ impl User {
         };
         let login_token_bytes = crypto::decrypt(&key, enc)?;
         let login_token = String::from_utf8(login_token_bytes)?;
-        info!("User::restor_login() -- restored login from {:?}", filepath);
+        info!("User::restore_login() -- restored login from {:?}", filepath);
         Ok(login_token)
     }
 
