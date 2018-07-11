@@ -50,8 +50,8 @@ sync:
 integration_tests:
   data_folder: /tmp/turtl/integration
   login:
-    username: slappy@turtlapp.com
-    password: turtlesallthewaydown
+    username: testdata@turtlapp.com
+    password: omgitsatest
   v6_login:
     username: 'duck duck'
     password: 'juice'
