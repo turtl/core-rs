@@ -403,8 +403,12 @@ pub fn process_incoming_sync(turtl: &Turtl) -> TResult<()> {
                     None => return TErr!(TError::MissingData(format!("sync item missing `data` field."))),
                 }
                 let mut model: T = jedi::from_val(data)?;
-                turtl.find_model_key(&mut model)?;
-                model.deserialize()?;
+                // NOTE: AL: i feel weird putting this here, but invites really
+                // are kind of "special" and should not be deserialized.
+                if model.should_deserialize_on_mem_update() {
+                    turtl.find_model_key(&mut model)?;
+                    model.deserialize()?;
+                }
                 model
             };
             model.run_mem_update(turtl, sync_item.action.clone())?;

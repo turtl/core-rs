@@ -128,6 +128,12 @@ pub trait Keyfinder {
     fn add_to_keychain(&self) -> bool {
         false
     }
+
+    /// Whether or not this model should try to deserialize when we are updating
+    /// an in-mem model based on an incoming sync.
+    fn should_deserialize_on_mem_update(&self) -> bool {
+        true
+    }
 }
 
 /// The Protected trait defines a set of functionality for our models such that

@@ -516,9 +516,11 @@ impl Turtl {
             return Ok(());
         }
 
+        // the user object is encrypted with the master key.
+        //
         // keychain entries are always encrypted using the user's key, so we
         // skip the song and dance of searching and just set it in here.
-        if model.model_type() == "keychain" {
+        if (model.model_type() == "user" && model.id_or_else()? == self.user_id()?) || model.model_type() == "keychain" {
             let user_key = {
                 let user_guard = lockr!(self.user);
                 user_guard.key_or_else()?

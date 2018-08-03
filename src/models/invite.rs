@@ -58,8 +58,13 @@ pub struct InviteRequest {
 
 make_storable!(Invite, "invites");
 impl SyncModel for Invite {}
-impl Keyfinder for Invite {}
 impl Validate for Invite {}
+impl Keyfinder for Invite {
+    // DON'T try to deserialize on mem update
+    fn should_deserialize_on_mem_update(&self) -> bool {
+        false
+    }
+}
 
 impl MemorySaver for Invite {
     fn mem_update(self, turtl: &Turtl, sync_item: &mut SyncRecord) -> TResult<()> {
@@ -80,7 +85,7 @@ impl MemorySaver for Invite {
             }
             SyncAction::Delete => {
                 let mut profile_guard = lockw!(turtl.profile);
-                let invite_id = self.id().unwrap();
+                let invite_id = self.id_or_else()?;
                 // remove the invite from memory
                 profile_guard.invites.retain(|s| s.id() != Some(&invite_id));
             }
