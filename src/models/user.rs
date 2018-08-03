@@ -280,6 +280,7 @@ impl User {
         user_guard_w.merge_fields(jedi::walk(&["data"], &joindata)?)?;
         user_guard_w.id = Some(user_id);
         user_guard_w.do_login(key, auth);
+        user_guard_w.deserialize()?;
         drop(user_guard_w);
 
         debug!("user::join() -- auth success, joined and logged in");
@@ -530,6 +531,25 @@ impl User {
             user_guard.id_or_else()?
         };
         turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
+        Ok(())
+    }
+
+    /// Make sure the user object has a keypair (for accepting invites/messages)
+    pub fn ensure_keypair(turtl: &Turtl) -> TResult<()> {
+        let mut user_guard = lockw!(turtl.user);
+        if user_guard.privkey.is_none() {
+            info!("User::ensure_keypair() -- missing privkey, regenerating");
+            let mut save_user = user_guard.clone()?;
+            let (pk, sk) = crypto::asym::keygen()?;
+            // set the keypair into turtl.user as a stopgap until the sync goes
+            // through, then make sure the guard is dropped before updating
+            user_guard.pubkey = Some(pk.clone());
+            user_guard.privkey = Some(sk.clone());
+            drop(user_guard);
+            save_user.pubkey = Some(pk.clone());
+            save_user.privkey = Some(sk.clone());
+            sync_model::save_model(SyncAction::Edit, turtl, &mut save_user, false)?;
+        }
         Ok(())
     }
 

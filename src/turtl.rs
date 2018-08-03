@@ -222,6 +222,7 @@ impl Turtl {
         let mut db_guard = lock!(self.db);
         *db_guard = Some(db);
         drop(db_guard);
+        User::ensure_keypair(self)?;
         messaging::ui_event("user:login", &Value::Null)?;
         Ok(())
     }

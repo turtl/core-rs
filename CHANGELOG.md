@@ -68,6 +68,9 @@ crates
 - Fixing some timing issues with the WebSocket server
 - Centralizing the function that grabs the current storage location for the
 core (so we can use it as a building block to grab the core's files/logs/etc).
+- Fixing a bug where user.privkey (for decrypting messages/invites) gets lost
+after joining. Also, adding an `ensure_keypair` fn to the User model that looks
+for a missing keypair and generates one if needed.
 
 
 # v0.1.0
