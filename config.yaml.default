@@ -34,6 +34,9 @@ logging:
 
 api:
   endpoint: "https://apiv3.turtlapp.com"
+  # this should be set by the client loading the core. standard format is
+  # <platform>/<version>, like "android/0.7.0"
+  client_version_string: 'core'
   # point this at a v0.6 api (the old lisp server) if you want to enable
   # migration from the old system to the new.
   v6:
@@ -44,7 +47,7 @@ sync:
   enable_outgoing: true
   enable_files_incoming: true
   enable_files_outgoing: true
-  poll_timeout: 29
+  poll_timeout: 25
 
 # configuration integration tests
 integration_tests:

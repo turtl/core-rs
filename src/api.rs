@@ -18,6 +18,9 @@ use ::jedi::{self, Value, DeserializeOwned};
 use ::error::{TResult, TError};
 use ::crypto;
 
+/// Pull out our crate version to send to the api
+const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 /// Holds our Api configuration. This consists of any mutable fields the Api
 /// needs to build URLs or make decisions.
 struct ApiConfig {
@@ -130,6 +133,13 @@ impl Api {
         self.set_auth_headers(headers);
         if headers.get_raw("Content-Type").is_none() {
             headers.set(header::ContentType::json());
+        }
+        match config::get::<String>(&["api", "client_version_string"]) {
+            Ok(version) => {
+                let header_val = format!("{}/{}", version, CORE_VERSION);
+                headers.set_raw("X-Turtl-Client", vec![Vec::from(header_val.as_bytes())]);
+            }
+            Err(_) => {}
         }
     }
 
