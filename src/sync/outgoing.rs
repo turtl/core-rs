@@ -124,7 +124,7 @@ impl Syncer for SyncOutgoing {
         // our local db
         info!("SyncOutgoing.run_sync() -- sending {} sync items", syncs.len());
         let syncs_json = jedi::to_val(&syncs)?;
-        let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().data(syncs_json))?;
+        let sync_result: SyncResponse = self.api.post("/sync", ApiReq::new().timeout(120).data(syncs_json))?;
         info!("SyncOutgoing.run_sync() -- got {} successes, {} failed, {} blocked syncs", sync_result.success.len(), sync_result.failures.len(), sync_result.blocked.len());
 
         // clear out the successful syncs
