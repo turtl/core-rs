@@ -4,14 +4,39 @@ aliases:
 
 version: 2
 jobs:
-  build:
+  test:
     <<: *defaults
 
     docker:
       - image: circleci/node:8.11.3
+      - image: circleci/postgres:9.6.2-alpine
+        environment:
+          - POSTGRES_USER=turtl
+          - POSTGRES_DB=turtl
 
     steps:
       - checkout
+
+      # set up/run server
+      - run: git clone https://github.com/turtl/server ../server
+      - run: chmod 755 ../server/scripts/*
+      - run: cp ../server/config/config.yaml.ci ../server/config/config.yaml
+      - run: sleep 5
+      - restore_cache:
+          key: server-npm-v1-{{ checksum "../server/package.json" }}
+          key: server-npm-v1-
+      - run: cd ../server && npm install
+      - save_cache:
+          key: server-npm-v1-{{ checksum "../server/package.json" }}
+          paths:
+            - ../server/node_modules
+      - run: mkdir -p ../server/plugins
+      - run: mkdir -p ../server/public/uploads
+      - run: cd ../server && ./scripts/init-db.sh
+      - run: node ../server/tools/populate-test-data.js
+      - run:
+          command: node ../server/server.js
+          background: true
 
       # update lib type
       - run: sed -i 's|crate-type = .*|crate-type = ["cdylib"]|' Cargo.toml
@@ -50,25 +75,23 @@ jobs:
 
       # build the release
       - restore_cache:
-          key: core-build-v3-{{ checksum "Cargo.lock" }}
+          key: core-build-v4-{{ checksum "Cargo.lock" }}
       - run: make SODIUM_STATIC=static RUST_BACKTRACE=1 CARGO_BUILD_ARGS="--release -p carrier -p jedi -p dumpy -p turtl_core" test
       - run: make SODIUM_STATIC=static release
+      - run: |
+          cd integration-tests
+          make \
+            RUST_BACKTRACE=1 \
+            TURTL_LOGLEVEL=info \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:../target/release" \
+            test
       - save_cache:
-          key: core-build-v3-{{ checksum "Cargo.lock" }}
+          key: core-build-v4-{{ checksum "Cargo.lock" }}
           paths:
             - ~/.cargo/
             - target/
 
-      - run: mkdir -p ../workspace
-      - run: cp target/release/libturtl_core.so ../workspace
-      - run: cd ../workspace && sha256sum libturtl_core.so > libturtl_core.so.sha256
-      - run: cp config.yaml ../workspace
-      - persist_to_workspace:
-          root: /tmp/turtl/
-          paths:
-            - workspace
-
-  test:
+  test2:
     <<: *defaults
 
     docker:
@@ -169,22 +192,31 @@ jobs:
 
 workflows:
   version: 2
-  build_test_deploy:
+  test:
     jobs:
-      - build:
-          filters:
-            branches:
-              only: master
-            tags:
-              only: /.*/
       - test:
-          requires: 
-            - build
           filters:
             branches:
               only: master
             tags:
               only: /.*/
+
+#  build_test_deploy:
+#    jobs:
+#      - build:
+#          filters:
+#            branches:
+#              only: master
+#            tags:
+#              only: /.*/
+#      - test:
+#          requires:
+#            - build
+#          filters:
+#            branches:
+#              only: master
+#            tags:
+#              only: /.*/
 #      - deploy:
 #          requires:
 #            - build
