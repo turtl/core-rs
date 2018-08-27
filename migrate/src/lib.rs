@@ -310,7 +310,13 @@ fn decrypt_val(key: &Key, val: &Value) -> MResult<Value> {
     let body_base64: String = jedi::get(&["body"], val)?;
     let body = detect_old_format(&body_base64)?;
     let dec: Vec<u8> = crypto::decrypt(key, &body)?;
-    let json: String = String::from_utf8(dec)?;
+    let json: String = match String::from_utf8(dec) {
+        Ok(x) => x,
+        Err(e) => {
+            warn!("migrate::decrypt_val() -- UTF8 decoding error (attempting lossy decoding): {}", e);
+            String::from_utf8_lossy(e.as_bytes()).to_string()
+        }
+    };
     Ok(jedi::parse(&json)?)
 }
 
