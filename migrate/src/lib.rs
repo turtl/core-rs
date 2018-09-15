@@ -6,6 +6,7 @@
 
 extern crate config;
 extern crate crypto as rust_crypto;
+extern crate encoding_rs;
 extern crate fern;
 extern crate hyper;
 extern crate jedi;
@@ -306,15 +307,27 @@ fn detect_old_format(data: &String) -> MResult<Vec<u8>> {
     }
 }
 
+fn decode_text(bytes: &[u8]) -> MResult<String> {
+    match String::from_utf8(Vec::from(bytes)) {
+        Ok(decoded) => { return Ok(decoded); },
+        Err(_) => {}
+    }
+    let (decoded, _enc, has_err) = encoding_rs::WINDOWS_1252.decode(bytes);
+    if !has_err { return Ok(decoded.to_string()); }
+    let (decoded, _enc, has_err) = encoding_rs::UTF_16LE.decode(bytes);
+    if !has_err { return Ok(decoded.to_string()); }
+    Err(MError::BadValue(format!("unable to decode bytes to string")))
+}
+
 fn decrypt_val(key: &Key, val: &Value) -> MResult<Value> {
     let body_base64: String = jedi::get(&["body"], val)?;
     let body = detect_old_format(&body_base64)?;
     let dec: Vec<u8> = crypto::decrypt(key, &body)?;
-    let json: String = match String::from_utf8(dec) {
+    let json: String = match decode_text(&dec[..]) {
         Ok(x) => x,
         Err(e) => {
-            warn!("migrate::decrypt_val() -- UTF8 decoding error (attempting lossy decoding): {}", e);
-            String::from_utf8_lossy(e.as_bytes()).to_string()
+            warn!("migrate::decrypt_val() -- error decoding text (attempting lossy utf8 decode): {}", e);
+            String::from_utf8_lossy(&dec[..]).into_owned()
         }
     };
     Ok(jedi::parse(&json)?)
@@ -700,6 +713,18 @@ mod tests {
             },
         });
         deep_merge(&mut obj1, &obj2).unwrap();
+    }
+
+    #[test]
+    fn can_decode_properly() {
+        let decode_me = String::from(r#"{"name":"larry","says":"alright, shutup, parker, thank you. parker, shut up. thank you. parker...next to me. sko. right now. nobody thinks you're funny, parker. right now."}"#);
+        let (utf16_bytes, _enc, _has_errors) = encoding_rs::UTF_16LE.encode(decode_me.as_str());
+        let latin1_bytes = vec![123, 34, 116, 121, 112, 101, 34, 58, 34, 116, 101, 120, 116, 34, 44, 34, 116, 105, 116, 108, 101, 34, 58, 34, 80, 111, 114, 116, 117, 103, 117, 101, 115, 101, 34, 44, 34, 116, 97, 103, 115, 34, 58, 91, 93, 44, 34, 117, 114, 108, 34, 58, 110, 117, 108, 108, 44, 34, 117, 115, 101, 114, 110, 97, 109, 101, 34, 58, 110, 117, 108, 108, 44, 34, 112, 97, 115, 115, 119, 111, 114, 100, 34, 58, 110, 117, 108, 108, 44, 34, 116, 101, 120, 116, 34, 58, 34, 193, 32, 195, 32, 192, 32, 194, 32, 196, 32, 228, 32, 225, 32, 227, 32, 224, 32, 226, 92, 110, 92, 110, 210, 32, 212, 32, 213, 32, 211, 32, 214, 32, 242, 32, 244, 32, 245, 32, 243, 32, 246, 92, 110, 92, 110, 202, 32, 201, 32, 201, 32, 233, 32, 234, 32, 235, 32, 92, 110, 92, 110, 204, 32, 236, 92, 110, 92, 110, 199, 32, 231, 32, 34, 125];
+        let decoded_latin = decode_text(&latin1_bytes[..]).unwrap();
+        let decoded_utf16 = decode_text(utf16_bytes.into_owned().as_slice()).unwrap();
+
+        assert_eq!(decoded_latin, String::from(r#"{"type":"text","title":"Portuguese","tags":[],"url":null,"username":null,"password":null,"text":"Á Ã À Â Ä ä á ã à â\n\nÒ Ô Õ Ó Ö ò ô õ ó ö\n\nÊ É É é ê ë \n\nÌ ì\n\nÇ ç "}"#));
+        assert_eq!(decoded_utf16, String::from(r#"{"name":"larry","says":"alright, shutup, parker, thank you. parker, shut up. thank you. parker...next to me. sko. right now. nobody thinks you're funny, parker. right now."}"#));
     }
 }
 
