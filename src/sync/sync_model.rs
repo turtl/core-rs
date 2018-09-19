@@ -21,6 +21,7 @@ use ::lib_permissions::Permission;
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
 use ::std::mem;
+use ::time;
 use ::messaging;
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
@@ -328,6 +329,8 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     // always set to false. this is a public field that
                     // we let the server manage for us
                     note.has_file = false;
+                    let now = time::get_time();
+                    note.mod_ = Some(now.sec as i64);
                     let note_data = save_model(action, turtl, &mut note, false)?;
                     match filemebbe {
                         Some(mut file) => {
