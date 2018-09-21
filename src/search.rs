@@ -216,8 +216,7 @@ impl Search {
                 }
                 qry_vals.push(SearchVal::String(excluded_tag.clone()));
             }
-            excluded_tag_qry.push(") GROUP BY note_id HAVING COUNT(*) = ?");
-            qry_vals.push(SearchVal::Int(query.exclude_tags.len() as i32));
+            excluded_tag_qry.push(")");
             exclude_queries.push(excluded_tag_qry.as_slice().join(""));
         }
 
