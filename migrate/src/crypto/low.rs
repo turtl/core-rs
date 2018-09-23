@@ -240,7 +240,7 @@ pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
 /// Generate N number of CS random bytes.
 pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
     let mut out = vec![0u8; len];
-    let mut guard = (*RNG).lock().unwrap();
+    let mut guard = (*RNG).lock().expect("migrate::crypto::low::rand_bytes() -- failed to grab lock");
     guard.fill_bytes(out.as_mut_slice());
     Ok(out)
 }
@@ -309,7 +309,7 @@ impl PaddingProcessor for AnsiPadding {
         let last_byte: u8;
         {
             let data = output_buffer.peek_remaining();
-            last_byte = *data.last().unwrap();
+            last_byte = *data.last().expect("migrate::crypto::low::PaddingProcessor.strip_output() -- failed to grab last data");
         }
         output_buffer.truncate(last_byte as usize);
         true

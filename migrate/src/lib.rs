@@ -97,7 +97,7 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
     let mut headers = hyper::header::Headers::new();
     let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
     if url.contains(api_endpoint.as_str()) {
-        let auth_header = api.get_auth().unwrap();
+        let auth_header = api.get_auth().expect("migrate::download_file() -- failed to get auth header");
         headers.set_raw("Authorization", vec![Vec::from(auth_header.as_bytes())]);
     }
     let mut client = hyper::client::Client::new();
@@ -171,7 +171,7 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
     for rec in records {
         let SyncRecord { ty, data } = rec;
         if data.is_none() { continue; }
-        let data = data.unwrap();
+        let data = data.expect("migrate::get_profile() -- failed to get record data");
         let rec_user_id: String = match jedi::get(&["user_id"], &data) {
             Ok(x) => x,
             Err(_) => {
@@ -371,8 +371,8 @@ fn find_key(keychain: &Vec<Value>, keysearch: &HashMap<String, Key>, val: &Value
             }
         }
         if encrypted_key.is_none() || item_id.is_none() { continue; }
-        let item_id = item_id.unwrap();
-        let encrypted_key = encrypted_key.unwrap();
+        let item_id = item_id.expect("migrate::find_key() -- failed to get item id");
+        let encrypted_key = encrypted_key.expect("migrate::find_key() -- failed to get key");
 
         let item_key = match keysearch.get(&item_id) {
             Some(k) => k.clone(),
@@ -645,8 +645,8 @@ fn deep_merge(val1: &mut Value, val2: &Value) -> MResult<Value> {
     }
 
     {
-        let obj1 = val1.as_object_mut().unwrap();
-        let obj2 = val2.as_object().unwrap();
+        let obj1 = val1.as_object_mut().expect("migrate::deep_merge() -- failed to grab mut object");
+        let obj2 = val2.as_object().expect("migrate::deep_merge() -- failed to grab object");
         for (key, val) in obj2 {
             if val.is_object() {
                 let merged_val = {

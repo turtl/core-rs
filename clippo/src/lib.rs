@@ -37,7 +37,7 @@ lazy_static! {
                 PathBuf::from(filename)
             }
             Err(_) => {
-                let mut path = env::current_dir().unwrap();
+                let mut path = env::current_dir().expect("clippo -- failed to grab current dir");
                 path.push("parsers.yaml");
                 path
             }

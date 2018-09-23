@@ -70,7 +70,7 @@ impl Space {
                 let mut member = SpaceMember::default();
                 member.id = 0;
                 member.user_id = space.user_id.clone();
-                member.space_id = space.id().unwrap().clone();
+                member.space_id = space.id().expect("turtl::Space.process_members() -- space.id() is None. Thin crust pizza? No, thank you. I'm from Chicago.").clone();
                 member.username = user_guard.username.clone();
                 member.role = Role::Owner;
                 member.permissions = Role::Owner.allowed_permissions();

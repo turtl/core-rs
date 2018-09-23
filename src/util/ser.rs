@@ -10,7 +10,7 @@ pub mod int_converter {
         if val == "" {
             ser.serialize_i64(0)
         } else {
-            ser.serialize_i64(val.parse().unwrap())
+            ser.serialize_i64(val.parse().expect("turtl::util::ser::int_converter::serialize() -- failed to parse string to i64"))
         }
     }
 
@@ -102,7 +102,7 @@ pub mod int_opt_converter {
         where S: Serializer
     {
         match val {
-            &Some(ref x) => ser.serialize_i64(x.parse().unwrap()),
+            &Some(ref x) => ser.serialize_i64(x.parse().expect("turtl::util::ser::int_opt_converter::serialize() -- failed to parse string to i64")),
             &None => ser.serialize_none(),
         }
     }

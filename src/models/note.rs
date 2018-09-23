@@ -107,7 +107,7 @@ impl Keyfinder for Note {
         let mut board_ids: Vec<String> = Vec::new();
         space_ids.push(self.space_id.clone());
         if self.board_id.is_some() {
-            board_ids.push(self.board_id.as_ref().unwrap().clone());
+            board_ids.push(self.board_id.as_ref().expect("turtl::Note::get_key_search() -- note.board_id is None even though we just checked it hmmmmm HMMMMMMM").clone());
         }
         match self.get_keys() {
             Some(keys) => for key in keys {
@@ -126,9 +126,9 @@ impl Keyfinder for Note {
             let profile_guard = lockr!(turtl.profile);
             for space in &profile_guard.spaces {
                 if space.id().is_none() || space.key().is_none() { continue; }
-                let space_id = space.id().unwrap();
+                let space_id = space.id().expect("turtl::Note::get_key_search() -- space.id() is None even though, ONCE AGAIN, we just checked for that. son of a");
                 if !space_ids.contains(space_id) { continue; }
-                keychain.upsert_key(turtl, space_id, space.key().unwrap(), &ty)?;
+                keychain.upsert_key(turtl, space_id, space.key().expect("turtl::Note::get_key_search() -- space.key() is none"), &ty)?;
             }
         }
         if board_ids.len() > 0 {
@@ -136,9 +136,9 @@ impl Keyfinder for Note {
             let profile_guard = lockr!(turtl.profile);
             for board in &profile_guard.boards {
                 if board.id().is_none() || board.key().is_none() { continue; }
-                let board_id = board.id().unwrap();
+                let board_id = board.id().expect("turtl::Note::get_key_search() -- board.id() is none");
                 if !board_ids.contains(board_id) { continue; }
-                keychain.upsert_key(turtl, board_id, board.key().unwrap(), &ty)?;
+                keychain.upsert_key(turtl, board_id, board.key().expect("turtl::Note::get_key_search() -- board.key() is none"), &ty)?;
             }
         }
         Ok(keychain)
@@ -152,7 +152,7 @@ impl Keyfinder for Note {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
                     ty: KeyType::Space,
-                    k: space.key().unwrap().clone(),
+                    k: space.key().expect("turtl::Note::get_keyrefs() -- space.key() is None GAHHH TIMMY").clone(),
                 });
             }
         }
@@ -164,7 +164,7 @@ impl Keyfinder for Note {
                         refs.push(KeyRef {
                             id: board_id.clone(),
                             ty: KeyType::Board,
-                            k: board.key().unwrap().clone(),
+                            k: board.key().expect("turtl::Note::get_keyrefs() -- board.key() is None GAHHH TIMMY").clone(),
                         });
                     }
                 }

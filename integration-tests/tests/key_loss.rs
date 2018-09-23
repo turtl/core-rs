@@ -66,6 +66,7 @@ mod tests {
         jedi::set::<String>(&["space_id"], &mut board, &to_space_id).unwrap();
         dispatch_ass(json!(["profile:sync:model", "move-space", "board", board]));
         wait_on("sync:outgoing:complete");
+        sleep(5000);
 
         let profile = dispatch_ass(json!(["profile:load"]));
         let search = dispatch_ass(json!(["profile:find-notes", {"space_id": to_space_id}]));

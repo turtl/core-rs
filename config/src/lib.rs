@@ -24,7 +24,7 @@ pub fn load_config(location: Option<String>) -> TResult<()> {
     let path_env = location
         .unwrap_or(env::var("TURTL_CONFIG_FILE").unwrap_or(String::from("config.yaml")));
     if path_env == ":null:" {
-        let mut config_guard = (*CONFIG).write().unwrap();
+        let mut config_guard = (*CONFIG).write().expect("config::load_config() -- failed to grab config write lock");
         *config_guard = json!({});
         drop(config_guard);
         return Ok(());
@@ -46,7 +46,7 @@ pub fn load_config(location: Option<String>) -> TResult<()> {
             println!("config::load_config() -- error parsing config yaml: {}: {}", path_env, e);
             e
         })?;
-    let mut config_guard = (*CONFIG).write().unwrap();
+    let mut config_guard = (*CONFIG).write().expect("config::load_config() -- failed to grab config write lock 2");
     *config_guard = data;
     drop(config_guard);
     Ok(())
@@ -54,14 +54,14 @@ pub fn load_config(location: Option<String>) -> TResult<()> {
 
 /// get a string value from our config
 pub fn get<T: DeserializeOwned>(keys: &[&str]) -> TResult<T> {
-    let guard = (*CONFIG).read().unwrap();
+    let guard = (*CONFIG).read().expect("config::get() -- failed to get read lock");
     jedi::get(keys, &guard)
         .map_err(|e| From::from(e))
 }
 
 /// Set a value into our heroic config
 pub fn set<T: Serialize>(keys: &[&str], val: &T) -> TResult<()> {
-    let mut guard = (*CONFIG).write().unwrap();
+    let mut guard = (*CONFIG).write().expect("config::set() -- failed to get write lock");
     jedi::set(keys, &mut guard, val)
         .map_err(|e| From::from(e))
 }
@@ -72,8 +72,8 @@ fn deep_merge(val1: &mut Value, val2: &Value) -> TResult<Value> {
     }
 
     {
-        let obj1 = val1.as_object_mut().unwrap();
-        let obj2 = val2.as_object().unwrap();
+        let obj1 = val1.as_object_mut().expect("config::deep_merge() -- failed to get mut object from val");
+        let obj2 = val2.as_object().expect("config::deep_merge() -- failed to get object from val");
         for (key, val) in obj2 {
             if val.is_object() {
                 let merged_val = {
@@ -94,7 +94,7 @@ fn deep_merge(val1: &mut Value, val2: &Value) -> TResult<Value> {
 
 /// Merge a serializable object into the config object
 pub fn merge<T: Serialize>(obj: &T) -> TResult<()> {
-    let mut config_mut = (*CONFIG).write().unwrap();
+    let mut config_mut = (*CONFIG).write().expect("config::merge() -- failed to grab write lock");
     let val = jedi::to_val(obj)?;
     deep_merge(&mut config_mut, &val)?;
     Ok(())
@@ -102,7 +102,7 @@ pub fn merge<T: Serialize>(obj: &T) -> TResult<()> {
 
 /// Send the entire config back as a val
 pub fn dump() -> TResult<Value> {
-    let config = (*CONFIG).read().unwrap();
+    let config = (*CONFIG).read().expect("config::dump() -- failed to grab read lock");
     let json = config.clone();
     Ok(json)
 }

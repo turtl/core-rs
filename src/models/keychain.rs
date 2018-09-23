@@ -89,7 +89,7 @@ impl<'de> de::Deserialize<'de> for KeyRef<String> {
                     Ok(x) => x,
                     Err(_) => return Err(de::Error::invalid_value(de::Unexpected::Str(&typekey.as_str()), &"KeyRef.deserialize() -- bad field")),
                 };
-                let id = x.remove(&typekey).unwrap();
+                let id = x.remove(&typekey).expect("turtl::KeyRef.deserialize() -- could not remove item from hashmap");
                 keyref.id = id;
                 keyref.ty = ty;
                 Ok(keyref)
@@ -202,7 +202,7 @@ impl Keychain {
             Some((turtl, skip_remote_sync)) => {
                 for entry in &mut self.entries {
                     if &entry.item_id != item_id { continue; }
-                    sync_model::delete_model::<KeychainEntry>(turtl, entry.id().unwrap(), skip_remote_sync)?;
+                    sync_model::delete_model::<KeychainEntry>(turtl, entry.id().expect("turtl::Keychain.remove_entry() -- entry.id() is None"), skip_remote_sync)?;
                 }
             },
             None => {},
@@ -238,7 +238,7 @@ impl Keychain {
         match self.find_entry(item_id) {
             Some(entry) => {
                 if !entry.k.is_some() { return None; }
-                Some(entry.k.as_ref().unwrap().clone())
+                Some(entry.k.as_ref().expect("turtl::Keychain::find_key() -- entry.k is None HOW CAN THIS BE").clone())
             },
             None => {
                 None
@@ -252,7 +252,7 @@ impl Keychain {
         for entry in &self.entries {
             if !entry.k.is_some() { continue; }
             if &entry.item_id == item_id {
-                found.push(entry.k.as_ref().unwrap().clone());
+                found.push(entry.k.as_ref().expect("turtl::Keychain::find_all_entries() -- entry.k is NONE OMG HELLLPPP").clone());
             }
         }
         found
@@ -318,7 +318,7 @@ pub fn remove_key(turtl: &Turtl, item_id: &String, skip_remote_sync: bool) -> TR
         let mut ids = Vec::new();
         for entry in &profile_guard.keychain.entries {
             if &entry.item_id == item_id {
-                ids.push(entry.id().unwrap().clone());
+                ids.push(entry.id().expect("turtl::keychain::remove_key() -- entry.id() is None nooo").clone());
             }
         }
         ids

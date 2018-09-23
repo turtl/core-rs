@@ -638,11 +638,11 @@ pub fn random_hash() -> CResult<String> {
 /// 777Z+DOI+8O8OO88DNDNNMO.D8O7ONMMDZMMMMMMMMNN8D8DNNMMMMMMNNNNNNNNNNNNNNNNMM
 /// 888888D8ZO888OZ88DNNNNM$,.III++?8NMMMMMMND88O8D8NMMMMMMMNNNNNNNNNNNNNNNNMN
 fn deserialize_version_0(serialized: &Vec<u8>) -> CResult<CryptoData> {
-    let ciphertext_base64 = String::from_utf8(Vec::from(&serialized[0..(serialized.len() - 34)])).unwrap();
-    let ciphertext = low::from_base64(&ciphertext_base64).unwrap();
+    let ciphertext_base64 = String::from_utf8(Vec::from(&serialized[0..(serialized.len() - 34)])).expect("migrate::crypto::deserialize_version_0() -- failed to parse utf8");
+    let ciphertext = low::from_base64(&ciphertext_base64).expect("migrate::crypto::deserialize_version_0() -- failed to parse base64");
     let cutoff: usize = serialized.len() - 32;
-    let iv_hex = String::from_utf8(Vec::from(&serialized[cutoff..])).unwrap();
-    let iv = low::from_hex(&iv_hex).unwrap();
+    let iv_hex = String::from_utf8(Vec::from(&serialized[cutoff..])).expect("migrate::crypto::deserialize_version_0() -- failed to parse utf8 2");
+    let iv = low::from_hex(&iv_hex).expect("migrate::crypto::deserialize_version_0() -- failed to parse iv hex");
     let desc = PayloadDescription { cipher_index: 0, block_index: 0, pad_index: None, kdf_index: None };
     Ok(CryptoData::new(0, desc, iv, Vec::new(), ciphertext))
 }
@@ -650,9 +650,9 @@ fn deserialize_version_0(serialized: &Vec<u8>) -> CResult<CryptoData> {
 /// Ugh. Serialize a CryptoData container to version 0. See "dunce" comment
 /// above.
 fn serialize_version_0(data: &CryptoData) -> CResult<Vec<u8>> {
-    let mut ser = to_base64(&data.ciphertext).unwrap();
+    let mut ser = to_base64(&data.ciphertext).expect("migrate::crypto::serialize_version_0() -- failed to serialize base64");
     ser.push_str(":i");
-    ser.push_str(&to_hex(&data.iv).unwrap());
+    ser.push_str(&to_hex(&data.iv).expect("migrate::crypto::serialize_version_0() -- failed to serialize hex"));
     Ok(Vec::from(ser.as_bytes()))
 }
 

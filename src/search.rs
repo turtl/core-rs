@@ -144,7 +144,7 @@ impl Search {
         //   SELECT id FROM notes WHERE id IN (id1, id2)
         // there's probably a much better way, but this is easiest for now
         if query.text.is_some() {
-            let ft_note_ids = self.idx.find(query.text.as_ref().unwrap())?;
+            let ft_note_ids = self.idx.find(query.text.as_ref().expect("turtl::Search.find() -- query.text is None. This is so strange. I do not know how this could happen. But rest assured, I will make sure it DOES NOT HAPPEN AGAIN."))?;
             let mut ft_qry: Vec<&str> = Vec::with_capacity(ft_note_ids.len() + 2);
             ft_qry.push("SELECT id FROM notes WHERE id IN (");
             for id in &ft_note_ids {
@@ -222,22 +222,22 @@ impl Search {
 
         if query.type_.is_some() {
             queries.push(String::from("SELECT id FROM notes WHERE type = ?"));
-            qry_vals.push(SearchVal::String(query.type_.as_ref().unwrap().clone()));
+            qry_vals.push(SearchVal::String(query.type_.as_ref().expect("turtl::Search.find() -- query.type_ is None").clone()));
         }
 
         if query.url.is_some() {
             queries.push(String::from("SELECT id FROM notes WHERE url = ?"));
-            qry_vals.push(SearchVal::String(query.url.as_ref().unwrap().clone()));
+            qry_vals.push(SearchVal::String(query.url.as_ref().expect("turtl::Search.find() -- query.url is None").clone()));
         }
 
         if query.has_file.is_some() {
             queries.push(String::from("SELECT id FROM notes WHERE has_file = ?"));
-            qry_vals.push(SearchVal::Bool(query.has_file.as_ref().unwrap().clone()));
+            qry_vals.push(SearchVal::Bool(query.has_file.as_ref().expect("turtl::Search.find() -- query.has_file is None").clone()));
         }
 
         if query.color.is_some() {
             queries.push(String::from("SELECT id FROM notes WHERE color = ?"));
-            qry_vals.push(SearchVal::Int(query.color.as_ref().unwrap().clone()));
+            qry_vals.push(SearchVal::Int(query.color.as_ref().expect("turtl::Search.find() -- query.color is None").clone()));
         }
 
         let filter_query = if queries.len() > 0 && exclude_queries.len() > 0 {

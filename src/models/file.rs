@@ -124,7 +124,7 @@ impl SyncModel for FileData {
         match sync_record.action {
             SyncAction::Delete => {
                 sync_record.data = Some(json!({
-                    "id": self.id().unwrap().clone(),
+                    "id": self.id().expect("turtl::FileData.outgoing() -- delete -- self.id() is None").clone(),
                 }));
             }
             _ => {
@@ -143,7 +143,7 @@ impl MemorySaver for FileData {
             SyncAction::Delete => {
                 // unwrap is ok. we will always have an id. hopefully. no, but
                 // we will.
-                let note_id = self.id().unwrap().clone();
+                let note_id = self.id().expect("turtl::FileData::.mem_update() -- delete -- self.id() IS NONE AAARRRGGGGHGHHGHHH").clone();
                 let mut notes = turtl.load_notes(&vec![note_id.clone()])?;
                 if notes.len() == 0 { return Ok(()); }
                 let note = &mut notes[0];

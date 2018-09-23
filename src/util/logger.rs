@@ -187,7 +187,7 @@ pub fn setup_logger() -> TResult<()> {
             }
             out.finish(format_args!(
                 "{} - [{}][{}] {}",
-                time::now().strftime("%Y-%m-%dT%H:%M:%S").unwrap(),
+                time::now().strftime("%Y-%m-%dT%H:%M:%S").expect("turtl::logger::setup_logger() -- failed to parse time or something"),
                 record.level(),
                 record.target(),
                 message

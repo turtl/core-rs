@@ -17,12 +17,12 @@ pub fn sleep(millis: u64) {
 }
 
 fn exit() {
-    turtl_core::send(String::from(r#"["0","sync:shutdown",false]"#)).unwrap();
-    turtl_core::send(String::from(r#"["0","user:logout",false]"#)).unwrap();
+    turtl_core::send(String::from(r#"["0","sync:shutdown",false]"#)).expect("client::exit() -- failed to send shutdown command");
+    turtl_core::send(String::from(r#"["0","user:logout",false]"#)).expect("client::exit() -- failed to send logout command");
 }
 
 fn repl() -> TResult<()> {
-    let re = Regex::new(r#"'.+?'|".+?"|[^ ]+"#).unwrap();
+    let re = Regex::new(r#"'.+?'|".+?"|[^ ]+"#).expect("client::repl() -- failed to create regex");
     let mut req_id = 1;
     let mut rl = Editor::<()>::new();
     // TODO: Find a good path for history
@@ -69,8 +69,8 @@ fn repl() -> TResult<()> {
                 msg_parts.append(&mut args);
 
                 let msg = jedi::stringify(&msg_parts)?;
-                turtl_core::send(msg).unwrap();
-                let response = turtl_core::recv(None).unwrap();
+                turtl_core::send(msg).expect("client::repl() -- failed to send core message");
+                let response = turtl_core::recv(None).expect("client::repl() -- failed to recv core message");
                 println!("response: {}", response);
                 req_id += 1;
             },
@@ -104,6 +104,6 @@ fn main() {
         Err(err) => println!("turtl-client::repl() -- {}", err),
     }
 
-    handle.join().unwrap();
+    handle.join().expect("client::main() -- failed to join thread handle");
 }
 

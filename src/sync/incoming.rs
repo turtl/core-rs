@@ -50,7 +50,7 @@ pub fn ignore_syncs_maybe(turtl: &Turtl, val_with_sync_ids: &Value, errtype: &st
         Some(x) => {
             let mut db_guard = lock!(turtl.db);
             if db_guard.is_some() {
-                match SyncIncoming::ignore_on_next(db_guard.as_mut().unwrap(), &x) {
+                match SyncIncoming::ignore_on_next(db_guard.as_mut().expect("turtl::sync_incoming::ignore_syncs_maybe() -- db is None"), &x) {
                     Ok(..) => {},
                     Err(e) => warn!("{} -- error ignoring sync items: {}", errtype, e),
                 }

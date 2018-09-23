@@ -45,7 +45,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
                 // if we're running an update and our object's data is missing,
                 // don't bother. odds are the sync item directly after this is a
                 // delete =]
-                let has_missing: Option<bool> = jedi::get_opt(&["missing"], sync_item.data.as_ref().unwrap());
+                let has_missing: Option<bool> = jedi::get_opt(&["missing"], sync_item.data.as_ref().expect("turtl::SyncModel.incoming() -- sync_item.data is None!!!1"));
                 if has_missing.is_some() {
                     return Ok(());
                 }
@@ -54,7 +54,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
                 let mut data = Value::Null;
                 // swap the `data` out from under the SyncRecord so we don't
                 // have to clone it
-                mem::swap(sync_item.data.as_mut().unwrap(), &mut data);
+                mem::swap(sync_item.data.as_mut().expect("turtl::SyncModel.incoming() -- sync_item.data is None!!!2"), &mut data);
                 debug!("sync::incoming() -- {} / data: {:?}", self.model_type(), jedi::stringify(&data)?);
                 let model: Self = jedi::from_val(data)?;
                 model.db_save(db, Some(sync_item as &SyncRecord))?;
@@ -88,7 +88,7 @@ pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
         match sync_record.action {
             SyncAction::Delete => {
                 sync_record.data = Some(json!({
-                    "id": self.id().unwrap().clone(),
+                    "id": self.id().expect("turtl::SyncModel.outgoing() -- self.id() is None").clone(),
                 }));
             }
             _ => {
@@ -167,7 +167,7 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
             model.generate_id()?;
             model.generate_key()?;
         } else {
-            let got_model = db.get::<T>(model.table(), model.id().unwrap())?;
+            let got_model = db.get::<T>(model.table(), model.id().expect("turtl::sync_model::save_model() -- model.id() is Nooooooooooone"))?;
             match got_model {
                 Some(db_model) => {
                     let mut model_data: Value = model.data()?;
@@ -192,7 +192,13 @@ pub fn save_model<T>(action: SyncAction, turtl: &Turtl, model: &mut T, skip_remo
     model.generate_subkeys(&keyrefs)?;
 
     if model.add_to_keychain() {
-        keychain::save_key(turtl, model.id().as_ref().unwrap(), model.key().unwrap(), &String::from(model.model_type()), skip_remote_sync)?;
+        keychain::save_key(
+            turtl,
+            model.id().as_ref().expect("turtl::sync_model::save_model() -- model.id() is None"),
+            model.key().expect("turtl::sync_model::save_model() -- model.key() is None"),
+            &String::from(model.model_type()),
+            skip_remote_sync
+        )?;
     }
 
     // TODO: is there a way around all the horrible cloning?
@@ -226,7 +232,7 @@ pub fn delete_model<T>(turtl: &Turtl, id: &String, skip_remote_sync: bool) -> TR
     // if this model adds itself to the keychain on create, then it should be
     // removed from the keychain on delete.
     if model.add_to_keychain() {
-        keychain::remove_key(turtl, model.id().as_ref().unwrap(), skip_remote_sync)?;
+        keychain::remove_key(turtl, model.id().as_ref().expect("turtl::sync_model::delete_model() -- model.id() is None"), skip_remote_sync)?;
     }
 
     {

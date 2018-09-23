@@ -214,7 +214,7 @@ macro_rules! model {
                 if self.id.is_none() {
                     self.id = Some(::models::model::cid()?);
                 }
-                Ok(self.id.as_ref().unwrap())
+                Ok(self.id.as_ref().expect("turtl::Model.generate_id() -- self.id is None. No, that's not true. THAT'S IMPOSSIBLE!!"))
             }
         }
     }

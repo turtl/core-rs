@@ -156,7 +156,7 @@ pub fn start() -> thread::JoinHandle<()> {
                 error!("main::start() -- {}", e);
             }
         }
-    }).unwrap();
+    }).expect("turtl::start() -- failed to spawn thread");
 
     handle
 }

@@ -76,7 +76,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
             }
             let mut model_clone = ftry!(model.clone());
             let model_type = String::from(model.model_type());
-            let model_id = model.id().unwrap().clone();
+            let model_id = model.id().expect("turtl::protected::map_deserialize() -- mode.id() is None").clone();
             // run the deserialize, return the result into our future chain
             let fut = work.run_async(move || model_clone.deserialize())
                 .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
@@ -360,7 +360,7 @@ pub trait Protected: Model + fmt::Debug {
         if self.key().is_none() {
             return TErr!(TError::MissingData(format!("Protected.generate_subkeys() -- missing `key` (type: {}, id {:?})", self.model_type(), self.id())));
         }
-        let model_key = self.key().unwrap().clone();
+        let model_key = self.key().expect("turtl::Protected.generate_subkeys() -- self.key() is None").clone();
         let mut encrypted: Vec<KeyRef<String>> = Vec::with_capacity(keydata.len());
         for key in keydata {
             let enc = encrypt_key(&key.k, model_key.clone())?;

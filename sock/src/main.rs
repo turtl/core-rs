@@ -35,13 +35,13 @@ pub fn main() {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
     let handle = cwrap::init(r#"{"messaging":{"reqres_append_mid":false}}"#);
-    let server = Server::bind("127.0.0.1:7472").unwrap();
+    let server = Server::bind("127.0.0.1:7472").expect("sock::main() -- failed to bind server");
     info!("* sock server bound, listening");
     let conn_id: Arc<RwLock<u32>> = Arc::new(RwLock::new(0));
     macro_rules! inc_conn_id {
         ($conn:expr) => {
             {
-                let mut guard = $conn.write().unwrap();
+                let mut guard = $conn.write().expect("sock::main() -- failed to grab conn write lock");
                 *guard += 1;
                 *guard
             }
@@ -50,7 +50,7 @@ pub fn main() {
     macro_rules! get_conn_id {
         ($conn:expr) => {
             {
-                let guard = $conn.read().unwrap();
+                let guard = $conn.read().expect("sock::main() -- failed to grab conn read lock");
                 *guard
             }
         }
@@ -60,15 +60,15 @@ pub fn main() {
         let this_conn_id = inc_conn_id!(cid);
         thread::spawn(move || {
             info!("* new connection! {}", get_conn_id!(cid));
-            let mut client = connection.accept().unwrap();
-            client.set_nonblocking(true).unwrap();
+            let mut client = connection.accept().expect("sock::main() -- failed to accept connection");
+            client.set_nonblocking(true).expect("sock::main() -- failed to set sock to nonblocking lol");
             drain_channels();
             cwrap::send(r#"["0","sync:shutdown",false]"#);
             cwrap::send(r#"["0","user:logout",false]"#);
             cwrap::recv("");
             cwrap::recv("");
             drain_channels();
-            client.send_message(&Message::text(r#"{"e":"messaging:ready","d":true}"#)).unwrap();
+            client.send_message(&Message::text(r#"{"e":"messaging:ready","d":true}"#)).expect("sock::main() -- failed to send ready msg to client");
             loop {
                 // make sure that if our stupid lazy connection has been left
                 // behind that it is forgotten forever and ever and ever and
@@ -82,7 +82,7 @@ pub fn main() {
                             OwnedMessage::Close(_) => { break; }
                             OwnedMessage::Binary(x) => {
                                 info!("* ui -> core ({})", x.len());
-                                let msg_str = String::from_utf8(x).unwrap();
+                                let msg_str = String::from_utf8(x).expect("sock::main() -- do you see what happens, larry? do you see what happens when you pass non-utf8 data, larry? this is what happens, larry.");
                                 cwrap::send(msg_str.as_str());
                             }
                             OwnedMessage::Text(x) => {
@@ -101,7 +101,7 @@ pub fn main() {
                     Some(x) => {
                         info!("* core -> ui (ev: {})", x.len());
                         //println!("---\n{}", x);
-                        client.send_message(&Message::text(x)).unwrap();
+                        client.send_message(&Message::text(x)).expect("sock::main() -- failed to send message to stinkin' client");
                     }
                     None => {}
                 }
@@ -111,7 +111,7 @@ pub fn main() {
                     Some(x) => {
                         info!("* core -> ui (res: {})", x.len());
                         //println!("---\n{}", x);
-                        client.send_message(&Message::text(x)).unwrap();
+                        client.send_message(&Message::text(x)).expect("sock::main() -- failed to send event to stinkin' client");
                     }
                     None => {}
                 }
@@ -120,6 +120,6 @@ pub fn main() {
             info!("* connection ended! {}", this_conn_id);
         });
     }
-    handle.join().unwrap();
+    handle.join().expect("sock::main() -- failed to join thread");
 }
 

@@ -25,7 +25,7 @@ pub fn setup_logger() {
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} - [{}][{}] {}",
-                time::now().strftime("%Y-%m-%dT%H:%M:%S").unwrap(),
+                time::now().strftime("%Y-%m-%dT%H:%M:%S").expect("sock::setup_logger() -- failed to parse time format"),
                 record.level(),
                 record.target(),
                 message

@@ -94,7 +94,7 @@ pub fn init() -> thread::JoinHandle<()> {
         env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
     }
     // load the local config
-    config::load_config(None).unwrap();
+    config::load_config(None).expect("integration-tests::init() -- failed to load config");
     let handle = cwrap::init(r#"{
         "data_folder": ":memory:",
         "wrap_errors": true,
@@ -114,23 +114,23 @@ pub fn init() -> thread::JoinHandle<()> {
 
 pub fn end(handle: thread::JoinHandle<()>) {
     dispatch(json!(["app:shutdown"]));
-    handle.join().unwrap();
+    handle.join().expect("integration-tests::end() -- failed to join thread handle");
 }
 
 pub fn dispatch(args: Value) -> Response {
     let msg_id = {
-        let mut mid_guard = MID.write().unwrap();
+        let mut mid_guard = MID.write().expect("integration-tests::dispatch() -- failed to grab write lock");
         let mid = *mid_guard;
         *mid_guard += 1;
         mid.to_string()
     };
-    let mut msg_args = vec![jedi::to_val(&msg_id).unwrap()];
-    let mut vals = jedi::from_val::<Vec<Value>>(args).unwrap();
+    let mut msg_args = vec![jedi::to_val(&msg_id).expect("integration-tests::dispatch() -- failed to convert to val")];
+    let mut vals = jedi::from_val::<Vec<Value>>(args).expect("integration-tests::dispatch() -- failed to convert from val");
     msg_args.append(&mut vals);
-    let msg = jedi::stringify(&msg_args).unwrap();
+    let msg = jedi::stringify(&msg_args).expect("integration-tests::dispatch() -- failed to stringify");
     send(msg.as_str());
     let recv = recv(msg_id.as_str());
-    jedi::parse(&recv).unwrap()
+    jedi::parse(&recv).expect("integration-tests::dispatch() -- failed to parse json")
 }
 
 pub fn dispatch_ass(args: Value) -> Value {
@@ -145,10 +145,10 @@ pub fn dispatch_ass(args: Value) -> Value {
 pub fn wait_on(evname: &str) -> Value {
     loop {
         let ev = recv_event();
-        let parsed: Value = jedi::parse(&ev).unwrap();
-        let parsed_evname: String = jedi::get(&["e"], &parsed).unwrap();
+        let parsed: Value = jedi::parse(&ev).expect("integration-tests::wait_on() -- failed to parse json");
+        let parsed_evname: String = jedi::get(&["e"], &parsed).expect("integration-tests::wait_on() -- failed to get e");
         if parsed_evname == evname {
-            return jedi::get(&["d"], &parsed).unwrap();
+            return jedi::get(&["d"], &parsed).expect("integration-tests::wait_on() -- failed to get d");
         }
     }
 }

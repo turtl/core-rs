@@ -41,7 +41,7 @@ pub use ::error::CError;
 use ::error::CResult;
 
 lazy_static! {
-    static ref CONN: Carrier = Carrier::new().unwrap();
+    static ref CONN: Carrier = Carrier::new().expect("carrier -- global static: failed to create");
 }
 
 /// The carrier Queue is a quick and simple wrapper around MsQueue that keeps
@@ -64,25 +64,25 @@ impl<T> Queue<T> {
 
     /// Increment the number of messages this queue has by a certain amount (1).
     fn inc_messages(&self, val: i32) {
-        let mut mguard = self.messages.write().unwrap();
+        let mut mguard = self.messages.write().expect("Queue.inc_messages() -- failed to grab write lock");
         (*mguard) += val;
     }
 
     /// Increment the number of users this queue has by a certain amount (1).
     fn inc_users(&self, val: i32) {
-        let mut uguard = self.users.write().unwrap();
+        let mut uguard = self.users.write().expect("Queue.inc_users() -- failed to grab write lock");
         (*uguard) += val;
     }
 
     /// Get how many messages this queue currently has listening to it.
     fn num_messages(&self) -> i32 {
-        let mguard = self.messages.read().unwrap();
+        let mguard = self.messages.read().expect("Queue.num_messages() -- failed to grab read lock");
         (*mguard).clone()
     }
 
     /// Get how many users this queue currently has listening to it.
     fn num_users(&self) -> i32 {
-        let uguard = self.users.read().unwrap();
+        let uguard = self.users.read().expect("Queue.num_users() -- failed to grab read lock");
         (*uguard).clone()
     }
 
@@ -98,7 +98,7 @@ impl<T> Queue<T> {
         if res.is_some() {
             self.inc_messages(-1);
         } else {
-            *(self.messages.write().unwrap()) = 0;
+            *(self.messages.write().expect("Queue.try_pop() -- failed to grab write lock")) = 0;
         }
         res
     }
@@ -140,9 +140,9 @@ impl Carrier {
 
     /// Ensure a channel exists
     fn ensure(&self, channel: &String) -> Arc<Queue<Vec<u8>>> {
-        let mut guard = self.queues.write().unwrap();
+        let mut guard = self.queues.write().expect("Carrier.ensure() -- failed to grab write lock");
         if (*guard).contains_key(channel) {
-            (*guard).get(channel).unwrap().clone()
+            (*guard).get(channel).expect("Carrier.ensure() -- failed to grab map item").clone()
         } else {
             let queue = Arc::new(Queue::new());
             (*guard).insert(channel.clone(), queue.clone());
@@ -151,24 +151,24 @@ impl Carrier {
     }
 
     fn exists(&self, channel: &String) -> bool {
-        let guard = self.queues.read().unwrap();
+        let guard = self.queues.read().expect("Carrier.exists() -- failed to grab read lock");
         (*guard).contains_key(channel)
     }
 
     /// Count how many active channels there are
     fn count(&self) -> u32 {
-        let guard = self.queues.read().unwrap();
+        let guard = self.queues.read().expect("Carrier.count() -- failed to grab read lock");
         (*guard).len() as u32
     }
 
     /// Remove a channel
     fn remove(&self, channel: &String) {
-        let mut guard = self.queues.write().unwrap();
+        let mut guard = self.queues.write().expect("Carrier.remove() -- failed to grab write lock");
         (*guard).remove(channel);
     }
 
     fn wipe(&self) {
-        let mut guard = self.queues.write().unwrap();
+        let mut guard = self.queues.write().expect("Carrier.wipe() -- failed to grab write lock");
         guard.clear();
     }
 }

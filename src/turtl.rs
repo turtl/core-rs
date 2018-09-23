@@ -263,7 +263,7 @@ impl Turtl {
         if login.is_none() {
             return TErr!(TError::PermissionDenied(String::from("login on old server failed")));
         }
-        let migrate_data = migrate::migrate(login.unwrap(), |ev, args| {
+        let migrate_data = migrate::migrate(login.expect("turtl::Turtl.join_migrate() -- login is None"), |ev, args| {
             debug!("turtl.join_migrate() -- migration event: {}", ev);
             match messaging::ui_event("migration-event", &json!({"event": ev, "args": args})) {
                 Ok(_) => {}
@@ -407,7 +407,7 @@ impl Turtl {
         info!("turtl.sync_shutdown() -- has state? {}", guard.is_some());
         if guard.is_none() { return Ok(()); }
         {
-            let state = guard.as_mut().unwrap();
+            let state = guard.as_mut().expect("turtl::Turtl.sync_shutdown() -- sync_state is None");
             (state.shutdown)();
             if join {
                 info!("turtl.sync_shutdown() -- waiting on {} handles", state.join_handles.len());
@@ -434,20 +434,20 @@ impl Turtl {
     /// Pause the sync system (if active)
     pub fn sync_pause(&self) {
         let guard = lockr!(self.sync_state);
-        if guard.is_some() { (guard.as_ref().unwrap().pause)(); }
+        if guard.is_some() { (guard.as_ref().expect("turtl::Turtl.sync_pause() -- sync_state is None").pause)(); }
     }
 
     /// Resume the sync system (if active)
     pub fn sync_resume(&self) {
         let guard = lockr!(self.sync_state);
-        if guard.is_some() { (guard.as_ref().unwrap().resume)(); }
+        if guard.is_some() { (guard.as_ref().expect("turtl::Turtl.sync_resume() -- sync_state is None").resume)(); }
     }
 
     /// Returns whether or not the sync system is running
     pub fn sync_running(&self) -> bool {
         let guard = lockr!(self.sync_state);
         if guard.is_some() {
-            (guard.as_ref().unwrap().enabled)()
+            (guard.as_ref().expect("turtl::Turtl::sync_running() -- sync_state is None").enabled)()
         } else {
             false
         }
@@ -488,7 +488,7 @@ impl Turtl {
     /// the current logged-in user.
     pub fn get_user_db_location(&self, user_id: &String) -> TResult<String> {
         lazy_static! {
-            static ref RE_API_FORMAT: Regex = Regex::new(r"(?i)[^a-z0-9]").unwrap();
+            static ref RE_API_FORMAT: Regex = Regex::new(r"(?i)[^a-z0-9]").expect("turtl::Turtl.get_user_db_location() -- failed to compile regex");
         }
         let api_endpoint = config::get::<String>(&["api", "endpoint"])?;
         let server = RE_API_FORMAT.replace_all(&api_endpoint, "");
@@ -534,7 +534,7 @@ impl Turtl {
 
         // check the keychain right off the bat. it's quick and easy.
         if model.id().is_some() {
-            match keychain.find_key(model.id().unwrap()) {
+            match keychain.find_key(model.id().expect("turtl::Turtl.find_model_key() -- model.id() is None")) {
                 Some(key) => return found_key(model, key),
                 None => {},
             }
@@ -554,8 +554,8 @@ impl Turtl {
         {
             let user_guard = lockr!(self.user);
             if user_guard.id().is_some() && user_guard.key().is_some() {
-                let id = user_guard.id().unwrap().clone();
-                let key = user_guard.key().unwrap().clone();
+                let id = user_guard.id().expect("turtl::Turtl.find_model_key() -- user.id() is None").clone();
+                let key = user_guard.key().expect("turtl::Turtl.find_model_key() -- user.key() is None").clone();
                 drop(user_guard);
                 search.upsert_key(self, &id, &key, &String::from("user"))?;
             }
@@ -650,7 +650,7 @@ impl Turtl {
         if db_guard.is_none() {
             return TErr!(TError::MissingField(String::from("Turtl.db")));
         }
-        let db = db_guard.as_ref().unwrap();
+        let db = db_guard.as_ref().expect("turtl::Turtl.load_profile() -- db is None");
         let mut keychain: Vec<KeychainEntry> = db.all("keychain")?;
         let mut spaces: Vec<Space> = db.all("spaces")?;
         let mut boards: Vec<Board> = db.all("boards")?;
@@ -704,7 +704,7 @@ impl Turtl {
             let mut tmp = Vec::with_capacity(notes.len());
             let mut sort_hash: HashMap<String, Note> = HashMap::with_capacity(notes.len());
             for note in notes {
-                sort_hash.insert(note.id().unwrap().clone(), note);
+                sort_hash.insert(note.id().expect("turtl::Turtl.load_notes() -- note.id() is None").clone(), note);
             }
             for note_id in note_ids {
                 if let Some(note) = sort_hash.remove(note_id) {
@@ -725,7 +725,7 @@ impl Turtl {
         if db_guard.is_none() {
             return TErr!(TError::MissingData(String::from("Turtl.db")));
         }
-        let db = db_guard.as_ref().unwrap();
+        let db = db_guard.as_ref().expect("turtl::Turtl::index_notes() -- db is None");
         let mut notes: Vec<Note> = db.all("notes")?;
         self.find_models_keys(&mut notes)?;
         let notes: Vec<Note> = protected::map_deserialize(self, notes)

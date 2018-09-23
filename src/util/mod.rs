@@ -10,7 +10,7 @@ use ::config;
 macro_rules! do_lock {
     ($lock:expr) => {{
         //println!(" >>> lock {} ({}::{})", stringify!($lock), file!(), line!());
-        $lock.unwrap()
+        $lock.expect(concat!("turtl::util::do_lock!() -- failed to grab lock at ", file!(), "::", line!()))
     }}
 }
 

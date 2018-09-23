@@ -32,7 +32,7 @@ pub fn init(app_config: &str) -> thread::JoinHandle<()> {
     let handle = thread::spawn(move || {
         // send in a the config options we need for our tests
         let app_config = config_copy.as_str();
-        let app_config_c = CString::new(app_config).unwrap();
+        let app_config_c = CString::new(app_config).expect("cwrap::init() -- failed to convert config to CString");
         let ret = unsafe {
             turtlc_start(app_config_c.as_ptr(), 0)
         };
@@ -63,7 +63,7 @@ pub fn send(msg: &str) {
 pub fn recv(mid: &str) -> String {
     let mut len: usize = 0;
     let raw_len = &mut len as *mut usize;
-    let mid_c = CString::new(mid).unwrap();
+    let mid_c = CString::new(mid).expect("cwrap::recv() -- failed to convert mid to CString");
     let msg_c = unsafe {
         turtlc_recv(0, mid_c.as_ptr(), raw_len)
     };
@@ -74,7 +74,7 @@ pub fn recv(mid: &str) -> String {
         }
     }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
+    let res_str = str::from_utf8(slice).expect("cwrap::recv() -- failed to parse utf8 str");
     let ret = String::from(res_str);
     unsafe {
         turtlc_free(msg_c, len);
@@ -86,7 +86,7 @@ pub fn recv(mid: &str) -> String {
 pub fn recv_nb(mid: &str) -> Option<String> {
     let mut len: usize = 0;
     let raw_len = &mut len as *mut usize;
-    let mid_c = CString::new(mid).unwrap();
+    let mid_c = CString::new(mid).expect("cwrap::recv_nb() -- failed to convert mid to CString");
     let msg_c = unsafe {
         turtlc_recv(1, mid_c.as_ptr(), raw_len)
     };
@@ -94,7 +94,7 @@ pub fn recv_nb(mid: &str) -> Option<String> {
         return None;
     }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
+    let res_str = str::from_utf8(slice).expect("cwrap::recv_nb() -- failed to parse utf8 str");
     let ret = String::from(res_str);
     unsafe {
         turtlc_free(msg_c, len);
@@ -116,7 +116,7 @@ pub fn recv_event() -> String {
         }
     }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
+    let res_str = str::from_utf8(slice).expect("cwrap::recv_event() -- failed to parse utf8 str");
     let ret = String::from(res_str);
     unsafe {
         turtlc_free(msg_c, len);
@@ -135,7 +135,7 @@ pub fn recv_event_nb() -> Option<String> {
         return None;
     }
     let slice = unsafe { slice::from_raw_parts(msg_c, len) };
-    let res_str = str::from_utf8(slice).unwrap();
+    let res_str = str::from_utf8(slice).expect("cwrap::recv_event_nb() -- failed to parse utf8 str");
     let ret = String::from(res_str);
     unsafe {
         turtlc_free(msg_c, len);

@@ -61,7 +61,7 @@ impl Board {
             };
             notes.iter()
                 .filter(|x| x.id().is_some())
-                .map(|x| x.id().unwrap().clone())
+                .map(|x| x.id().expect("turtl::Board.move_spaces() -- id is None").clone())
                 .collect::<Vec<String>>()
         };
 
@@ -107,9 +107,9 @@ impl Keyfinder for Board {
             let profile_guard = lockr!(turtl.profile);
             for space in &profile_guard.spaces {
                 if space.id().is_none() || space.key().is_none() { continue; }
-                let space_id = space.id().unwrap();
+                let space_id = space.id().expect("turtl::Board.get_key_search() -- space id is None");
                 if !space_ids.contains(space_id) { continue; }
-                keychain.upsert_key(turtl, space_id, space.key().unwrap(), &ty)?;
+                keychain.upsert_key(turtl, space_id, space.key().expect("turtl::Board.get_key_search() -- space key is None"), &ty)?;
             }
         }
         Ok(keychain)
@@ -123,7 +123,7 @@ impl Keyfinder for Board {
                 refs.push(KeyRef {
                     id: self.space_id.clone(),
                     ty: KeyType::Space,
-                    k: space.key().unwrap().clone(),
+                    k: space.key().expect("turtl::Board.get_keyrefs() -- space key is None").clone(),
                 });
             }
         }
@@ -150,7 +150,7 @@ impl MemorySaver for Board {
             }
             SyncAction::Delete => {
                 let mut profile_guard = lockw!(turtl.profile);
-                let board_id = self.id().unwrap();
+                let board_id = self.id().expect("turtl::Board.mem_update() -- delete -- self.id() is None. HOW CAN I DELETE IT IF ITS NONE?!!");
 
                 let notes: Vec<Note> = {
                     let db_guard = lock!(turtl.db);

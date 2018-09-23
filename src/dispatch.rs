@@ -341,7 +341,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
-            let search = search_guard.as_ref().unwrap();
+            let search = search_guard.as_ref().expect("turtl::dispatch::dispatch() -- profile:find-notes -- search_guard is none");
             let (note_ids, total) = search.find(&qry)?;
             let notes: Vec<Note> = turtl.load_notes(&note_ids)?;
             let tags: Vec<(String, i32)> = search.find_tags(&qry)?;
@@ -362,7 +362,7 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             if search_guard.is_none() {
                 return TErr!(TError::MissingField(format!("turtl is missing `search` object")));
             }
-            let search = search_guard.as_ref().unwrap();
+            let search = search_guard.as_ref().expect("turtl::dispatch::dispatch() -- profile:find-tags -- search_guard is none");
             let tags: Vec<(String, i32)> = search.find_tags(&qry)?;
             Ok(json!({
                 "tags": tags,

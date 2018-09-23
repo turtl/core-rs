@@ -12,9 +12,9 @@ use proc_macro::TokenStream;
 pub fn protected(input: TokenStream) -> TokenStream {
     let s = input.to_string();
 
-    let ast = syn::parse_derive_input(&s).unwrap();
+    let ast = syn::parse_derive_input(&s).expect("protected_derive::protected() -- failed to parse tokens or something");
     let gen = impl_protected(&ast);
-    gen.parse().unwrap()
+    gen.parse().expect("protected_derive::protected() -- failed to parse")
 }
 
 /// Find all fields that have a serde(rename = ...) attribute and add them into
@@ -37,7 +37,7 @@ fn field_map(body: &syn::Body, attr_type: &str, attr_name: &str) -> HashMap<Stri
                                                     if ident.as_ref() == attr_name {
                                                         match lit {
                                                             &syn::Lit::Str(ref renamed_field, ref _style) => {
-                                                                let field_str = String::from(field.ident.as_ref().unwrap().as_ref());
+                                                                let field_str = String::from(field.ident.as_ref().expect("protected_derive::field_map() -- failed to grab field").as_ref());
                                                                 map.insert(field_str, renamed_field.clone());
                                                             },
                                                             _ => {},
@@ -129,7 +129,7 @@ fn find_protected_fields<'a>(body: &'a syn::Body, field_type: &str, restrict: bo
                     }
                     is_pub
                 })
-                .map(|x| x.ident.as_ref().unwrap())
+                .map(|x| x.ident.as_ref().expect("protected_derive::find_protected_fields() -- failed to grab ident ref"))
                 .collect()
         },
         _ => panic!("You can only use #[derive(Protected)] on Structs"),
@@ -207,7 +207,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 quote! {
                     let converted = #converter_mod::from_value(x)?;
                     if converted.is_some() {
-                        self.#field = converted.unwrap();
+                        self.#field = converted.expect("protected_derive::impl_protected() -- failed to grab converted");
                     };
                 }
             },
@@ -305,7 +305,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 if self.key().is_none() { return; }
                 #(
                     {
-                        let key = self.key().unwrap().clone();
+                        let key = self.key().expect("Protected._set_key_on_submodels() -- failed to grab self key").clone();
                         match self.#submodel_fields4.as_mut() {
                             Some(ref mut x) => x.set_key(Some(key)),
                             None => {},
@@ -352,7 +352,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                     let key = ::crypto::Key::random()?;
                     self.set_key(Some(key));
                 }
-                Ok(self.key().unwrap())
+                Ok(self.key().expect("Protected.generate_key() -- failed to grab self key"))
             }
 
             fn get_keys<'a>(&'a self) -> Option<&'a Vec<::models::keychain::KeyRef<String>>> {
@@ -399,7 +399,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                     match ::jedi::get_opt::<::jedi::Value>(&[#submodel_fields_rename2], data) {
                         Some(x) => {
                             if self.#submodel_fields7.is_some() {
-                                self.#submodel_fields8.as_mut().unwrap().merge_fields(&x)?;
+                                self.#submodel_fields8.as_mut().expect("Protected.merge_fields() -- failed to grab self field as mut").merge_fields(&x)?;
                             } else {
                                 self.#submodel_fields9 = Some(::jedi::from_val(x).map_err(|e| toterr!(e))?);
                             }
