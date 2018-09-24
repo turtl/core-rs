@@ -1,10 +1,11 @@
 use ::std::thread;
 use ::std::time::Duration;
-use ::error::TResult;
+use ::error::{TResult, TError};
 use ::std::io;
 use ::std::fs;
 use ::std::path::Path;
-use ::jedi::{self, Value};
+use ::std::fmt::Debug;
+use ::jedi::{self, Value, Serialize};
 use ::config;
 
 macro_rules! do_lock {
@@ -87,5 +88,14 @@ pub fn create_dir<P: AsRef<Path>>(dir: P) -> TResult<()> {
 pub fn json_or_string(maybe_json: String) -> Value {
     jedi::parse(&maybe_json)
         .unwrap_or(Value::String(maybe_json))
+}
+
+/// Turn an enum that has serde rename fields into a flat string
+pub fn enum_to_string<T: Serialize + Debug>(en: &T) -> TResult<String> {
+    let val = jedi::to_val(en)?;
+    match val {
+        Value::String(x) => Ok(x),
+        _ => TErr!(TError::BadValue(format!("enum_to_string() -- bad enum given: {:?}", en))),
+    }
 }
 

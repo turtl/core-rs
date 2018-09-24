@@ -21,6 +21,7 @@ use ::models::sync_record::{SyncType, SyncRecord, SyncAction};
 use ::turtl::Turtl;
 use ::std::mem;
 use ::config;
+use ::util;
 
 const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
@@ -42,6 +43,17 @@ struct Handlers {
     note: models::note::Note,
     file: models::file::FileData,
     invite: models::invite::Invite,
+}
+
+/// Lets the server know why we are asking for an incoming sync.
+#[derive(Debug, Serialize, PartialEq)]
+enum SyncReason {
+    #[serde(rename = "poll")]
+    Poll,
+    #[serde(rename = "reconnect")]
+    Reconnect,
+    #[serde(rename = "initial")]
+    Initial,
 }
 
 /// Given a Value object with sync_ids, try to ignore the sync ids. Kids' stuff.
@@ -151,16 +163,14 @@ impl SyncIncoming {
 
     /// Grab the latest changes from the API (anything after the given sync ID).
     /// Also, if `poll` is true, we long-poll.
-    fn sync_from_api(&mut self, sync_id: &String, poll: bool) -> TResult<()> {
-        let immediate = if poll { "0" } else { "1" };
-        let url = format!("/sync?sync_id={}&immediate={}", sync_id, immediate);
-        let timeout = if poll {
-            match config::get(&["sync", "poll_timeout"]) {
-                Ok(x) => x,
-                Err(_) => 60,
+    fn sync_from_api(&mut self, sync_id: &String, reason: SyncReason) -> TResult<()> {
+        let reason_s = util::enum_to_string(&reason)?;
+        let url = format!("/sync?sync_id={}&type={}", sync_id, reason_s);
+        let timeout = match &reason {
+            SyncReason::Poll => {
+                config::get(&["sync", "poll_timeout"]).unwrap_or(60)
             }
-        } else {
-            10
+            _ => 10
         };
         let syncres: TResult<SyncResponse> = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
 
@@ -199,7 +209,7 @@ impl SyncIncoming {
         };
 
         self.set_connected(true);
-        self.update_local_db_from_api_sync(syncdata, !poll)
+        self.update_local_db_from_api_sync(syncdata, reason != SyncReason::Poll)
     }
 
     /// Load the user's entire profile. The API gives us back a set of sync
@@ -346,7 +356,7 @@ impl Syncer for SyncIncoming {
         let res = if !skip_init {
             match sync_id {
                 // we have a sync id! grab the latest changes from the API
-                Some(ref x) => self.sync_from_api(x, false),
+                Some(ref x) => self.sync_from_api(x, SyncReason::Initial),
                 // no sync id ='[ ='[ ='[ ...instead grab the full profile
                 None => self.load_full_profile(),
             }
@@ -362,9 +372,9 @@ impl Syncer for SyncIncoming {
         // are currently connected. this way, if we DO get a connection back
         // after being previously disconnected, we can update our state
         // immediately instead of waiting 60s or w/e until the sync goes through
-        let do_poll = self.connected;
+        let reason = if self.connected { SyncReason::Poll } else { SyncReason::Reconnect };
         let res = match sync_id {
-            Some(ref x) => self.sync_from_api(x, do_poll),
+            Some(ref x) => self.sync_from_api(x, reason),
             None => return TErr!(TError::MissingData(String::from("no sync_id present"))),
         };
         res
