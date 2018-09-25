@@ -8,6 +8,7 @@ extern crate config;
 extern crate crossbeam;
 extern crate dumpy;
 extern crate fern;
+extern crate fs2;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate glob;
@@ -56,10 +57,10 @@ mod turtl;
 use ::std::thread;
 use ::std::sync::Arc;
 use ::std::env;
-
+use ::std::fs;
 use ::jedi::Value;
-
 use ::error::TResult;
+use ::fs2::FileExt;
 
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
@@ -124,6 +125,29 @@ pub fn start() -> thread::JoinHandle<()> {
     info!("main::start() -- begin");
     let handle = thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
+            // acquire our datadir lock
+            let data_folder = config::get::<String>(&["data_folder"])?;
+            let lockfile = if data_folder != ":memory:" {
+                let lockfile_path = format!("{}/run.lock", data_folder);
+                info!("main::start() -- locking data dir: {}", lockfile_path);
+                let lockfile = fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .open(lockfile_path.as_str())?;
+                match lockfile.try_lock_exclusive() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("main::start() -- cannot lock {} ...another instance of turtl is likely running", lockfile_path);
+                        return Err(toterr!(e));
+                    }
+                }
+                Some(lockfile)
+            } else {
+                None
+            };
+
             // create our turtl object
             let turtl = Arc::new(turtl::Turtl::new()?);
 
@@ -147,6 +171,7 @@ pub fn start() -> thread::JoinHandle<()> {
                 Ok(..) => {},
                 Err(e) => error!("main::start() -- messaging error: {}", e),
             }
+            drop(lockfile);
             info!("main::start() -- shutting down");
             Ok(())
         };
