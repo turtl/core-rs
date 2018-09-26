@@ -5,6 +5,7 @@ use ::models::protected::{Protected, Keyfinder};
 use ::storage::Storage;
 use ::turtl::Turtl;
 use ::sync::sync_model::SyncModel;
+use ::std::fmt::Display;
 
 /// How many times a sync record can fail before it's "frozen"
 static MAX_ALLOWED_FAILURES: u32 = 3;
@@ -127,6 +128,14 @@ impl SyncRecord {
         new
     }
 
+    /// Set a local error into this sync item
+    pub fn set_error<T: Display>(&mut self, err: &T) {
+        self.error = Some(SyncError {
+            code: String::from("7471"),
+            msg: format!("{}", err),
+        });
+    }
+
     /// Given a DB and some params, grab all matching sync records
     pub fn find(db: &mut Storage, ty: Option<SyncType>) -> TResult<Vec<SyncRecord>> {
         let mut args = vec![];
@@ -147,8 +156,7 @@ impl SyncRecord {
         }
     }
 
-    /// Given a DB, find all sync records matching `frozen` but NOT matching
-    /// `not_ty`.
+    /// Given a DB, find all sync records not matching `not_ty`.
     pub fn allbut(db: &mut Storage, not_ty: &Vec<SyncType>) -> TResult<Vec<SyncRecord>> {
         let syncs = SyncRecord::find(db, None)?
             .into_iter()
