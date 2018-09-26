@@ -51,7 +51,13 @@ impl FileSyncOutgoing {
         match next {
             Some(x) => {
                 match x.ty {
-                    SyncType::FileOutgoing => Ok(Some(x)),
+                    SyncType::FileOutgoing => {
+                        if x.frozen {
+                            Ok(None)
+                        } else {
+                            Ok(Some(x))
+                        }
+                    }
                     _ => Ok(None),
                 }
             }
@@ -61,8 +67,8 @@ impl FileSyncOutgoing {
 
     /// Given a sync record for an outgoing file, find the corresponding file
     /// in our storage folder and stream it to our heroic API.
-    fn upload_file(&mut self, sync: &SyncRecord) -> TResult<()> {
-        let note_id = &sync.item_id;
+    fn upload_file(&mut self, sync: &mut SyncRecord) -> TResult<()> {
+        let note_id = sync.item_id.clone();
         let user_id = {
             let local_config = self.get_config();
             let guard = lockr!(local_config);
@@ -71,8 +77,6 @@ impl FileSyncOutgoing {
                 None => return TErr!(TError::MissingField(String::from("SyncConfig.user_id"))),
             }
         };
-        let file = FileData::file_finder(Some(&user_id), Some(note_id))?;
-        info!("FileSyncOutgoing.upload_file() -- syncing file {:?}", file);
 
         #[derive(Deserialize, Debug)]
         struct UploadRes {
@@ -83,13 +87,15 @@ impl FileSyncOutgoing {
 
         // define a container function that grabs our file and runs the upload.
         // if anything in here fails, we mark 
-        let upload = |note_id, file| -> TResult<UploadRes> {
+        let upload = |note_id| -> TResult<UploadRes> {
+            let file = FileData::file_finder(Some(&user_id), Some(note_id))?;
+            info!("FileSyncOutgoing.upload_file() -- syncing file {:?}", file);
             // open our local file. we should test if it's readable/exists
             // before making API calls
             let mut file = fs::File::open(&file)?;
             // start our API call to the note file attachment endpoint
             let url = format!("/notes/{}/attachment", note_id);
-            let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream"));
+            let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream")).timeout(60);
             // get an API stream we can start piping file data into
             let (mut stream, info) = self.api.call_start(api::Method::Put, &url[..], req)?;
             // start streaming our file into the API call 4K at a time
@@ -109,7 +115,7 @@ impl FileSyncOutgoing {
             self.api.call_end(stream.send(), info)
         };
 
-        match upload(&note_id, file) {
+        match upload(&note_id) {
             Ok(res) => {
                 match res.sync_ids.as_ref() {
                     Some(ids) => {
@@ -127,11 +133,15 @@ impl FileSyncOutgoing {
                 }
             }
             Err(e) => {
+                warn!("FileSyncOutgoing.run_sync() -- failed to upload file: {}", e);
+                sync.set_error(&e);
                 // our upload failed? send to our sync failure handler
                 with_db!{ db, self.db,
                     SyncRecord::handle_failed_sync(db, sync)?;
                 };
-                return Err(e);
+                // we've handled this, return ok, otherwise our main thread will
+                // re-log the error which isn't but but kind of annoying
+                return Ok(());
             }
         }
 
@@ -169,8 +179,8 @@ impl Syncer for FileSyncOutgoing {
 
     fn run_sync(&mut self) -> TResult<()> {
         let sync_maybe = self.get_next_outgoing_file_sync()?;
-        if let Some(sync) = sync_maybe {
-            self.upload_file(&sync)?;
+        if let Some(mut sync) = sync_maybe {
+            self.upload_file(&mut sync)?;
         }
         Ok(())
     }
