@@ -46,11 +46,16 @@ pub fn fixed_time_eq(lhs: &[u8], rhs: &[u8]) -> bool {
     } else {
         let count = lhs.len() as libc::size_t;
 
-        unsafe {
-            let lhsp = lhs.get_unchecked(0);
-            let rhsp = rhs.get_unchecked(0);
-            rust_crypto_util_fixed_time_eq_asm(lhsp, rhsp, count) == 0
+        let mut acc = 0;
+        for i in 0..count {
+            acc += lhs[i] ^ rhs[i];
         }
+        acc == 0
+        //unsafe {
+            //let lhsp = lhs.get_unchecked(0);
+            //let rhsp = rhs.get_unchecked(0);
+            //rust_crypto_util_fixed_time_eq_asm(lhsp, rhsp, count) == 0
+        //}
     }
 }
 
