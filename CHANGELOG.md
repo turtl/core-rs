@@ -1,3 +1,23 @@
+# v0.1.2
+
+v0.7 has been released and here are some updates we've done for it:
+
+Features:
+
+- convert all use of .unwrap() to .expect() with descriptive errors. while we
+obviously avoid using either for anything serious, sometimes there's not much
+else you can do, and an expect() at least gives more information
+- the messaging system now tries more resilient methods of character decoding.
+the idea here is to make sure (preemtively) that it plays nice with a javascript
+UI.
+- turtl now locks its data directory so only one instance of the core can run
+at once. this fixes some strange issues that happen when multiple turtl
+instances run at the same time (using the same database(s))
+
+Fixes:
+
+- fixing some issues in the sync system that were causing weird disconnects.
+
 # v0.1.1
 
 This is a pre-v0.7 maintenance release.
