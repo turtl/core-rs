@@ -7,6 +7,7 @@ use ::std::path::Path;
 use ::std::fmt::Debug;
 use ::jedi::{self, Value, Serialize};
 use ::config;
+use ::encoding_rs;
 
 macro_rules! do_lock {
     ($lock:expr) => {{
@@ -97,5 +98,21 @@ pub fn enum_to_string<T: Serialize + Debug>(en: &T) -> TResult<String> {
         Value::String(x) => Ok(x),
         _ => TErr!(TError::BadValue(format!("enum_to_string() -- bad enum given: {:?}", en))),
     }
+}
+
+/// Decodes text from the UI. javascript apparently uses utf16, except when it
+/// doesn't, and then it uses latin1 or any other weird encoding that might suit
+/// its mood lolol. really don't know. did some research, but found no solid
+/// answers, so now we just try to decode however we can.
+pub fn decode_text(bytes: &[u8]) -> TResult<String> {
+    match String::from_utf8(Vec::from(bytes)) {
+        Ok(decoded) => { return Ok(decoded); },
+        Err(_) => {}
+    }
+    let (decoded, _enc, has_err) = encoding_rs::WINDOWS_1252.decode(bytes);
+    if !has_err { return Ok(decoded.to_string()); }
+    let (decoded, _enc, has_err) = encoding_rs::UTF_16LE.decode(bytes);
+    if !has_err { return Ok(decoded.to_string()); }
+    Err(TError::BadValue(format!("unable to decode bytes to string")))
 }
 

@@ -27,6 +27,7 @@ clippo = { path = "clippo" }
 clouseau = { path = "clouseau" }
 crossbeam = "0.3.0"
 dumpy = { path = "dumpy" }
+encoding_rs = "0.8.6"
 fern = "0.5.5"
 fs2 = "0.4.3"
 futures = "0.1.14"

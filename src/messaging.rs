@@ -6,7 +6,7 @@
 
 use ::carrier;
 use ::jedi::{self, Value, Serialize};
-
+use ::util;
 use ::config;
 use ::error::{TResult, TError};
 
@@ -115,7 +115,7 @@ impl Messenger {
     pub fn recv(&self) -> TResult<String> {
         let bytes = carrier::recv(&self.channel_in[..])?;
         debug!("messaging: recv: {} ({})", self.channel_in, bytes.len());
-        String::from_utf8(bytes).map_err(|e| From::from(e))
+        util::decode_text(bytes.as_slice())
     }
 
     #[allow(dead_code)]
@@ -125,7 +125,7 @@ impl Messenger {
         match maybe_bytes {
             Some(x) => {
                 debug!("messaging: recv: {} ({})", self.channel_in, x.len());
-                String::from_utf8(x).map_err(|e| From::from(e))
+                util::decode_text(x.as_slice())
             },
             None => Err(TError::TryAgain),
         }

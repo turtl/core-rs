@@ -7,6 +7,7 @@ extern crate clouseau;
 extern crate config;
 extern crate crossbeam;
 extern crate dumpy;
+extern crate encoding_rs;
 extern crate fern;
 extern crate fs2;
 extern crate futures;
