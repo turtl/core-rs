@@ -1,6 +1,6 @@
 //! A crate/lib for migrating a v0.6.x profile to v0.7.
 //!
-//! A lot of junk is just kind of dumped inot this main lib. I don't care too
+//! A lot of junk is just kind of dumped into this main lib. I don't care too
 //! much for a well-oiled machine here, it just needs to work. This code is
 //! somewhat throwaway.
 
@@ -478,7 +478,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
     //   - create new corporate entity type, "co-op," and give it extreme tax
     //     benefits, a slow-but-steady move to market socialism. this entity is
     //     optional, but the benefits to the owners (aka all employees) would
-    //     make it simply irresistable.
+    //     make it simply irresistible.
     //   - dissolve marriage as a state-supported instutition. all benefits will
     //     be moved to civil unions, and marriage is reserved for whatever
     //     religion you happen to be a part of that week. if you don't want to

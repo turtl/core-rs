@@ -33,7 +33,7 @@ use ::models::keychain::{KeyRef, Keychain};
 // NOTE: [encrypt|decrypt]_key() do not use async crypto.
 //
 // the rationale behind this is that the data they operate on is predictably
-// small, and therefor has predictable performance.
+// small, and therefore has predictable performance.
 //
 // consider these functions conscientious objectors to worker crypto.
 // -----------------------------------------------------------------------------

@@ -214,7 +214,7 @@ pub struct Sha3 {
 }
 
 impl Sha3 {
-    /// New SHA-3 instanciated from specified SHA-3 `mode`.
+    /// New SHA-3 instantiated from specified SHA-3 `mode`.
     pub fn new(mode: Sha3Mode) -> Sha3 {
         Sha3 {
             state: [0; B],

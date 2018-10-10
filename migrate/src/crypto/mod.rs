@@ -344,7 +344,7 @@ fn derive_keys(master_key: &[u8], desc: &PayloadDescription) -> CResult<(Key, Ke
 /// in the struct securely. Returns true of the data authenticates properly.
 ///
 /// NOTE that we are not going to implement this correctly. No. Instead, we're
-/// going to mimick the way the function worked in the turtl js project, which
+/// going to mimic the way the function worked in the turtl js project, which
 /// used string concatenation as such:
 ///
 ///   // if version = 4 and desc = "desc"

@@ -34,7 +34,7 @@ lazy_static! {
 macro_rules! model_getter {
     ($name:ident, $func:expr) => {
         macro_rules! $name {
-            // this variant throws an enourmous tantrum of epic proportions if
+            // this variant throws an enormous tantrum of epic proportions if
             // the model field is None
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {

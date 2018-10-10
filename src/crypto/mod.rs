@@ -53,7 +53,7 @@ impl CryptoOp {
         Ok(CryptoOp { algorithm: algorithm, nonce: None })
     }
 
-    /// Create a new crypto op with a algorith/nonce
+    /// Create a new crypto op with a algorithm/nonce
     pub fn new_with_nonce(algorithm: &'static str, nonce: Vec<u8>) -> CResult<CryptoOp> {
         let mut op = CryptoOp::new(algorithm)?;
         op.nonce = Some(nonce);
