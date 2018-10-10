@@ -75,7 +75,7 @@ pub struct Profile {
 }
 
 fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
-    // how many imes we try to download a file before we peace out
+    // how many times we try to download a file before we peace out
     const MAX_FILE_TRIES: u8 = 5;
 
     info!("migrate::download_file() -- grabbing note file url {}", note_id);
@@ -167,17 +167,23 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
     evfn("profile-download", &Value::Null);
     let mut profile = Profile::default();
     let mut files: Vec<String> = Vec::new();
-    let mut num_items = 0;
+    let mut num_keychain = 0;
+    let mut num_boards = 0;
+    let mut num_notes = 0;
     for rec in records {
         let SyncRecord { ty, data } = rec;
         if data.is_none() { continue; }
+        if ty == "user" { continue; }
         let data = data.expect("migrate::get_profile() -- failed to get record data");
         let rec_user_id: String = match jedi::get(&["user_id"], &data) {
             Ok(x) => x,
             Err(_) => {
+                let id = jedi::get_opt::<String>(&["id"], &data);
                 evfn("error", &json!({
                     "msg": format!("missing user_id field for {}", ty),
                     "type": "missing_data",
+                    "subtype": ty,
+                    "item_id": id,
                 }));
                 continue;
             }
@@ -188,10 +194,11 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
         match ty.as_ref() {
             "keychain" => {
                 profile.keychain.push(data);
+                num_keychain += 1;
             }
             "board" => {
                 profile.boards.push(data);
-                num_items += 1;
+                num_boards += 1;
             }
             "note" => {
                 // if we have a file, push the note id onto the list
@@ -199,20 +206,24 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
                     Ok(_) => {
                         let id = jedi::get(&["id"], &data)?;
                         files.push(id);
-                        num_items += 1;
                     }
                     Err(_) => {}
                 }
-                num_items += 1;
+                num_notes += 1;
                 profile.notes.push(data);
             }
             _ => {}
         }
     }
 
-    evfn("profile-items", &jedi::to_val(&num_items)?);
+    evfn("profile-items", &json!({
+        "num_keychain": num_keychain,
+        "num_boards": num_boards,
+        "num_notes": num_notes,
+        "num_files": files.len(),
+    }));
     evfn("files-pre-download", &jedi::to_val(&files.len())?);
-    info!("migrate::get_profile() -- profile processed (got {} items, {} files)", num_items, jedi::to_val(&files.len())?);
+    info!("migrate::get_profile() -- profile processed (got {} keychain entries, {} boards, {} notes, {} files)", num_keychain, num_boards, num_notes, files.len());
 
     let filepath = PathBuf::from(util::file_folder()?);
     util::create_dir(&filepath)?;
@@ -235,7 +246,7 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
                 evfn("error", &json!({
                     "msg": format!("{}", e),
                     "type": "file-download",
-                    "note_id": note_id,
+                    "item_id": note_id,
                 }));
             }
         }
@@ -296,6 +307,7 @@ pub fn migrate<F>(v6_login: Login, mut evfn: F) -> MResult<MigrateResult>
     let mut result = MigrateResult::default();
     result.boards = decrypted.boards.iter().map(|x| x.clone()).collect::<Vec<_>>();
     result.notes = decrypted.notes.iter().map(|x| x.clone()).collect::<Vec<_>>();
+    evfn("decrypt-done", &Value::Null);
     Ok(result)
 }
 
@@ -397,7 +409,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
             Ok(x) => x,
             Err(e) => {
                 let keychain_id: Option<String> = jedi::get_opt(&["id"], keychain);
-                warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}", keychain_id.clone().unwrap_or(String::from("<no id>")));
+                warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}: {}", keychain_id.clone().unwrap_or(String::from("<no id>")), e);
                 evfn("error", &json!({
                     "msg": format!("{}", e),
                     "type": "decrypt",
@@ -407,6 +419,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
+        evfn("decrypt-item", &Value::String(String::from("keychain")));
         profiled.keychain.push(deep_merge(&mut keychain.clone(), &dec)?);
     }
 
