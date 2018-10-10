@@ -307,7 +307,6 @@ pub fn migrate<F>(v6_login: Login, mut evfn: F) -> MResult<MigrateResult>
     let mut result = MigrateResult::default();
     result.boards = decrypted.boards.iter().map(|x| x.clone()).collect::<Vec<_>>();
     result.notes = decrypted.notes.iter().map(|x| x.clone()).collect::<Vec<_>>();
-    evfn("decrypt-done", &Value::Null);
     Ok(result)
 }
 
@@ -649,6 +648,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
             }
         }
     }
+    evfn("decrypt-done", &json!({}));
     Ok(profiled)
 }
 
