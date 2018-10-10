@@ -26,7 +26,8 @@ pub use ::crypto::low::{
     from_hex,
     to_base64,
     from_base64,
-    secure_compare
+    secure_compare,
+    hmac,
 };
 pub use ::crypto::key::Key;
 

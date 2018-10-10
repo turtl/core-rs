@@ -29,7 +29,7 @@ extern crate time;
 pub mod error;
 mod api;
 mod crypto;
-mod user;
+pub mod user;
 mod util;
 
 use ::std::io::{Read, Write};

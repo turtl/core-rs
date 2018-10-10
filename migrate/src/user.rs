@@ -62,6 +62,106 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> MRes
     Ok(key_auth)
 }
 
+// -----------------------------------------------------------------------------
+// login debug crap
+// -----------------------------------------------------------------------------
+
+fn log_val(name: &str, value: &String) -> String {
+    format!("{}: {}", name, value)
+}
+
+fn log_secret_v(name: &str, vec: &[u8]) -> String {
+    let key: Vec<u8> = vec![236, 249, 58, 218, 97, 168, 59, 164, 102, 126, 209, 175, 181, 5, 175, 210];
+    let hmac = match crypto::hmac(crypto::Hasher::SHA1, key.as_slice(), vec) {
+        Ok(x) => crypto::to_hex(&x).unwrap(),
+        Err(e) => format!("error generating hmac: {}", e),
+    };
+    log_val(name, &hmac)
+}
+
+fn log_secret(name: &str, secret: &String) -> String {
+    log_secret_v(name, secret.as_bytes())
+}
+
+/// Generate a user's key given some variables or something
+fn generate_key_debug(username: &String, password: &String, version: u16, iterations: usize) -> MResult<(Key, Vec<String>)> {
+    let mut log: Vec<String> = Vec::new();
+    log.push(log_val("username(raw)", username));
+    log.push(log_secret("username", username));
+    log.push(log_secret("password", password));
+    let key: Key = match version {
+        0 => {
+            let mut salt = String::from(&username[..]);
+            salt.push_str(":a_pinch_of_salt");  // and laughter too
+            log.push(log_val("salt", &salt));
+            crypto::gen_key(crypto::Hasher::SHA1, password.as_ref(), salt.as_bytes(), 400)?
+        },
+        1 => {
+            let salt = crypto::to_hex(&crypto::sha256(username.as_bytes())?)?;
+            log.push(log_val("salt", &salt));
+            crypto::gen_key(crypto::Hasher::SHA256, password.as_ref(), &salt.as_bytes(), iterations)?
+        },
+        _ => return Err(MError::NotImplemented),
+    };
+    log.push(log_secret_v("key", &key.data().as_slice()));
+    Ok((key, log))
+}
+
+/// Generate a user's auth token given some variables or something
+pub fn generate_auth_debug(username: &String, password: &String, version: u16) -> MResult<((Key, String), Vec<String>)> {
+    let mut log: Vec<String> = Vec::new();
+    info!("user::generate_auth() -- generating v{} auth", version);
+    let key_auth = match version {
+        0 => {
+            let (key, mut keylog) = generate_key_debug(&username, &password, version, 0)?;
+            log.append(&mut keylog);
+            let iv_str = String::from(&username[..]) + "4c281987249be78a";
+            log.push(log_val("iv", &iv_str));
+            let mut iv = Vec::from(iv_str.as_bytes());
+            iv.truncate(16);
+            log.push(log_secret_v("iv", iv.as_slice()));
+            let mut user_record = crypto::to_hex(&crypto::sha256(&password.as_bytes())?)?;
+            user_record.push_str(":");
+            user_record.push_str(&username[..]);
+            log.push(log_secret("rec", &user_record));
+            let auth = crypto::encrypt_v0(&key, &iv, &user_record)?;
+            log.push(log_secret("auth", &auth));
+            (key, auth)
+        },
+        1 => {
+            let (key, mut keylog) = generate_key_debug(&username, &password, version, 100000)?;
+            log.append(&mut keylog);
+            let concat = String::from(&password[..]) + &username;
+            log.push(log_secret("concat", &concat));
+            let iv_bytes = crypto::sha256(concat.as_bytes())?;
+            let iv_str = crypto::to_hex(&iv_bytes)?;
+            log.push(log_secret("iv1", &iv_str));
+            let iv = Vec::from(&iv_str.as_bytes()[0..16]);
+            log.push(log_secret_v("iv2", &iv));
+            let pw_hash = crypto::to_hex(&crypto::sha256(&password.as_bytes())?)?;
+            let un_hash = crypto::to_hex(&crypto::sha256(&username.as_bytes())?)?;
+            log.push(log_secret("pw_hash", &pw_hash));
+            log.push(log_secret("un_hash", &un_hash));
+            let mut user_record = String::from(&pw_hash[..]);
+            user_record.push_str(":");
+            user_record.push_str(&un_hash[..]);
+            log.push(log_secret("rec", &user_record));
+            let utf8_byte: u8 = u8::from_str_radix(&user_record[18..20], 16)?;
+            log.push(log_val("utf8", &format!("{}", utf8_byte)));
+            // have to do a stupid conversion here because of stupidity in the
+            // original turtl code. luckily there will be a v2 gen_auth...
+            let utf8_random: u8 = (((utf8_byte as f64) / 256.0) * 128.0).floor() as u8;
+            log.push(log_val("utf8-2", &format!("{}", utf8_random)));
+            let op = crypto::CryptoOp::new_with_iv_utf8("aes", "gcm", iv, utf8_random)?;
+            let auth_bin = crypto::encrypt(&key, Vec::from(user_record.as_bytes()), op)?;
+            let auth = crypto::to_base64(&auth_bin)?;
+            log.push(log_secret("auth", &auth));
+            (key, auth)
+        },
+        _ => return Err(MError::NotImplemented),
+    };
+    Ok((key_auth, log))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,7 +171,7 @@ mod tests {
         ($v:expr, $username:expr, $password:expr, $key:expr, $auth:expr) => {
             let username = String::from($username);
             let password = String::from($password);
-            let (key, auth) = generate_auth(&username, &password, $v).unwrap();
+            let ((key, auth), _log) = generate_auth_debug(&username, &password, $v).unwrap();
             assert_eq!(crypto::to_base64(&key.into_data()).unwrap(), $key);
             assert_eq!(auth, $auth);
         }

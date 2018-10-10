@@ -85,6 +85,16 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             let user_guard = lockr!(turtl.user);
             user_guard.data()
         }
+        "user:migrate-auth-debug" => {
+            let old_username: String = jedi::get(&["2"], &data)?;
+            let old_password: String = jedi::get(&["3"], &data)?;
+            let result_v0 = ::migrate::user::generate_auth_debug(&old_username, &old_password, 0)?;
+            let result_v1 = ::migrate::user::generate_auth_debug(&old_username, &old_password, 1)?;
+            Ok(json!({
+                "v0": result_v0.1,
+                "v1": result_v1.1,
+            }))
+        }
         "user:logout" => {
             let clear_cookie: bool = match jedi::get(&["2"], &data) {
                 Ok(x) => x,
