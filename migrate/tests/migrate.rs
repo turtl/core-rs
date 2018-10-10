@@ -5,14 +5,14 @@ extern crate config;
 mod tests {
     use ::config;
     use ::migrate;
-    use ::std::env;
+
+    fn init() {
+        config::load_config(None).unwrap();
+    }
 
     #[test]
     fn migrates_lol() {
-        if env::var("TURTL_CONFIG_FILE").is_err() {
-            env::set_var("TURTL_CONFIG_FILE", "../config.yaml");
-        }
-
+        init();
         let username = config::get::<String>(&["integration_tests", "v6_login", "username"]).unwrap();
         let password = config::get::<String>(&["integration_tests", "v6_login", "password"]).unwrap();
         let login = migrate::check_login(&username, &password).unwrap();
