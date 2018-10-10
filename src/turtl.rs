@@ -70,7 +70,7 @@ pub struct Turtl {
     pub msg: Messenger,
     /// A storage system dedicated to key-value data. This *must* be initialized
     /// before our main local db because our local db is baed off the currently
-    /// logged-in user, and we need persistant key-value storage even when
+    /// logged-in user, and we need persistent key-value storage even when
     /// logged out.
     pub kv: Arc<RwLock<Storage>>,
     /// Our main database, initialized after a successful login. This db is

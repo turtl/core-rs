@@ -81,7 +81,7 @@ TURTL_EXPORT const uint8_t* TURTL_CONV turtlc_recv(uint8_t, const char*, size_t*
 //   -> returns a pointer to our event data, or null if no event is available
 //     and we set non_block = 1
 // -----------------------------------------------------------------------------
-// Recieve an event from the core. Note that events are separate from responses
+// Receive an event from the core. Note that events are separate from responses
 // because you can have many (or none) while the core is processing a command.
 // Events are used to notify the UI of certain stages of execution being
 // completed or certain conditions being met.

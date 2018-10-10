@@ -12,7 +12,7 @@ it was decided that you can just re-create your shares after migrating. Sorry
 - Notes in multiple boards. Notes in 0.7.x can only belong to one board. There
 is some good reasoning behind this: allowing multiple boards complicates logic
 and especially complicates interfaces. It's a hard feature to maintain, and I
-do not care to do it anymore. Therefor when you migrate, the notes will be added
+do not care to do it anymore. Therefore when you migrate, the notes will be added
 to the *first board* in their board list.
 - Nested boards. Another seldom-used feature that is difficult to maintain and
 causes a lot of complexity in the UI. Boards that are nested will be preserved,

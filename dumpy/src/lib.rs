@@ -2,7 +2,7 @@
 //!
 //! It provides a simple interface to "dump" JSON objects into SQLite and pull
 //! them back out again. It actually stores all objects in one big table, and
-//! has a secondary table that provides indexes. Thre are a few reasons for it
+//! has a secondary table that provides indexes. There are a few reasons for it
 //! working like this:
 //!
 //!   1. It's simple. There's no "schema" ...we just send in a JSON object and

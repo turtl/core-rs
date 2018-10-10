@@ -127,7 +127,7 @@ pub enum Hasher {
 }
 
 /// Generic hash function that uses the Hasher enum to specify the hash function
-/// used for hte given data. Note that this function is not a necessary export
+/// used for the given data. Note that this function is not a necessary export
 /// for this module, so it remains private.
 fn hash(hasher: Hasher, data: &[u8]) -> CResult<Vec<u8>> {
     match hasher {
@@ -183,7 +183,7 @@ pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
     Ok(data.from_hex()?)
 }
 
-/// Convert a u8 vector of binary data inot a base64 string.
+/// Convert a u8 vector of binary data into a base64 string.
 pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
     Ok(data[..].to_base64(base64::STANDARD))
 }

@@ -52,7 +52,7 @@ impl Space {
         fn ensure_owner(space: &mut Space, turtl: &Turtl) -> TResult<()> {
             // if the current logged-in user is the owner of this space, make sure
             // the space has an owner record in the members list. we get this when
-            // syncing from the API (and therefor don't need to do this for spaces
+            // syncing from the API (and therefore don't need to do this for spaces
             // shared with us) but for newly created spaces, we need to make sure
             // the member record exists.
             if space.user_id == turtl.user_id()? {
