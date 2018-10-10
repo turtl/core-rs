@@ -263,7 +263,7 @@ impl Turtl {
         if login.is_none() {
             return TErr!(TError::PermissionDenied(String::from("login on old server failed")));
         }
-        let migrate_data = migrate::migrate(login.expect("turtl::Turtl.join_migrate() -- login is None"), |ev, args| {
+        let migrate_data = migrate::migrate(login.expect("turtl.join_migrate() -- login is None"), |ev, args| {
             debug!("turtl.join_migrate() -- migration event: {}", ev);
             match messaging::ui_event("migration-event", &json!({"event": ev, "args": args})) {
                 Ok(_) => {}
