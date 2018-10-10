@@ -175,7 +175,7 @@ impl <P: BlockProcessor, X: PaddingProcessor> BlockEngine<P, X> {
                 next_out);
         }
 
-        // Process all remaining blocks. We can pull the history out of the buffers without having to
+        // Process all remaing blocks. We can pull the history out of the buffers without having to
         // do any copies
         let next_in_size = self.in_hist.len() + self.block_size;
         let next_out_size = self.out_hist.len() + self.block_size;
@@ -300,7 +300,7 @@ impl <P: BlockProcessor, X: PaddingProcessor> BlockEngine<P, X> {
                 // for handling.
                 BlockEngineState::LastInput => {
                     // We we arrive in this state, we know that all input data that is going to be
-                    // supplied has been supplied and that that data has been written to in_scratch
+                    // supplied has been suplied and that that data has been written to in_scratch
                     // by the NeedInput state. Furthermore, we know that one of three things must be
                     // true about in_scratch:
                     // 1) It is empty. This only occurs if the input is zero length. We can do last
@@ -433,7 +433,7 @@ pub struct PkcsPadding;
 // where padding is stripped. Since BlockEngine doesn't know if its an Encryption or Decryption
 // operation, it will call both methods if given a chance. So, this class can't be passed directly
 // to BlockEngine. Instead, it must be wrapped with EncPadding or DecPadding which will ensure that
-// only the proper methods are called. The client of the library, however, doesn't have to
+// only the propper methods are called. The client of the library, however, doesn't have to
 // distinguish encryption padding handling from decryption padding handline, which is the whole
 // point.
 impl PaddingProcessor for PkcsPadding {

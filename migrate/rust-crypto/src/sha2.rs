@@ -267,7 +267,7 @@ pub fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 /// # Implementation
 ///
 /// The `Sha256` algorithm is implemented with functions that resemble the new
-/// Intel SHA instruction set extensions. These instructions fall into two categories:
+/// Intel SHA instruction set extensions. These intructions fall into two categories:
 /// message schedule calculation, and the message block 64-round digest calculation.
 /// The schedule-related instructions allow 4 rounds to be calculated as:
 ///
