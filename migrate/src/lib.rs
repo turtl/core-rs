@@ -292,6 +292,21 @@ pub fn check_login(username: &String, password: &String) -> MResult<Option<Login
         Ok(user_id) => { return Ok(Some(Login::new(user_id, auth0, key0))); }
         Err(_) => {}
     }
+    // some v0.6 people can't log in if they have capitals in their username.
+    // so let's "correct" their username and try again.
+    let username_lower = username.to_lowercase();
+    let (key1, auth1) = user::generate_auth(&username_lower, password, 1)?;
+    api.set_auth(auth1.clone())?;
+    match api.post::<String>("/auth", ApiReq::new()) {
+        Ok(user_id) => { return Ok(Some(Login::new(user_id, auth1, key1))); }
+        Err(_) => {}
+    }
+    let (key0, auth0) = user::generate_auth(&username_lower, password, 0)?;
+    api.set_auth(auth0.clone())?;
+    match api.post::<String>("/auth", ApiReq::new()) {
+        Ok(user_id) => { return Ok(Some(Login::new(user_id, auth0, key0))); }
+        Err(_) => {}
+    }
     Ok(None)
 }
 
