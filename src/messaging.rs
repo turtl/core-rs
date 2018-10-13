@@ -133,21 +133,21 @@ impl Messenger {
 
     /// Send a message out
     pub fn send(&self, msg: String) -> TResult<()> {
-        debug!("messaging: send: {} ({})", self.channel_out, msg.len());
+        trace!("messaging: send: {} ({})", self.channel_out, msg.len());
         carrier::send_string(self.channel_out.as_str(), msg)
             .map_err(|e| From::from(e))
     }
 
     /// Send a message on the out channel, but suffix the channel
     pub fn send_suffix(&self, suffix: String, msg: String) -> TResult<()> {
-        debug!("messaging: send_suffix: {}:{} ({})", self.channel_out, suffix, msg.len());
+        trace!("messaging: send_suffix: {}:{} ({})", self.channel_out, suffix, msg.len());
         carrier::send_string(format!("{}:{}", &self.channel_out, suffix).as_str(), msg)
             .map_err(|e| From::from(e))
     }
 
     /// Send a message out on the in channel
     pub fn send_rev(&self, msg: String) -> TResult<()> {
-        debug!("messaging: send_rev: {}", msg.len());
+        trace!("messaging: send_rev: {}", msg.len());
         carrier::send_string(&self.channel_in[..], msg)
             .map_err(|e| From::from(e))
     }
