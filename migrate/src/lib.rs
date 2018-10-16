@@ -418,11 +418,13 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
 {
     evfn("decrypt-start", &Value::Null);
     let mut profiled = Profile::default();
+    let mut keychain_errors = 0;
     for keychain in &profile.keychain {
         let dec = match decrypt_val(user_key, keychain) {
             Ok(x) => x,
             Err(e) => {
                 let keychain_id: Option<String> = jedi::get_opt(&["id"], keychain);
+                keychain_errors += 1;
                 warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}: {}", keychain_id.clone().unwrap_or(String::from("<no id>")), e);
                 evfn("error", &json!({
                     "msg": format!("{}", e),
@@ -435,6 +437,11 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         };
         evfn("decrypt-item", &Value::String(String::from("keychain")));
         profiled.keychain.push(deep_merge(&mut keychain.clone(), &dec)?);
+    }
+
+    if (keychain_errors * 2) >= profile.keychain.len() {
+        // ruh roh, over half the keychain failed to decrypt. bail.
+        return Err(MError::Msg(String::from("Failed to decrypt keychain! Please try the migration again.")));
     }
 
     let mut keysearch: HashMap<String, Key> = HashMap::new();
