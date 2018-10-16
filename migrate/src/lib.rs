@@ -417,25 +417,28 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
     where F: FnMut(&str, &Value)
 {
     evfn("decrypt-start", &Value::Null);
+    let mut num_errors = 0;
     let mut profiled = Profile::default();
     let mut keychain_errors = 0;
     for keychain in &profile.keychain {
+        let keychain_id = jedi::get_opt::<String>(&["id"], keychain).unwrap_or(String::from("<no id>"));
         let dec = match decrypt_val(user_key, keychain) {
             Ok(x) => x,
             Err(e) => {
-                let keychain_id: Option<String> = jedi::get_opt(&["id"], keychain);
                 keychain_errors += 1;
-                warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}: {}", keychain_id.clone().unwrap_or(String::from("<no id>")), e);
+                num_errors += 1;
+                warn!("migrate::decrypt_profile() -- error decrypting keychain entry: {}: {}", keychain_id, e);
                 evfn("error", &json!({
                     "msg": format!("{}", e),
                     "type": "decrypt",
                     "subtype": "keychain",
-                    "item_id": keychain_id.unwrap_or(String::from("<no id>")),
+                    "item_id": keychain_id,
                 }));
                 continue;
             }
         };
-        evfn("decrypt-item", &Value::String(String::from("keychain")));
+        debug!("migrate::decrypt_profile() -- decrypted keychain {}", keychain_id);
+        evfn("decrypt-item", &json!("keychain"));
         profiled.keychain.push(deep_merge(&mut keychain.clone(), &dec)?);
     }
 
@@ -513,6 +516,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         let board_id = match jedi::get(&["id"], board) {
             Ok(x) => x,
             Err(e) => {
+                num_errors += 1;
                 warn!("migrate::decrypt_profile() -- missing board id? weird: {}", e);
                 evfn("error", &json!({
                     "msg": format!("board id not present: {}", e),
@@ -545,12 +549,14 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
+        trace!("migrate::decrypt_profile() -- decrypting board {}", board_id);
         match find_key(&profiled.keychain, &keysearch, board) {
             Ok(x) => {
                 keysearch.insert(board_id.clone(), x.clone());
                 let dec = match decrypt_val(&x, board) {
                     Ok(x) => x,
                     Err(e) => {
+                        num_errors += 1;
                         warn!("migrate::decrypt_profile() -- cannot decrypt board {}: {}", board_id, e);
                         evfn("error", &json!({
                             "msg": format!("{}", e),
@@ -561,10 +567,12 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                         continue;
                     }
                 };
-                evfn("decrypt-item", &Value::String(String::from("board")));
+                debug!("migrate::decrypt_profile() -- decrypted board {}", board_id);
+                evfn("decrypt-item", &json!("board"));
                 profiled.boards.push(deep_merge(&mut board.clone(), &dec)?);
             }
             Err(e) => {
+                num_errors += 1;
                 warn!("migrate::decrypt_profile() -- cannot find key for board {}: {}", board_id, e);
                 evfn("error", &json!({
                     "msg": format!("can't find board key: {}", e),
@@ -581,6 +589,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
         let note_id: String = match jedi::get(&["id"], note) {
             Ok(x) => x,
             Err(e) => {
+                num_errors += 1;
                 warn!("migrate::decrypt_profile() -- missing note id? weird: {}", e);
                 evfn("error", &json!({
                     "msg": format!("note id not present: {}", e),
@@ -591,12 +600,15 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 continue;
             }
         };
+        let bodylen = jedi::get_opt::<String>(&["body"], note).unwrap_or(String::from("")).len();
+        trace!("migrate::decrypt_profile() -- decrypting note {} (len {})", note_id, bodylen);
         match find_key(&profiled.keychain, &keysearch, note) {
             Ok(note_key) => {
                 keysearch.insert(note_id.clone(), note_key.clone());
                 let mut dec = match decrypt_val(&note_key, note) {
                     Ok(x) => x,
                     Err(e) => {
+                        num_errors += 1;
                         warn!("migrate::decrypt_profile() -- cannot decrypt note {}: {}", note_id, e);
                         evfn("error", &json!({
                             "msg": format!("{}", e),
@@ -613,6 +625,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                             deep_merge(&mut dec, &json!({"file": filedec}))?;
                         }
                         Err(e) => {
+                            num_errors += 1;
                             warn!("migrate::decrypt_profile() -- cannot decrypt note {} file meta: {}", note_id, e);
                             evfn("error", &json!({
                                 "msg": format!("cannot decrypt note file meta: {}", e),
@@ -623,7 +636,8 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                         }
                     }
                 }
-                evfn("decrypt-item", &Value::String(String::from("note")));
+                debug!("migrate::decrypt_profile() -- decrypted note {}", note_id);
+                evfn("decrypt-item", &json!("note"));
                 fn get_file(note_id: &String, note_key: &Key, notedata: &Value) -> Option<String> {
                     if jedi::get_opt::<Value>(&["file"], &notedata).is_none() { return None; }
                     let encdata = match load_file(note_id) {
@@ -641,13 +655,16 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                     Some(filedec_base64)
                 }
                 let mut merged_note = deep_merge(&mut note.clone(), &dec)?;
+                trace!("migrate::decrypt_profile() -- checking file for note {}", note_id);
                 if let Some(filebase64) = get_file(&note_id, &note_key, note) {
                     match jedi::set(&["file", "filedata"], &mut merged_note, &json!({"data": filebase64})) {
                         Ok(_) => {
-                            evfn("decrypt-item", &Value::String(String::from("file")));
+                            debug!("migrate::decrypt_profile() -- decrypted file {} (len {})", note_id, filebase64.len());
+                            evfn("decrypt-item", &json!("file"));
                         },
                         Err(e) => {
-                            warn!("migrate::decrypt_profile() -- cannot decrypt note {} file: {}", note_id, e);
+                            num_errors += 1;
+                            warn!("migrate::decrypt_profile() -- set decrypted filedata into note {}: {}", note_id, e);
                             evfn("error", &json!({
                                 "msg": format!("{}", e),
                                 "type": "decrypt",
@@ -660,6 +677,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 profiled.notes.push(merged_note);
             }
             Err(e) => {
+                num_errors += 1;
                 warn!("migrate::decrypt_profile() -- cannot find key for note {}: {}", note_id, e);
                 evfn("error", &json!({
                     "msg": format!("can't find note key: {}", e),
@@ -671,6 +689,7 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
             }
         }
     }
+    debug!("migrate::decrypt_profile() -- decryption done with {} errors", num_errors);
     evfn("decrypt-done", &json!({}));
     Ok(profiled)
 }
