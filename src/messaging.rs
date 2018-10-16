@@ -106,7 +106,7 @@ impl Messenger {
             d: data,
         };
         let msg = jedi::stringify(&event)?;
-        debug!("messaging: event: {} ({})", channel, msg.len());
+        trace!("messaging: event: {} ({})", channel, msg.len());
         carrier::send_string(channel.as_str(), msg)
             .map_err(|e| From::from(e))
     }
@@ -114,7 +114,7 @@ impl Messenger {
     /// Blocking receive
     pub fn recv(&self) -> TResult<String> {
         let bytes = carrier::recv(&self.channel_in[..])?;
-        debug!("messaging: recv: {} ({})", self.channel_in, bytes.len());
+        trace!("messaging: recv: {} ({})", self.channel_in, bytes.len());
         util::decode_text(bytes.as_slice())
     }
 
@@ -124,7 +124,7 @@ impl Messenger {
         let maybe_bytes = carrier::recv_nb(&self.channel_in[..])?;
         match maybe_bytes {
             Some(x) => {
-                debug!("messaging: recv: {} ({})", self.channel_in, x.len());
+                trace!("messaging: recv: {} ({})", self.channel_in, x.len());
                 util::decode_text(x.as_slice())
             },
             None => Err(TError::TryAgain),
