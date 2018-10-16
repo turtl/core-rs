@@ -264,7 +264,11 @@ impl Turtl {
             return TErr!(TError::PermissionDenied(String::from("login on old server failed")));
         }
         let migrate_data = migrate::migrate(login.expect("turtl.join_migrate() -- login is None"), |ev, args| {
-            debug!("turtl.join_migrate() -- migration event: {}", ev);
+            if ev == "decrypt-item" {
+                debug!("turtl.join_migrate() -- migration event: {}: {}", ev, args);
+            } else {
+                debug!("turtl.join_migrate() -- migration event: {}", ev);
+            }
             match messaging::ui_event("migration-event", &json!({"event": ev, "args": args})) {
                 Ok(_) => {}
                 Err(e) => {

@@ -642,9 +642,10 @@ fn decrypt_profile<F>(user_key: &Key, profile: Profile, evfn: &mut F) -> MResult
                 }
                 let mut merged_note = deep_merge(&mut note.clone(), &dec)?;
                 if let Some(filebase64) = get_file(&note_id, &note_key, note) {
-                    evfn("decrypt-item", &Value::String(String::from("file")));
                     match jedi::set(&["file", "filedata"], &mut merged_note, &json!({"data": filebase64})) {
-                        Ok(_) => {},
+                        Ok(_) => {
+                            evfn("decrypt-item", &Value::String(String::from("file")));
+                        },
                         Err(e) => {
                             warn!("migrate::decrypt_profile() -- cannot decrypt note {} file: {}", note_id, e);
                             evfn("error", &json!({
