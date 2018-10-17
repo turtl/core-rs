@@ -37,6 +37,8 @@ api:
   # this should be set by the client loading the core. standard format is
   # <platform>/<version>, like "android/0.7.0"
   client_version_string: 'core'
+  # defines the proxy server we use for all outgoing connections
+  proxy: false
   # point this at a v0.6 api (the old lisp server) if you want to enable
   # migration from the old system to the new.
   v6:
