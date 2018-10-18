@@ -4,19 +4,13 @@
 use ::std::sync::RwLock;
 use ::std::io::Read;
 use ::std::time::Duration;
-
 use ::config;
-use ::hyper;
-pub use ::hyper::method::Method;
-use ::hyper::client::request::Request;
-use ::hyper::client::response::Response;
-use ::hyper::header;
-pub use ::hyper::header::Headers;
-pub use ::hyper::status::StatusCode as Status;
-use ::jedi::{self, Value, DeserializeOwned};
-
+use ::jedi::{self, Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
 use ::crypto;
+use ::reqwest::{self, RequestBuilder, Client, Url};
+pub use ::reqwest::Method;
+pub use ::reqwest::StatusCode;
 
 /// Pull out our crate version to send to the api
 const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -38,25 +32,15 @@ impl ApiConfig {
 
 /// A struct used for building API requests
 pub struct ApiReq {
-    headers: Headers,
     timeout: Duration,
-    data: Value,
 }
 
 impl ApiReq {
     /// Create a new builder
     pub fn new() -> Self {
         ApiReq {
-            headers: Headers::new(),
             timeout: Duration::new(10, 0),
-            data: Value::Null,
         }
-    }
-
-    /// Set a header
-    pub fn header<'a>(mut self, name: &'static str, val: &String) -> Self {
-        self.headers.set_raw(name, vec![Vec::from(val.as_bytes())]);
-        self
     }
 
     /// Set (override) the timeout for this request
@@ -64,11 +48,100 @@ impl ApiReq {
         self.timeout = Duration::new(secs, 0);
         self
     }
+}
 
-    /// Set this request's data
-    pub fn data<'a>(mut self, data: Value) -> Self {
-        self.data = data;
-        self
+/// Wraps calling the Turtl API in an object
+pub struct ApiCaller {
+    req: RequestBuilder,
+}
+
+impl ApiCaller {
+    fn from_req(req: RequestBuilder) -> ApiCaller {
+        ApiCaller { req: req }
+    }
+
+    pub fn header<T: Into<String>>(self, name: &str, val: T) -> Self {
+        ApiCaller::from_req(self.req.header(name, val.into()))
+    }
+
+    pub fn body<T: Into<reqwest::Body>>(self, body: T) -> Self {
+        ApiCaller::from_req(self.req.body(body))
+    }
+
+    pub fn json<T: Serialize + ?Sized>(self, json: &T) -> Self {
+        ApiCaller::from_req(self.req.json(json))
+    }
+
+    #[allow(dead_code)]
+    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> Self {
+        ApiCaller::from_req(self.req.query(query))
+    }
+
+    #[allow(dead_code)]
+    pub fn form<T: Serialize + ?Sized>(self, form: &T) -> Self {
+        ApiCaller::from_req(self.req.form(form))
+    }
+
+    pub fn call<T: DeserializeOwned>(self) -> TResult<T> {
+        self.call_opt_impl(None)
+    }
+
+    pub fn call_opt<T: DeserializeOwned>(self, apireq: ApiReq) -> TResult<T> {
+        self.call_opt_impl(Some(apireq))
+    }
+
+    pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> TResult<T> {
+        let client = if let Some(builder) = builder_maybe {
+            let ApiReq { timeout } = builder;
+            Client::builder()
+                .timeout(timeout)
+                .build()?
+        } else {
+            Client::new()
+        };
+        let ApiCaller { req: reqb } = self;
+        let req = reqb.build()?;
+        let callinfo = CallInfo::new(req.method().clone(), String::from(req.url().as_str()));
+        debug!("api::call() -- req: {} {}", req.method(), req.url());
+        let res = client.execute(req);
+        res
+            .map_err(|e| { toterr!(e) })
+            .and_then(|mut res| {
+                let mut out = String::new();
+                let str_res = res.read_to_string(&mut out)
+                    .map_err(|e| toterr!(e))
+                    .and_then(move |_| Ok(out));
+                if !res.status().is_success() {
+                    let errstr = match str_res {
+                        Ok(x) => x,
+                        Err(e) => {
+                            error!("api::call() -- problem grabbing error message: {}", e);
+                            String::from("<unknown>")
+                        }
+                    };
+                    let val = match jedi::parse(&errstr) {
+                        Ok(x) => x,
+                        Err(_) => Value::String(errstr),
+                    };
+                    return TErr!(TError::Api(res.status(), val));
+                }
+                str_res.map(move |x| (x, res))
+            })
+            .map(|(out, res)| {
+                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status().as_u16(), &callinfo.method, &callinfo.resource);
+                trace!("  api::call() -- body: {}", out);
+                out
+            })
+            .map_err(|err| {
+                debug!("api::call() -- call error: {}", err);
+                err
+            })
+            .and_then(|out| {
+                jedi::parse(&out).map_err(|e| {
+                    warn!("api::call() -- JSON parse error: {}", out);
+                    toterr!(e)
+                })
+            })
     }
 }
 
@@ -117,29 +190,29 @@ impl Api {
     }
 
     /// Write our auth headers into a header collection
-    pub fn set_auth_headers(&self, headers: &mut Headers) {
+    pub fn set_auth_headers(&self, req: RequestBuilder) -> RequestBuilder {
         let auth = {
             let ref guard = lockr!(self.config);
             guard.auth.clone()
         };
         match auth {
-            Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),
-            None => (),
+            Some(x) => {
+                req.header("Authorization", x)
+            },
+            None => req
         }
     }
 
     /// Set our standard auth header into a Headers set
-    fn set_standard_headers(&self, headers: &mut Headers) {
-        self.set_auth_headers(headers);
-        if headers.get_raw("Content-Type").is_none() {
-            headers.set(header::ContentType::json());
-        }
+    fn set_standard_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        let req = self.set_auth_headers(req)
+            .header("Content-Type", "application/json");
         match config::get::<String>(&["api", "client_version_string"]) {
             Ok(version) => {
                 let header_val = format!("{}/{}", version, CORE_VERSION);
-                headers.set_raw("X-Turtl-Client", vec![Vec::from(header_val.as_bytes())]);
+                req.header("X-Turtl-Client", header_val)
             }
-            Err(_) => {}
+            Err(_) => req,
         }
     }
 
@@ -152,114 +225,32 @@ impl Api {
         Ok(url)
     }
 
-    /// Start an API request. call_start()/call_end() can be used to stream a
-    /// large HTTP body
-    pub fn call_start(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<(Request<hyper::net::Streaming>, CallInfo)> {
-        debug!("api::call_start() -- req: {} {}", method, resource);
-        let ApiReq {mut headers, timeout, data: _data} = builder;
+    /// Given a method an url, return a Reqwest RequestBuilder
+    pub fn req(&self, method: Method, resource: &str) -> TResult<ApiCaller> {
+        debug!("api::req() -- {} {}", method, resource);
         let url = self.build_url(resource)?;
-        let resource = String::from(resource);
-        let method2 = method.clone();
-        self.set_standard_headers(&mut headers);
-        let mut request = Request::new(method, hyper::Url::parse(&url[..])?)?;
-        request.set_read_timeout(Some(timeout))?;
-        {
-            // ridiculous. there has to be a better way??
-            let reqheaders = request.headers_mut();
-            for header in headers.iter() {
-                let name_string = String::from(header.name());
-                reqheaders.set_raw(name_string, vec![Vec::from(header.value_string().as_bytes())]);
-            }
-        }
-        Ok((request.start()?, CallInfo::new(method2, resource)))
-    }
-
-    /// Send out an API request
-    pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> TResult<T> {
-        debug!("api::call() -- req: {} {}", method, resource);
-        let ApiReq {mut headers, timeout, data} = builder;
-        let url = self.build_url(resource)?;
-        let resource = String::from(resource);
-        let method2 = method.clone();
-
-        let mut client = hyper::Client::new();
-        let body = jedi::stringify(&data)?;
-        self.set_standard_headers(&mut headers);
-        client.set_read_timeout(Some(timeout));
-        let res = client
-            .request(method, &url[..])
-            .body(&body)
-            .headers(headers)
-            .send();
-        self.call_end(res, CallInfo::new(method2, resource))
-    }
-
-    /// Finish an API request (takes a response result given back by
-    /// Request.send())
-    pub fn call_end<T: DeserializeOwned>(&self, response: Result<Response, hyper::error::Error>, callinfo: CallInfo) -> TResult<T> {
-        response
-            .map_err(|e| {
-                match e {
-                    hyper::Error::Io(err) => twrap!(TError::Io(err)),
-                    _ => toterr!(e),
-                }
-            })
-            .and_then(|mut res| {
-                let mut out = String::new();
-                let str_res = res.read_to_string(&mut out)
-                    .map_err(|e| toterr!(e))
-                    .and_then(move |_| Ok(out));
-                if !res.status.is_success() {
-                    let errstr = match str_res {
-                        Ok(x) => x,
-                        Err(e) => {
-                            error!("api::call() -- problem grabbing error message: {}", e);
-                            String::from("<unknown>")
-                        }
-                    };
-                    let val = match jedi::parse(&errstr) {
-                        Ok(x) => x,
-                        Err(_) => Value::String(errstr),
-                    };
-                    return TErr!(TError::Api(res.status, val));
-                }
-                str_res.map(move |x| (x, res))
-            })
-            .map(|(out, res)| {
-                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status_raw(), &callinfo.method, &callinfo.resource);
-                trace!("  api::call() -- body: {}", out);
-                out
-            })
-            .map_err(|err| {
-                debug!("api::call() -- call error: {}", err);
-                err
-            })
-            .and_then(|out| {
-                jedi::parse(&out).map_err(|e| {
-                    warn!("api::call() -- JSON parse error: {}", out);
-                    toterr!(e)
-                })
-            })
+        let req = Client::new().request(method, Url::parse(url.as_str())?);
+        Ok(ApiCaller::from_req(self.set_standard_headers(req)))
     }
 
     /// Convenience function for api.call(GET)
-    pub fn get<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
-        self.call(Method::Get, resource, builder)
+    pub fn get(&self, resource: &str) -> TResult<ApiCaller> {
+        self.req(Method::GET, resource)
     }
 
     /// Convenience function for api.call(POST)
-    pub fn post<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
-        self.call(Method::Post, resource, builder)
+    pub fn post(&self, resource: &str) -> TResult<ApiCaller> {
+        self.req(Method::POST, resource)
     }
 
     /// Convenience function for api.call(PUT)
-    pub fn put<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
-        self.call(Method::Put, resource, builder)
+    pub fn put(&self, resource: &str) -> TResult<ApiCaller> {
+        self.req(Method::PUT, resource)
     }
 
     /// Convenience function for api.call(DELETE)
-    pub fn delete<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> TResult<T> {
-        self.call(Method::Delete, resource, builder)
+    pub fn delete(&self, resource: &str) -> TResult<ApiCaller> {
+        self.req(Method::DELETE, resource)
     }
 }
 

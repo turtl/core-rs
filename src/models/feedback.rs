@@ -1,7 +1,5 @@
-use ::jedi;
 use ::turtl::Turtl;
 use ::error::{TResult, TError};
-use ::api::ApiReq;
 
 /// Stores feedback we'll be sending to the server
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,9 +15,9 @@ impl Feedback {
             // nice try
             return TErr!(TError::Msg(String::from("can't send feedback, not logged in")));
         }
-        let mut req = ApiReq::new();
-        req = req.data(jedi::to_val(self)?);
-        turtl.api.post::<bool>("/feedback", req)?;
+        turtl.api.post("/feedback")?
+            .json(&self)
+            .call::<bool>()?;
         Ok(())
     }
 }

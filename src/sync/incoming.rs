@@ -172,7 +172,8 @@ impl SyncIncoming {
             }
             _ => 10
         };
-        let syncres: TResult<SyncResponse> = self.api.get(url.as_str(), ApiReq::new().timeout(timeout));
+        let reqopt = ApiReq::new().timeout(timeout);
+        let syncres: TResult<SyncResponse> = self.api.get(url.as_str())?.call_opt(reqopt);
 
         // ^ this call can take a while. if sync got disabled while it was
         // taking its sweet time, then bail on the result.
@@ -216,7 +217,7 @@ impl SyncIncoming {
     /// objects, which is super handy because we can just treat them like any
     /// other sync
     fn load_full_profile(&mut self) -> TResult<()> {
-        let syncdata = self.api.get("/sync/full", ApiReq::new().timeout(120))?;
+        let syncdata = self.api.get("/sync/full")?.call_opt(ApiReq::new().timeout(120))?;
         self.set_connected(true);
         self.update_local_db_from_api_sync(syncdata, true)
     }

@@ -2,18 +2,18 @@ use ::std::sync::{Arc, RwLock, Mutex};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
-use ::api::{Api, ApiReq, Method, Headers};
+use ::api::{Api, Method};
 use ::messaging;
 use ::error::{TResult, TError};
 use ::models::sync_record::{SyncType, SyncRecord};
 use ::models::file::FileData;
-use ::hyper;
 use ::std::time::Duration;
 use ::std::fs;
 use ::std::io::{Read, Write};
 use ::jedi::{self, Value};
 use ::util;
 use ::config;
+use ::reqwest;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {
@@ -91,29 +91,26 @@ impl FileSyncIncoming {
             // start our API call to the note file attachment endpoint
             let url = format!("/notes/{}/attachment", note_id);
             // grab the location of the file we'll be downloading
-            let file_url: String = self.api.get(&url[..], ApiReq::new())?;
+            let file_url: String = self.api.get(&url[..])?.call()?;
             info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
-            let mut headers = Headers::new();
-            let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+
+            let client = reqwest::Client::builder().timeout(Duration::new(30, 0)).build()?;
+            let req = client.request(Method::GET, reqwest::Url::parse(file_url.as_str())?);
             // only add our auth junk if we're calling back to the turtl api!
-            if file_url.contains(turtl_api_url.as_str()) {
-                self.api.set_auth_headers(&mut headers);
-            }
-            let mut client = hyper::Client::new();
-            client.set_read_timeout(Some(Duration::new(30, 0)));
-            let mut res = client
-                .request(Method::Get, &file_url[..])
-                .headers(headers)
-                .send()?;
-            let status = res.status_raw().0;
-            if status >= 400 {
-                let mut errstr = String::new();
-                res.read_to_string(&mut errstr)?;
+            let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+            let req = if file_url.contains(turtl_api_url.as_str()) {
+                self.api.set_auth_headers(req)
+            } else {
+                req
+            };
+            let mut res = client.execute(req.build()?)?;
+            if res.status().as_u16() >= 400 {
+                let errstr = res.text()?;
                 let val = match jedi::parse(&errstr) {
                     Ok(x) => x,
                     Err(_) => Value::String(errstr),
                 };
-                return TErr!(TError::Api(res.status.clone(), val));
+                return TErr!(TError::Api(res.status(), val));
             }
             // start streaming our API call into the file 4K at a time
             let mut buf = [0; 4096];

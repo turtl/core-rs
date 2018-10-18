@@ -11,7 +11,6 @@ use ::models::keychain;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::turtl::Turtl;
 use ::lib_permissions::{Role, Permission};
-use ::api::ApiReq;
 use ::jedi::{self, Value};
 use ::crypto::Key;
 use ::messaging;
@@ -265,7 +264,7 @@ impl Space {
         let user_id = turtl.user_id()?;
         self.can_i_or_else(&user_id, &Permission::SetSpaceOwner)?;
         let url = format!("/spaces/{}/owner/{}", space_id, member_user_id);
-        let space_data: Value = turtl.api.put(url.as_str(), ApiReq::new())?;
+        let space_data: Value = turtl.api.put(url.as_str())?.call()?;
         self.merge_fields(&space_data)?;
         Ok(())
     }

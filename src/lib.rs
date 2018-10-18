@@ -14,7 +14,6 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate glob;
 extern crate hex;
-extern crate hyper;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
@@ -28,6 +27,7 @@ extern crate protected_derive;
 #[macro_use]
 extern crate quick_error;
 extern crate regex;
+extern crate reqwest;
 extern crate rusqlite;
 extern crate serde;
 #[macro_use]

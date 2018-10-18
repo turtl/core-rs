@@ -2,7 +2,6 @@ use ::error::TResult;
 use ::lib_permissions::{Role, Permission};
 use ::turtl::Turtl;
 use ::jedi::{self, Value};
-use ::api::ApiReq;
 use ::sync::incoming;
 
 /// Holds information about a member of a space.
@@ -33,7 +32,7 @@ impl SpaceMember {
     pub fn edit(&mut self, turtl: &Turtl, existing_member: Option<&mut SpaceMember>) -> TResult<()> {
         let member_data = jedi::to_val(self)?;
         let url = format!("/spaces/{}/members/{}", self.space_id, self.user_id);
-        let saved_data: Value = turtl.api.put(url.as_str(), ApiReq::new().data(member_data))?;
+        let saved_data: Value = turtl.api.put(url.as_str())?.json(&member_data).call()?;
         incoming::ignore_syncs_maybe(turtl, &saved_data, "SpaceMember.edit()");
         match existing_member {
             Some(x) => { *x = jedi::from_val(saved_data)?; }
@@ -45,7 +44,7 @@ impl SpaceMember {
     /// Delete this member from the space
     pub fn delete(&self, turtl: &Turtl) -> TResult<()> {
         let url = format!("/spaces/{}/members/{}", self.space_id, self.user_id);
-        let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
+        let ret: Value = turtl.api.delete(url.as_str())?.call()?;
         incoming::ignore_syncs_maybe(turtl, &ret, "SpaceMember.delete()");
         Ok(())
     }

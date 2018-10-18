@@ -3,13 +3,12 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::sync::incoming::SyncIncoming;
 use ::storage::Storage;
-use ::api::{self, Api, ApiReq};
+use ::api::{Api, ApiReq};
 use ::messaging;
 use ::error::{TResult, TError};
 use ::models::file::FileData;
 use ::models::sync_record::{SyncType, SyncRecord};
 use ::std::fs;
-use ::std::io::{Read, Write};
 
 /// Holds the state for outgoing files (uploads)
 pub struct FileSyncOutgoing {
@@ -92,27 +91,13 @@ impl FileSyncOutgoing {
             info!("FileSyncOutgoing.upload_file() -- syncing file {:?}", file);
             // open our local file. we should test if it's readable/exists
             // before making API calls
-            let mut file = fs::File::open(&file)?;
+            let file = fs::File::open(&file)?;
             // start our API call to the note file attachment endpoint
             let url = format!("/notes/{}/attachment", note_id);
-            let req = ApiReq::new().header("Content-Type", &String::from("application/octet-stream")).timeout(60);
-            // get an API stream we can start piping file data into
-            let (mut stream, info) = self.api.call_start(api::Method::Put, &url[..], req)?;
-            // start streaming our file into the API call 4K at a time
-            let mut buf = [0; 4096];
-            loop {
-                let read = file.read(&mut buf[..])?;
-                // all done! (EOF)
-                if read <= 0 { break; }
-                let (read_bytes, _) = buf.split_at(read);
-                let written = stream.write(read_bytes)?;
-                if read != written {
-                    return TErr!(TError::Msg(format!("problem uploading file: grabbed {} bytes, only sent {} wtf wtf lol", read, written)));
-                }
-            }
-            // write all our output and finalize the API call
-            stream.flush()?;
-            self.api.call_end(stream.send(), info)
+            self.api.put(&url[..])?
+                .header("Content-Type", "application/octet-stream")
+                .body(file)
+                .call_opt(ApiReq::new().timeout(60))
         };
 
         match upload(&note_id) {

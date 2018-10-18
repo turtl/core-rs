@@ -2,14 +2,12 @@ use ::std::error::Error;
 use ::std::io::Error as IoError;
 use ::std::convert::From;
 use ::std::sync::Arc;
-
-use ::hyper::status::StatusCode;
 use ::jedi::{Value, JSONError};
 use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
 use ::migrate::error::MError as MigrateError;
 use ::rusqlite;
-
+use ::api::StatusCode;
 use ::crypto::CryptoError;
 use ::util;
 
@@ -275,13 +273,13 @@ from_err!(::clouseau::CError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::rusqlite::Error);
 from_err!(::std::num::ParseIntError);
-from_err!(::hyper::Error);
-from_err!(::hyper::error::ParseError);
 from_err!(::regex::Error);
 from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
+from_err!(::reqwest::Error);
+from_err!(::reqwest::UrlError);
 
 pub type BoxFuture<T, E> = Box<::futures::Future<Item = T, Error = E> + Send>;
 pub type TResult<T> = Result<T, TError>;

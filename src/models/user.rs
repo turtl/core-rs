@@ -2,7 +2,7 @@ use ::std::collections::HashMap;
 use ::jedi::{self, Value, Serialize};
 use ::error::{TResult, TError};
 use ::crypto::{self, Key, CryptoOp};
-use ::api::Status;
+use ::api::StatusCode;
 use ::models::model::{self, Model};
 use ::models::space::Space;
 use ::models::board::Board;
@@ -10,7 +10,6 @@ use ::models::protected::{Keyfinder, Protected};
 use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
 use ::models::validate::{self, Validate};
 use ::turtl::Turtl;
-use ::api::ApiReq;
 use ::util;
 use ::sync::sync_model::{self, SyncModel, MemorySaver};
 use ::sync::incoming::SyncIncoming;
@@ -163,7 +162,7 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
 /// we get a match.
 fn do_login(turtl: &Turtl, username: &String, key: Key, auth: String) -> TResult<()> {
     turtl.api.set_auth(username.clone(), auth.clone())?;
-    let user_id = turtl.api.post("/auth", ApiReq::new())?;
+    let user_id: Value = turtl.api.post("/auth")?.call()?;
 
     let mut user_guard_w = lockw!(turtl.user);
     let id_err = TErr!(TError::BadValue(format!("auth was successful, but API returned strange id object: {:?}", user_id)));
@@ -181,7 +180,7 @@ fn do_login(turtl: &Turtl, username: &String, key: Key, auth: String) -> TResult
     user_guard_w.id = Some(user_id);
     user_guard_w.do_login(key, auth);
     drop(user_guard_w);
-    let userdata = turtl.api.get(url.as_str(), ApiReq::new())?;
+    let userdata: Value = turtl.api.get(url.as_str())?.call()?;
     let mut user_guard = lockw!(turtl.user);
     user_guard.merge_fields(&userdata)?;
     user_guard.deserialize()?;
@@ -224,9 +223,9 @@ impl User {
                         match x {
                             // if we got a BAD LOGIN error, try again with a
                             // different (lesser) auth version
-                            Status::Unauthorized => {
+                            StatusCode::UNAUTHORIZED => {
                                 if version <= 0 {
-                                    TErr!(TError::Api(Status::Unauthorized, y))
+                                    TErr!(TError::Api(StatusCode::UNAUTHORIZED, y))
                                 } else {
                                     User::login(turtl, username, password, version - 1)
                                 }
@@ -266,14 +265,13 @@ impl User {
         };
 
         turtl.api.set_auth(username.clone(), auth.clone())?;
-        let mut req = ApiReq::new();
-
-        req = req.data(json!({
-            "auth": auth.clone(),
-            "username": username,
-            "data": userdata,
-        }));
-        let joindata = turtl.api.post("/users", req)?;
+        let joindata: Value = turtl.api.post("/users")?
+            .json(&json!({
+                "auth": auth.clone(),
+                "username": username,
+                "data": userdata,
+            }))
+            .call()?;
         let user_id: String = jedi::get(&["id"], &joindata)?;
         let user_id: String = user_id.to_string();
         let mut user_guard_w = lockw!(turtl.user);
@@ -336,7 +334,7 @@ impl User {
             "keychain": encrypted_keychain,
         });
         let url = format!("/users/{}", user_id);
-        let res: PWChangeResponse = turtl.api.put(&url[..], ApiReq::new().data(auth_change))?;
+        let res: PWChangeResponse = turtl.api.put(&url[..])?.json(&auth_change).call()?;
         match res.sync_ids.as_ref() {
             Some(ids) => {
                 let mut db_guard = lock!(turtl.db);
@@ -349,7 +347,7 @@ impl User {
         }
 
         turtl.api.set_auth(new_user.username.clone(), new_auth.clone())?;
-        turtl.api.post::<String>("/auth", ApiReq::new())?;
+        turtl.api.post("/auth")?.call::<String>()?;
         self.do_login(new_key.clone(), new_auth);
         sync_model::save_model(SyncAction::Edit, turtl, self, true)?;
 
@@ -530,7 +528,7 @@ impl User {
             let user_guard = lockr!(turtl.user);
             user_guard.id_or_else()?
         };
-        turtl.api.delete::<bool>(format!("/users/{}", id).as_str(), ApiReq::new())?;
+        turtl.api.delete(format!("/users/{}", id).as_str())?.call::<bool>()?;
         Ok(())
     }
 
@@ -555,7 +553,7 @@ impl User {
 
     /// Resend a user's confirmation email
     pub fn resend_confirmation(turtl: &Turtl) -> TResult<()> {
-        turtl.api.post::<bool>("/users/confirmation/resend", ApiReq::new())?;
+        turtl.api.post("/users/confirmation/resend")?.call::<bool>()?;
         Ok(())
     }
 
@@ -646,7 +644,7 @@ impl User {
     /// Given an email address, find a matching user (pubkey and all)
     pub fn find_by_email(turtl: &Turtl, email: &String) -> TResult<Option<User>> {
         let url = format!("/users/email/{}", email.to_lowercase());
-        turtl.api.get(url.as_str(), ApiReq::new())
+        turtl.api.get(url.as_str())?.call()
     }
 }
 

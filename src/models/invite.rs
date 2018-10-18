@@ -9,7 +9,6 @@ use ::lib_permissions::Role;
 use ::crypto::{self, Key};
 use ::jedi::{self, Value};
 use ::turtl::Turtl;
-use ::api::ApiReq;
 use ::profile::Profile;
 
 /// Used as our passphrase for our invites if we don't provide one.
@@ -170,7 +169,7 @@ impl Invite {
     pub fn send(&self, turtl: &Turtl) -> TResult<()> {
         let url = format!("/spaces/{}/invites", self.space_id);
         let data = self.data_for_storage()?;
-        let invite: Value = turtl.api.post(url.as_str(), ApiReq::new().data(data))?;
+        let invite: Value = turtl.api.post(url.as_str())?.json(&data).call()?;
         incoming::ignore_syncs_maybe(turtl, &invite, "Invite.send()");
         Ok(())
     }
@@ -180,7 +179,7 @@ impl Invite {
         model_getter!(get_field, "Invite.accept()");
         let invite_id = get_field!(self, id);
         let url = format!("/spaces/{}/invites/accepted/{}", self.space_id, invite_id);
-        let spacedata: Value = turtl.api.post(url.as_str(), ApiReq::new())?;
+        let spacedata: Value = turtl.api.post(url.as_str())?.call()?;
         incoming::ignore_syncs_maybe(turtl, &spacedata, "Invite.accept()");
         Ok(spacedata)
     }
@@ -191,7 +190,7 @@ impl Invite {
         model_getter!(get_field, "Invite.edit()");
         let invite_id = get_field!(self, id);
         let url = format!("/spaces/{}/invites/{}", self.space_id, invite_id);
-        let saved_data: Value = turtl.api.put(url.as_str(), ApiReq::new().data(invite_data))?;
+        let saved_data: Value = turtl.api.put(url.as_str())?.json(&invite_data).call()?;
         incoming::ignore_syncs_maybe(turtl, &saved_data, "Invite.edit()");
         match existing_invite {
             Some(x) => { *x = jedi::from_val(saved_data)?; }
@@ -205,7 +204,7 @@ impl Invite {
         model_getter!(get_field, "Invite.delete()");
         let invite_id = get_field!(self, id);
         let url = format!("/spaces/{}/invites/{}", self.space_id, invite_id);
-        let ret: Value = turtl.api.delete(url.as_str(), ApiReq::new())?;
+        let ret: Value = turtl.api.delete(url.as_str())?.call()?;
         incoming::ignore_syncs_maybe(turtl, &ret, "Invite.delete()");
         Ok(())
     }
