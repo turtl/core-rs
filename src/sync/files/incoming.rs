@@ -94,7 +94,16 @@ impl FileSyncIncoming {
             let file_url: String = self.api.get(&url[..])?.call()?;
             info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
 
-            let client = reqwest::Client::builder().timeout(Duration::new(30, 0)).build()?;
+            let mut client_builder = reqwest::Client::builder()
+                .timeout(Duration::new(30, 0));
+            match config::get::<Option<String>>(&["api", "proxy"]) {
+                Ok(Some(proxy_cfg)) => {
+                    client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                }
+                Ok(None) => {}
+                Err(_) => {}
+            }
+            let client = client_builder.build()?;
             let req = client.request(Method::GET, reqwest::Url::parse(file_url.as_str())?);
             // only add our auth junk if we're calling back to the turtl api!
             let turtl_api_url: String = config::get(&["api", "endpoint"])?;

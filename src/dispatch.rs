@@ -403,7 +403,9 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "clip" => {
             let url: String = jedi::get(&["2"], &data)?;
             let custom_parsers: Vec<CustomParser> = jedi::get(&["3"], &data)?;
-            let res = clippo::clip(&url, &custom_parsers)?;
+            let proxy_cfg: Option<String> = config::get(&["api", "proxy"])
+                .unwrap_or(None);
+            let res = clippo::clip(&url, &custom_parsers, proxy_cfg)?;
             Ok(jedi::to_val(&res)?)
         }
         "ping" => {
