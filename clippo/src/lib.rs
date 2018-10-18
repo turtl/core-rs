@@ -1,5 +1,4 @@
 extern crate fern;
-extern crate hyper;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
@@ -8,6 +7,7 @@ extern crate log;
 #[macro_use]
 extern crate quick_error;
 extern crate regex;
+extern crate reqwest;
 extern crate scraper;
 extern crate serde;
 #[macro_use]
@@ -20,8 +20,6 @@ pub mod error;
 use ::error::{CResult, CError};
 use ::std::env;
 use ::std::io::Read;
-use ::hyper::method::Method;
-use ::hyper::header::Headers;
 use ::url::Url;
 use ::scraper::{Html, Selector};
 use ::regex::Regex;
@@ -117,31 +115,22 @@ impl ClipResult {
 
 /// Convert a URL to HTML
 fn grab_url(url: &String) -> CResult<String> {
-    let client = hyper::Client::new();
-    let mut headers = Headers::new();
-    fn set_header(headers: &mut Headers, name: &'static str, val: &str) {
-        headers.set_raw(name, vec![Vec::from(val.as_bytes())]);
-    }
-    set_header(&mut headers, "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:54.0) Gecko/20100101 Firefox/54.0");
-    set_header(&mut headers, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-    set_header(&mut headers, "Accept-Language", "en-US,en;q=0.5");
-    //set_header(&mut headers, "Accept-Encoding", "");
-    set_header(&mut headers, "Cache-Control", "max-age=0");
-    let html = client.request(Method::Get, url.as_str())
-        .headers(headers)
-        .send()
-        .map_err(|e| {
-            match e {
-                hyper::Error::Io(err) => CError::Io(err),
-                _ => From::from(e),
-            }
-        })
+    let client = reqwest::Client::new();
+    let req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:54.0) Gecko/20100101 Firefox/54.0")
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.5")
+        //.header("Accept-Encoding", "")
+        .header("Cache-Control", "max-age=0")
+        .build()?;
+    let html = client.execute(req)
+        .map_err(|e| { From::from(e) })
         .and_then(|mut res| {
             let mut out = String::new();
             let str_res = res.read_to_string(&mut out)
                 .map_err(|e| From::from(e))
                 .and_then(move |_| Ok(out));
-            if !res.status.is_success() {
+            if !res.status().is_success() {
                 let errstr = match str_res {
                     Ok(x) => x,
                     Err(e) => {
@@ -149,7 +138,7 @@ fn grab_url(url: &String) -> CResult<String> {
                         String::from("<unknown>")
                     }
                 };
-                return Err(CError::Http(res.status, errstr));
+                return Err(CError::Http(res.status(), errstr));
             }
             str_res.map(move |x| x)
         })?;

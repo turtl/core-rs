@@ -16,7 +16,7 @@ quick_error! {
             description(err.description())
             display("error: {}", err.description())
         }
-        Http(status: ::hyper::status::StatusCode, msg: String) {
+        Http(status: ::reqwest::StatusCode, msg: String) {
             description("HTTP error")
             display("http error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
         }
@@ -53,13 +53,11 @@ macro_rules! from_err {
     )
 }
 
-from_err!(::hyper::Error);
+from_err!(::reqwest::Error);
+from_err!(::reqwest::UrlError);
 
 impl From<IoError> for CError {
     fn from(err: IoError) -> CError { CError::Io(err) }
-}
-impl From<::url::ParseError> for CError {
-    fn from(err: ::url::ParseError) -> CError { CError::Url(err) }
 }
 impl From<::serde_yaml::Error> for CError {
     fn from(err: ::serde_yaml::Error) -> CError { CError::Yaml(err) }
