@@ -8,7 +8,7 @@ use ::config;
 use ::jedi::{self, Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
 use ::crypto;
-use ::reqwest::{self, RequestBuilder, Client, Url};
+use ::reqwest::{self, RequestBuilder, Client, Url, Proxy};
 pub use ::reqwest::Method;
 pub use ::reqwest::StatusCode;
 
@@ -91,14 +91,20 @@ impl ApiCaller {
     }
 
     pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> TResult<T> {
-        let client = if let Some(builder) = builder_maybe {
+        let mut client_builder = Client::builder();
+        if let Some(builder) = builder_maybe {
             let ApiReq { timeout } = builder;
-            Client::builder()
-                .timeout(timeout)
-                .build()?
-        } else {
-            Client::new()
-        };
+            client_builder = client_builder.timeout(timeout);
+        }
+        match config::get::<Option<String>>(&["api", "proxy"]) {
+            Ok(x) => {
+                if let Some(proxy_cfg) = x {
+                    client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                }
+            }
+            Err(_) => {}
+        }
+        let client = client_builder.build()?;
         let ApiCaller { req: reqb } = self;
         let req = reqb.build()?;
         let callinfo = CallInfo::new(req.method().clone(), String::from(req.url().as_str()));

@@ -453,15 +453,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hello"
-version = "0.1.0"
-dependencies = [
- "config 0.1.0",
- "hyper 0.9.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "quick-error 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "hex"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

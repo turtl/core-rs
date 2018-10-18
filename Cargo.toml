@@ -1,5 +1,5 @@
 [workspace]
-members = ["carrier", "clippo", "config", "clouseau", "dumpy", "hello", "jedi", "migrate"]
+members = ["carrier", "clippo", "config", "clouseau", "dumpy", "jedi", "migrate"]
 exclude = ["integration-tests", "cwrap", "client", "sock"]
 
 [package]
