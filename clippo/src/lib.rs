@@ -114,8 +114,12 @@ impl ClipResult {
 }
 
 /// Convert a URL to HTML
-fn grab_url(url: &String) -> CResult<String> {
-    let client = reqwest::Client::new();
+fn grab_url(url: &String, proxy: Option<String>) -> CResult<String> {
+    let mut client_builder = reqwest::Client::builder();
+    if let Some(proxy_cfg) = proxy {
+        client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+    }
+    let client = client_builder.build()?;
     let req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?)
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:54.0) Gecko/20100101 Firefox/54.0")
         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -147,8 +151,8 @@ fn grab_url(url: &String) -> CResult<String> {
 
 /// Given a url, scrape the HTML of the page and try to determine the page
 /// title, description, and main image.
-pub fn clip(url: &String, parsers: &Vec<CustomParser>) -> CResult<ClipResult> {
-    let html = grab_url(url)?;
+pub fn clip(url: &String, parsers: &Vec<CustomParser>, proxy: Option<String>) -> CResult<ClipResult> {
+    let html = grab_url(url, proxy)?;
 
     /// A helpful function to parse CSS selectors and convert them to CResult
     /// objects. we can't really implement From::from() for selector errors
@@ -346,12 +350,12 @@ mod tests {
 
     #[test]
     fn clips_stuff() {
-        let res = clip(&String::from("https://www.amazon.com/Avoid-Huge-Ships-John-Trimmer/dp/0870334336/ref=pd_lpo_sbs_241_img_2?_encoding=UTF8&psc=1&refRID=SZKJN64CTAYQ44WPNN09"), &vec![]).unwrap();
+        let res = clip(&String::from("https://www.amazon.com/Avoid-Huge-Ships-John-Trimmer/dp/0870334336/ref=pd_lpo_sbs_241_img_2?_encoding=UTF8&psc=1&refRID=SZKJN64CTAYQ44WPNN09"), &vec![], None).unwrap();
         assert_eq!(res.title, Some(String::from("How to Avoid Huge Ships: John W. Trimmer: 9780870334337: Amazon.com: Books")));
         assert_eq!(res.description, Some(String::from("Book by Trimmer, John W.")));
         //assert_eq!(res.image_url, Some(String::from("https://images-na.ssl-images-amazon.com/images/I/714PH4X5FRL._SY344_BO1,204,203,200_.gif")));
 
-        let res = clip(&String::from("https://www.youtube.com/watch?v=1KfaQ6pmv18"), &vec![]).unwrap();
+        let res = clip(&String::from("https://www.youtube.com/watch?v=1KfaQ6pmv18"), &vec![], None).unwrap();
         assert_eq!(res.title, Some(String::from("King Gizzard & The Lizard Wizard- I’m In Your Mind Fuzz full album")));
         assert_eq!(res.description, Some(String::from("1.I\'m In Your Mind ")));
         assert_eq!(res.image_url, Some(String::from("https://img.youtube.com/vi/1KfaQ6pmv18/hqdefault.jpg")));
