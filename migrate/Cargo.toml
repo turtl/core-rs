@@ -15,12 +15,12 @@ panic-on-error = []
 config = { path = "../config" }
 encoding_rs = "0.8.6"
 fern = "0.5.5"
-hyper = "0.9.18"
 jedi = { path = "../jedi" }
 lazy_static = "0.2.1"
 log = "0.4.1"
 quick-error = "1.2.2"
 rand = "0.3.18"
+reqwest = "0.9.3"
 rust-crypto = { path = "rust-crypto" }
 rustc-serialize = "0.3.19"
 serde = "1.0.8"
