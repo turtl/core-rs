@@ -234,7 +234,7 @@ impl Api {
 
     /// Given a method an url, return a Reqwest RequestBuilder
     pub fn req(&self, method: Method, resource: &str) -> TResult<ApiCaller> {
-        debug!("api::req() -- {} {}", method, resource);
+        debug!("api::req() -- begin: {} {}", method, resource);
         let url = self.build_url(resource)?;
         let req = Client::new().request(method, Url::parse(url.as_str())?);
         Ok(ApiCaller::from_req(self.set_standard_headers(req)))
