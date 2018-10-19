@@ -94,29 +94,26 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
         }
     };
     info!("migrate::download_file() -- grabbing file {}", url);
-    let mut headers = hyper::header::Headers::new();
+    let client_builder = reqwest::Client::builder()
+        .timeout(Duration::new(120, 0));
+    let client = client_builder.build()?;
+    let mut req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?);
     let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
     if url.contains(api_endpoint.as_str()) {
         let auth_header = api.get_auth().expect("migrate::download_file() -- failed to get auth header");
-        headers.set_raw("Authorization", vec![Vec::from(auth_header.as_bytes())]);
+        req = req.header("Authorization", auth_header);
     }
-    let mut client = hyper::client::Client::new();
-    client.set_read_timeout(Some(Duration::new(120, 0)));
-    let req = client.get(url.as_str()).headers(headers);
-    let res = req.send()
+    let res = client.execute(req.build()?)
         .map_err(|e| {
             warn!("migrate::download_file() -- download error: {}", e);
-            match e {
-                hyper::Error::Io(err) => MError::Io(err),
-                _ => tomerr!(e),
-            }
+            tomerr!(e)
         })
         .and_then(|mut res| {
             let mut out = Vec::new();
             res.read_to_end(&mut out)?;
-            if !res.status.is_success() {
+            if !res.status().is_success() {
                 let errmsg = String::from_utf8(out)?;
-                return Err(MError::Api(res.status, errmsg));
+                return Err(MError::Api(res.status(), errmsg));
             }
             Ok(out)
         });

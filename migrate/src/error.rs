@@ -1,10 +1,8 @@
 use ::std::error::Error;
 use ::std::io::Error as IoError;
 use ::std::convert::From;
-
-use ::hyper::status::StatusCode;
+use ::api::StatusCode;
 use ::jedi::JSONError;
-
 use ::crypto::CryptoError;
 
 quick_error! {
@@ -54,9 +52,9 @@ quick_error! {
             description("io error")
             display("io error: {}", err)
         }
-        Api(status: StatusCode, msg: String) {
+        Api(status: StatusCode, val: String) {
             description("API error")
-            display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), msg)
+            display("api error ({}): {}", status.canonical_reason().unwrap_or("unknown"), val)
         }
         TryAgain {
             description("try again")
@@ -129,8 +127,8 @@ impl From<Box<::std::any::Any + Send>> for MError {
 from_err!(::fern::InitError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::std::num::ParseIntError);
-from_err!(::hyper::Error);
-from_err!(::hyper::error::ParseError);
+from_err!(::reqwest::Error);
+from_err!(::reqwest::UrlError);
 
 pub type MResult<T> = Result<T, MError>;
 

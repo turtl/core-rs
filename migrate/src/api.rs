@@ -3,16 +3,11 @@
 
 use ::std::io::Read;
 use ::std::time::Duration;
-
 use ::config;
-use ::hyper;
-pub use ::hyper::method::Method;
-use ::hyper::client::response::Response;
-use ::hyper::header;
-pub use ::hyper::header::Headers;
-pub use ::hyper::status::StatusCode as Status;
+use ::reqwest::{Method, RequestBuilder, Client, Url};
+use ::reqwest::header::{HeaderMap, HeaderValue};
+pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
-
 use ::error::{MResult, MError};
 use ::crypto;
 
@@ -33,7 +28,7 @@ impl ApiConfig {
 
 /// A struct used for building API requests
 pub struct ApiReq {
-    headers: Headers,
+    headers: HeaderMap,
     timeout: Duration,
     data: Value,
 }
@@ -42,7 +37,7 @@ impl ApiReq {
     /// Create a new builder
     pub fn new() -> Self {
         ApiReq {
-            headers: Headers::new(),
+            headers: HeaderMap::new(),
             timeout: Duration::new(10, 0),
             data: Value::Null,
         }
@@ -51,7 +46,7 @@ impl ApiReq {
     /// Set a header
     #[allow(dead_code)]
     pub fn header<'a>(mut self, name: &'static str, val: &String) -> Self {
-        self.headers.set_raw(name, vec![Vec::from(val.as_bytes())]);
+        self.headers.insert(name, HeaderValue::from_str(val.as_str()).expect("ApiReq.header() -- bad header value given"));
         self
     }
 
@@ -112,20 +107,17 @@ impl Api {
     }
 
     /// Write our auth headers into a header collection
-    pub fn set_auth_headers(&self, headers: &mut Headers) {
-        let auth = self.config.auth.clone();
-        match auth {
-            Some(x) => headers.set_raw("Authorization", vec![Vec::from(x.as_bytes())]),
-            None => (),
+    pub fn set_auth_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        match self.config.auth.as_ref() {
+            Some(x) => req.header("Authorization", x.clone()),
+            None => req,
         }
     }
 
     /// Set our standard auth header into a Headers set
-    fn set_standard_headers(&self, headers: &mut Headers) {
-        self.set_auth_headers(headers);
-        if headers.get_raw("Content-Type").is_none() {
-            headers.set(header::ContentType::json());
-        }
+    fn set_standard_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        self.set_auth_headers(req)
+            .header("Content-Type", "application/json")
     }
 
     /// Build a full URL given a resource
@@ -140,39 +132,26 @@ impl Api {
     /// Send out an API request
     pub fn call<T: DeserializeOwned>(&self, method: Method, resource: &str, builder: ApiReq) -> MResult<T> {
         debug!("api::call() -- req: {} {}", method, resource);
-        let ApiReq {mut headers, timeout, data} = builder;
+        let ApiReq {headers, timeout, data} = builder;
         let url = self.build_url(resource)?;
-        let resource = String::from(resource);
-        let method2 = method.clone();
-
-        let mut client = hyper::Client::new();
-        let body = jedi::stringify(&data)?;
-        self.set_standard_headers(&mut headers);
-        client.set_read_timeout(Some(timeout));
-        let res = client
-            .request(method, &url[..])
-            .body(&body)
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()?;
+        let req = client.request(method, Url::parse(url.as_str())?);
+        let req = self.set_standard_headers(req)
             .headers(headers)
-            .send();
-        self.call_end(res, CallInfo::new(method2, resource))
-    }
-
-    /// Finish an API request (takes a response result given back by
-    /// Request.send())
-    pub fn call_end<T: DeserializeOwned>(&self, response: Result<Response, hyper::error::Error>, callinfo: CallInfo) -> MResult<T> {
-        response
-            .map_err(|e| {
-                match e {
-                    hyper::Error::Io(err) => MError::Io(err),
-                    _ => tomerr!(e),
-                }
-            })
+            .json(&data)
+            .build()?;
+        let callinfo = CallInfo::new(req.method().clone(), String::from(req.url().as_str()));
+        let res = client.execute(req);
+        res
+            .map_err(|e| { tomerr!(e) })
             .and_then(|mut res| {
                 let mut out = String::new();
                 let str_res = res.read_to_string(&mut out)
                     .map_err(|e| tomerr!(e))
                     .and_then(move |_| Ok(out));
-                if !res.status.is_success() {
+                if !res.status().is_success() {
                     let errstr = match str_res {
                         Ok(x) => x,
                         Err(e) => {
@@ -180,12 +159,12 @@ impl Api {
                             String::from("<unknown>")
                         }
                     };
-                    return Err(MError::Api(res.status, errstr));
+                    return Err(MError::Api(res.status(), errstr));
                 }
                 str_res.map(move |x| (x, res))
             })
             .map(|(out, res)| {
-                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status_raw(), &callinfo.method, &callinfo.resource);
+                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status().as_u16(), &callinfo.method, &callinfo.resource);
                 trace!("  api::call() -- body: {}", out);
                 out
             })
@@ -194,24 +173,24 @@ impl Api {
 
     /// Convenience function for api.call(GET)
     pub fn get<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> MResult<T> {
-        self.call(Method::Get, resource, builder)
+        self.call(Method::GET, resource, builder)
     }
 
     /// Convenience function for api.call(POST)
     pub fn post<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> MResult<T> {
-        self.call(Method::Post, resource, builder)
+        self.call(Method::POST, resource, builder)
     }
 
     /// Convenience function for api.call(PUT)
     #[allow(dead_code)]
     pub fn put<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> MResult<T> {
-        self.call(Method::Put, resource, builder)
+        self.call(Method::PUT, resource, builder)
     }
 
     /// Convenience function for api.call(DELETE)
     #[allow(dead_code)]
     pub fn delete<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> MResult<T> {
-        self.call(Method::Delete, resource, builder)
+        self.call(Method::DELETE, resource, builder)
     }
 }
 
