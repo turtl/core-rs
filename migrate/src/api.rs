@@ -4,7 +4,7 @@
 use ::std::io::Read;
 use ::std::time::Duration;
 use ::config;
-use ::reqwest::{Method, RequestBuilder, Client, Url};
+use ::reqwest::{Method, RequestBuilder, Client, Url, Proxy};
 use ::reqwest::header::{HeaderMap, HeaderValue};
 pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
@@ -134,9 +134,17 @@ impl Api {
         debug!("api::call() -- req: {} {}", method, resource);
         let ApiReq {headers, timeout, data} = builder;
         let url = self.build_url(resource)?;
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()?;
+        let mut client_builder = Client::builder()
+            .timeout(timeout);
+        match config::get::<Option<String>>(&["api", "proxy"]) {
+            Ok(x) => {
+                if let Some(proxy_cfg) = x {
+                    client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                }
+            }
+            Err(_) => {}
+        }
+        let client = client_builder.build()?;
         let req = client.request(method, Url::parse(url.as_str())?);
         let req = self.set_standard_headers(req)
             .headers(headers)

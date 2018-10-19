@@ -94,8 +94,15 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
         }
     };
     info!("migrate::download_file() -- grabbing file {}", url);
-    let client_builder = reqwest::Client::builder()
+    let mut client_builder = reqwest::Client::builder()
         .timeout(Duration::new(120, 0));
+    match config::get::<Option<String>>(&["api", "proxy"]) {
+        Ok(Some(proxy_cfg)) => {
+            client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+        }
+        Ok(None) => {}
+        Err(_) => {}
+    }
     let client = client_builder.build()?;
     let mut req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?);
     let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
