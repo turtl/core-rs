@@ -99,6 +99,7 @@ impl ApiCaller {
         match config::get::<Option<String>>(&["api", "proxy"]) {
             Ok(x) => {
                 if let Some(proxy_cfg) = x {
+                    debug!("api::call() -- req: using proxy: {}", proxy_cfg);
                     client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
                 }
             }
