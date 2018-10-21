@@ -31,6 +31,7 @@ use ::sync;
 use ::messaging::{self, Event};
 use ::migrate;
 use ::crypto::{self, Key};
+use ::std::panic;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -486,19 +487,31 @@ pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
 
     info!("dispatch({}): {}", mid, cmd);
 
-    match dispatch(&cmd, turtl.clone(), data) {
-        Ok(val) => {
-            match turtl.msg_success(&mid, val) {
-                Err(e) => error!("dispatch::process() -- problem sending response (mid {}): {}", mid, e),
-                _ => {},
-            }
-        },
+    let res = panic::catch_unwind(|| {
+        match dispatch(&cmd, turtl.clone(), data) {
+            Ok(val) => {
+                match turtl.msg_success(&mid, val) {
+                    Err(e) => error!("dispatch::process() -- problem sending response (mid {}): {}", mid, e),
+                    _ => {},
+                }
+            },
+            Err(e) => {
+                match turtl.msg_error(&mid, &e) {
+                    Err(e) => error!("dispatch:process() -- problem sending (error) response (mod {}): {}", mid, e),
+                    _ => {},
+                }
+            },
+        }
+    });
+    match res {
+        Ok(..) => {}
         Err(e) => {
-            match turtl.msg_error(&mid, &e) {
-                Err(e) => error!("dispatch:process() -- problem sending (error) response (mod {}): {}", mid, e),
+            let err = e.downcast::<String>().unwrap_or(Box::new(String::from("no information available")));
+            match turtl.msg_error(&mid, &TError::Panic(format!("dispatch panic: {}", err))) {
+                Err(e) => error!("dispatch:process() -- problem sending (panic) response (mod {}): {}", mid, e),
                 _ => {},
             }
-        },
+        }
     }
     Ok(())
 }

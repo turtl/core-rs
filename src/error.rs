@@ -33,6 +33,10 @@ quick_error! {
             description(msg)
             display("{}", quick_error_obj!("generic", msg))
         }
+        Panic(msg: String) {
+            description(msg)
+            display("{}", quick_error_obj!("panic", msg))
+        }
         BadValue(msg: String) {
             description(msg)
             display("{}", quick_error_obj!("bad_value", msg))
