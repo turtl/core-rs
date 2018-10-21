@@ -442,7 +442,7 @@ name = "html5ever"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "mac 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf 0.7.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf_codegen 0.7.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -790,9 +790,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.43 (registry+https://github.com/rust-lang/crates.io-index)",
- "openssl 0.10.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl 0.10.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "openssl-sys 0.9.38 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl-sys 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "schannel 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "security-framework 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "security-framework-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -837,7 +837,7 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.13"
+version = "0.10.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -845,7 +845,7 @@ dependencies = [
  "foreign-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.43 (registry+https://github.com/rust-lang/crates.io-index)",
- "openssl-sys 0.9.38 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl-sys 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -855,7 +855,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.38"
+version = "0.9.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1830,9 +1830,9 @@ dependencies = [
 "checksum num-traits 0.1.43 (registry+https://github.com/rust-lang/crates.io-index)" = "92e5113e9fd4cc14ded8e499429f396a20f98c772a47cc8622a736e1ec843c31"
 "checksum num-traits 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e7de20f146db9d920c45ee8ed8f71681fd9ade71909b48c3acbd766aa504cf10"
 "checksum num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c51a3322e4bca9d212ad9a158a02abc6934d005490c054a2778df73a70aa0a30"
-"checksum openssl 0.10.13 (registry+https://github.com/rust-lang/crates.io-index)" = "5af9e83eb3c51ee806387d26a43056f3246d865844caa6dd704d2ba7e831c264"
+"checksum openssl 0.10.14 (registry+https://github.com/rust-lang/crates.io-index)" = "6285ab297861546af7a2753593b3160bfc09f0ab9d1f5bb009e39d81a169b499"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
-"checksum openssl-sys 0.9.38 (registry+https://github.com/rust-lang/crates.io-index)" = "ff3d1b390ab1b9700f682ad95a30dc9c0f40dd212ca57266012cfc678b0e365a"
+"checksum openssl-sys 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)" = "278c1ad40a89aa1e741a1eed089a2f60b18fab8089c3139b542140fc7d674106"
 "checksum owning_ref 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "cdf84f41639e037b484f93433aa3897863b561ed65c6e59c7073d7c561710f37"
 "checksum parking_lot 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "f0802bff09003b291ba756dc7e79313e51cc31667e94afbe847def490424cde5"
 "checksum parking_lot_core 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ad7f7e6ebdc79edff6fdcb87a55b620174f7a989e3eb31b65231f4af57f00b8c"
