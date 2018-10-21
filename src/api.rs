@@ -237,6 +237,7 @@ impl Api {
         debug!("api::req() -- begin: {} {}", method, resource);
         let url = self.build_url(resource)?;
         let req = Client::new().request(method, Url::parse(url.as_str())?);
+        trace!("api::req() -- made client, got req: {:?}", req);
         Ok(ApiCaller::from_req(self.set_standard_headers(req)))
     }
 
