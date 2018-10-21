@@ -236,12 +236,8 @@ impl Api {
     pub fn req(&self, method: Method, resource: &str) -> TResult<ApiCaller> {
         debug!("api::req() -- begin: {} {}", method, resource);
         let url = self.build_url(resource)?;
-        let client = Client::new();
-        trace!("api::req() -- made client");
-        let url = Url::parse(url.as_str())?;
-        trace!("api::req() -- made url");
-        let req = client.request(method, url);
-        trace!("api::req() -- req");
+        let req = Client::builder().build()?.request(method, Url::parse(url.as_str())?);
+        trace!("api::req() -- made client, got req: {:?}", req);
         Ok(ApiCaller::from_req(self.set_standard_headers(req)))
     }
 
