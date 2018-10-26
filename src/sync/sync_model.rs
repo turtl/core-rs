@@ -431,8 +431,9 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     if notes.len() == 0 {
                         return TErr!(TError::MissingData(format!("trouble grabbing Note {}", item_id)));
                     }
+                    let to_board_id: Option<String> = jedi::get(&["board_id"], &modeldata).unwrap_or(None);
                     let note = &mut notes[0];
-                    note.move_spaces(turtl, to_space_id)?;
+                    note.move_spaces(turtl, to_space_id, to_board_id)?;
                 }
                 _ => {
                     return TErr!(TError::BadValue(format!("cannot {:?} item of type {:?}", action, ty)));

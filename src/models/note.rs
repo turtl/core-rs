@@ -79,8 +79,9 @@ impl Note {
     }
 
     /// Move a note to a different space
-    pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String) -> TResult<()> {
+    pub fn move_spaces(&mut self, turtl: &Turtl, new_space_id: String, new_board_id: Option<String>) -> TResult<()> {
         self.space_id = new_space_id;
+        self.board_id = new_board_id;
         sync_model::save_model(SyncAction::MoveSpace, turtl, self, false)?;
         Ok(())
     }

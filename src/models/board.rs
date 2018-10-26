@@ -67,7 +67,7 @@ impl Board {
 
         let mut notes = turtl.load_notes(&note_ids)?;
         for note in &mut notes {
-            note.move_spaces(turtl, new_space_id.clone())?;
+            note.move_spaces(turtl, new_space_id.clone(), Some(board_id.clone()))?;
         }
 
         Ok(())
