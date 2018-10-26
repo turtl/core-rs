@@ -65,7 +65,6 @@ use ::fs2::FileExt;
 
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
-    info!("main::init() -- init with user config {}", config_str);
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
         Err(e) => {
@@ -101,6 +100,10 @@ pub fn init(config_str: String) -> TResult<()> {
             return TErr!(toterr!(e));
         }
     };
+
+    // log this AFTER the logger is set up (derr, andrew)
+    info!("main::init() -- init with user config {}", config_str);
+
     // log this AFTER the logger is set up! note that we need the data_folder to
     // exist before we set up logging, so this is why things are in this order
     // (in case the logger wants to use a logfile, which by default lives in the
