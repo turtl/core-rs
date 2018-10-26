@@ -194,9 +194,8 @@ pub fn setup_logger() -> TResult<()> {
             ))
         })
         .level(level)
-        // TODO: re-enable
-        //.level_for("tokio_reactor", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
-        //.level_for("hyper", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
+        .level_for("tokio_reactor", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
+        .level_for("hyper", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
         .level_for("jni", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
         .chain(std::io::stdout());
     if let Some(filedest) = get_logfile() {
