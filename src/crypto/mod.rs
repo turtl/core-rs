@@ -368,6 +368,16 @@ mod tests {
             }
             _ => { panic!("Unexpected error: {:?}", err); }
         }
+        let key = Key::new(from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap());
+        let payload_str = String::from("[object Object]");
+        let payload = Vec::from(payload_str.as_bytes());
+        let err = decrypt(&key, payload);
+        match err {
+            Err(CryptoError::BadData(x)) => {
+                assert!(x.contains("bad data length"));
+            }
+            _ => { panic!("Unexpected error: {:?}", err); }
+        }
     }
 
     #[test]

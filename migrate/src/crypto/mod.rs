@@ -646,13 +646,6 @@ mod tests {
     const TEST_ITERATIONS: usize = 32;
 
     #[test]
-    fn deserialize_bad_file() {
-        let body_str = String::from(r#"[object Object]"#);
-        let body = Vec::from(body_str.as_bytes());
-        assert!(deserialize(&body).is_err());
-    }
-
-    #[test]
     /// Makes sure our cipher/block/padding indexes are correct. New values can be
     /// added to these arrays, but *MUST* be tested here. Note that we also test for
     /// existence of specific values at specific indexes so re-ordering of these
@@ -668,6 +661,13 @@ mod tests {
         assert_eq!(super::PAD_INDEX[1], "PKCS7");
         assert_eq!(super::KDF_INDEX.len(), 1);
         assert_eq!(super::KDF_INDEX[0], "SHA256:2:64");
+    }
+
+    #[test]
+    fn deserialize_bad_file() {
+        let body_str = String::from(r#"[object Object]"#);
+        let body = Vec::from(body_str.as_bytes());
+        assert!(deserialize(&body).is_err());
     }
 
     #[test]
