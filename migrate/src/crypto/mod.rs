@@ -502,52 +502,6 @@ pub fn gen_key(hasher: Hasher, pass: &str, salt: &[u8], iter: usize) -> CResult<
 }
 
 #[allow(dead_code)]
-/// Generate a v4 UUID (random). I'd use the uuid crate, but I don't actually
-/// know where it gets its random values from, and I'd rather use our source
-/// than depend on it to be truly random when we already have that implemented.
-pub fn uuid() -> CResult<String> {
-    // generate 15 random bytes, which is exactly what we need for a 36-char
-    // UUID (when factoring in the dashes, '4', and the [8,9,a,b] byte). then
-    // convert the bytes to hex.
-    let rand = low::to_hex(&low::rand_bytes(15)?)?;
-    let ab89_byte = low::rand_bytes(1)?[0];
-    let yvals = ['8', '9', 'a', 'b'];
-    let mut uuid = String::with_capacity(36);
-    let mut i = 0;
-    for char in rand.chars() {
-        // match on our counter to insert the correct characters in the right
-        // spots. note than whenever we push a character to our UUID, we inc i
-        // to keep it in-sync with our string length. this makes things less
-        // confusing when matching later on when we know in our heart of hearts
-        // that a certain character needs to go in a certain spot.
-        match i {
-            8 | 23 => {
-                uuid.push('-');
-                i += 1;
-            }
-            13 => {
-                uuid.push('-');
-                i += 1;
-                uuid.push('4');
-                i += 1;
-            },
-            18 => {
-                uuid.push('-');
-                i += 1;
-                // grab a random 8 || 9 || a || b character and push it
-                let idx = (ab89_byte as usize) % yvals.len();
-                uuid.push(yvals[idx]);
-                i += 1;
-            },
-            _ => {},
-        }
-        uuid.push(char);
-        i += 1;
-    }
-    Ok(uuid)
-}
-
-#[allow(dead_code)]
 /// Generate a random hex string (64 bytes). In Turtl js, this was done by
 /// hashing a time value concatenated with a UUID, but why bother when we can
 /// just generate the "hash" directly by converting 32 random bytes to a hex
@@ -639,6 +593,9 @@ pub fn random_hash() -> CResult<String> {
 /// 777Z+DOI+8O8OO88DNDNNMO.D8O7ONMMDZMMMMMMMMNN8D8DNNMMMMMMNNNNNNNNNNNNNNNNMM
 /// 888888D8ZO888OZ88DNNNNM$,.III++?8NMMMMMMND88O8D8NMMMMMMMNNNNNNNNNNNNNNNNMN
 fn deserialize_version_0(serialized: &Vec<u8>) -> CResult<CryptoData> {
+    if serialized.len() <= 34 {
+        return Err(CryptoError::Msg(format!("crypto::deserialize_version_0() -- bad v0 payload ({} bytes, should be at 34)", serialized.len())));
+    }
     let ciphertext_base64 = String::from_utf8(Vec::from(&serialized[0..(serialized.len() - 34)])).expect("migrate::crypto::deserialize_version_0() -- failed to parse utf8");
     let ciphertext = low::from_base64(&ciphertext_base64).expect("migrate::crypto::deserialize_version_0() -- failed to parse base64");
     let cutoff: usize = serialized.len() - 32;
@@ -679,6 +636,14 @@ mod tests {
     use super::*;
 
     const TEST_ITERATIONS: usize = 32;
+
+    #[test]
+    fn deserialize_bad_file() {
+        let body_str = String::from(r#"[object Object]"#);
+        let body = Vec::from(body_str.as_bytes());
+        let des = deserialize(&body).unwrap();
+        assert!(des.version != 0);
+    }
 
     #[test]
     /// Makes sure our cipher/block/padding indexes are correct. New values can be
@@ -796,32 +761,6 @@ mod tests {
                     (cint >= ('0' as u32) && cint <= ('9' as u32)) ||
                     (cint >= ('a' as u32) && cint <= ('f' as u32))
                 );
-            }
-        }
-    }
-
-    #[test]
-    fn can_gen_uuid() {
-        // since we get a lot of variants, let's generate a lot of these and run
-        // the test for each one
-        for _ in 0..TEST_ITERATIONS {
-            let uuidstr = uuid().unwrap();
-            assert_eq!(uuidstr.len(), 36);
-            let mut i = 0;
-            for chr in uuidstr.chars() {
-                match i {
-                    8 | 13 | 18 | 23 => assert_eq!(chr, '-'),
-                    14 => assert_eq!(chr, '4'),
-                    19 => assert!(chr == '8' || chr == '9' || chr == 'a' || chr == 'b'),
-                    _ => {
-                        let cint = chr as u32;
-                        assert!(
-                            (cint >= ('0' as u32) && cint <= ('9' as u32)) ||
-                            (cint >= ('a' as u32) && cint <= ('f' as u32))
-                        );
-                    }
-                }
-                i += 1;
             }
         }
     }
