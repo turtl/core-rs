@@ -233,6 +233,9 @@ impl CryptoData {
 pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     let mut idx: usize = 0;
     let mut hmac: Vec<u8> = Vec::new();
+    let lengtherr = Err(CryptoError::Msg(format!("crypto::deserialize() -- bad data length while deserializing")));
+
+    if serialized.len() <= 2 { return lengtherr; }
     let version: u16 = ((serialized[idx] as u16) << 8) + (serialized[idx + 1] as u16);
     idx += 2;
 
@@ -254,18 +257,23 @@ pub fn deserialize(serialized: &Vec<u8>) -> CResult<CryptoData> {
     }
 
     if version <= 4 {
+        if serialized.len() <= (idx + 32) { return lengtherr; }
         hmac = Vec::from(&serialized[idx..(idx + 32)]);
         idx += 32;
     }
 
+    if serialized.len() <= idx { return lengtherr; }
     let desc_length = serialized[idx];
+    if serialized.len() <= (idx + 1 + (desc_length as usize)) { return lengtherr; }
     let desc = &serialized[(idx + 1)..(idx + 1 + (desc_length as usize))];
     let desc_struct = PayloadDescription::from(desc)?;
     idx += (desc_length as usize) + 1;
 
+    if serialized.len() <= (idx + 16) { return lengtherr; }
     let iv = &serialized[idx..(idx + 16)];
     idx += 16;
 
+    if serialized.len() <= idx { return lengtherr; }
     let ciphertext = &serialized[idx..];
 
     Ok(CryptoData::new(version, desc_struct, Vec::from(iv), hmac, Vec::from(ciphertext)))
@@ -641,8 +649,7 @@ mod tests {
     fn deserialize_bad_file() {
         let body_str = String::from(r#"[object Object]"#);
         let body = Vec::from(body_str.as_bytes());
-        let des = deserialize(&body).unwrap();
-        assert!(des.version != 0);
+        assert!(deserialize(&body).is_err());
     }
 
     #[test]
@@ -709,6 +716,19 @@ mod tests {
         let dec = decrypt(&key, &enc).unwrap();
         let dec_str = String::from_utf8(dec).unwrap();
         assert_eq!(dec_str, "{\"type\":\"link\",\"url\":\"http://www.baynatives.com/plants/Erysimum-capitatum/\",\"title\":\"Erysimum capitatum Gallery - Bay Natives: The San Francisco Source for Native Plants\",\"text\":\"![image](http://www.baynatives.com/plants/Erysimum-capitatum/03-P4082478__.jpg)  \\n\",\"tags\":[\"backyard\",\"garden\",\"native plants\",\"bay natives\",\"flower\",\"wildflower\"]}");
+    }
+
+    #[test]
+    fn catches_truncated_ciphertext() {
+        let key = Key::new(from_base64(&String::from("js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs=")).unwrap());
+        let enc = from_base64(&String::from(r#"AAUCAAFKp4T7iuwnVM6+OY"#)).unwrap();
+        let err = decrypt(&key, &enc);
+        match err {
+            Err(CryptoError::Msg(x)) => {
+                assert!(x.contains("bad data length"));
+            }
+            _ => { panic!("Unexpected error: {:?}", err); }
+        }
     }
 
     #[test]
