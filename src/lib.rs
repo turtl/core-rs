@@ -20,6 +20,7 @@ extern crate lazy_static;
 extern crate lib_permissions;
 #[macro_use]
 extern crate log;
+extern crate log_panics;
 extern crate migrate;
 extern crate num_cpus;
 #[macro_use]
@@ -65,6 +66,7 @@ use ::fs2::FileExt;
 
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
+    log_panics::init();
     let runtime_config: Value = match jedi::parse(&config_str) {
         Ok(x) => x,
         Err(e) => {

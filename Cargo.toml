@@ -52,6 +52,10 @@ serde_json = "1.0.2"
 sodiumoxide = "0.0.16"
 time = "0.1.35"
 
+[dependencies.log-panics]
+version = "2.0.0"
+features = ["with-backtrace"]
+
 #[target.i686-pc-windows-gnu]
 #user32-sys = "*"
 #gdi32-sys = "*"

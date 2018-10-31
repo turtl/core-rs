@@ -507,6 +507,7 @@ pub fn process(turtl: &Turtl, msg: &String) -> TResult<()> {
         Ok(..) => {}
         Err(e) => {
             let err = e.downcast::<String>().unwrap_or(Box::new(String::from("no information available")));
+            error!("dispatch::process() -- panic: {}", err);
             match turtl.msg_error(&mid, &TError::Panic(format!("dispatch panic: {}", err))) {
                 Err(e) => error!("dispatch:process() -- problem sending (panic) response (mod {}): {}", mid, e),
                 _ => {},
