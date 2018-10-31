@@ -177,6 +177,7 @@ pub fn setup_logger() -> TResult<()> {
             log::LevelFilter::Warn
         }
     };
+    let non_verbose_level = if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info };
     let mut config = fern::Dispatch::new()
         .format(|out, message, record| {
             match prune_logfile() {
@@ -194,9 +195,12 @@ pub fn setup_logger() -> TResult<()> {
             ))
         })
         .level(level)
-        .level_for("tokio_reactor", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
-        .level_for("hyper", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
-        .level_for("jni", if level < log::LevelFilter::Info { level } else { log::LevelFilter::Info })
+        .level_for("tokio_reactor", non_verbose_level.clone())
+        .level_for("mio", non_verbose_level.clone())
+        .level_for("reqwest", non_verbose_level.clone())
+        .level_for("hyper", non_verbose_level.clone())
+        .level_for("want", non_verbose_level.clone())
+        .level_for("jni", non_verbose_level.clone())
         .chain(std::io::stdout());
     if let Some(filedest) = get_logfile() {
         config = config.chain(fern::log_file(filedest)?);
