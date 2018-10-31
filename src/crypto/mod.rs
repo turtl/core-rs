@@ -141,17 +141,23 @@ impl CryptoData {
 ///
 pub fn deserialize(mut serialized: Vec<u8>) -> CResult<CryptoData> {
     let mut idx: usize = 0;
+    let lengtherr = Err(CryptoError::BadData(format!("crypto::deserialize() -- bad data length while deserializing")));
+
+    if serialized.len() <= 2 { return lengtherr; }
     let version: u16 = ((serialized[idx] as u16) << 8) + (serialized[idx + 1] as u16);
     idx += 2;
 
     let desc_struct = {
+        if serialized.len() <= (idx + 1) { return lengtherr; }
         let desc_length = serialized[idx];
         idx += 1;
+        if serialized.len() <= (idx + (desc_length as usize)) { return lengtherr; }
         let desc = &serialized[idx..(idx + (desc_length as usize))];
         idx += desc_length as usize;
         PayloadDescription::from(desc)?
     };
 
+    if serialized.len() <= idx { return lengtherr; }
     let nonce_length = serialized[idx] as usize;
     idx += 1;
     let nonce_idx = idx + nonce_length;
@@ -161,6 +167,7 @@ pub fn deserialize(mut serialized: Vec<u8>) -> CResult<CryptoData> {
     let nonce = Vec::from(&serialized[idx..nonce_idx]);
     idx += nonce_length;
 
+    if serialized.len() <= idx { return lengtherr; }
     // non-copying conversion into a vec
     let ciphertext: Vec<u8> = serialized.drain(idx..).collect();
 
@@ -331,6 +338,36 @@ mod tests {
         let key = gen_key(password.as_bytes(), salt.as_slice(), KEYGEN_OPS_DEFAULT, KEYGEN_MEM_DEFAULT).unwrap();
         let keystr = to_hex(key.data()).unwrap();
         assert_eq!(keystr, "f36850e9bd90afc3413a89693bf71ebdf347f3727bad9b4487e249bb21ca28f1");
+    }
+
+    #[test]
+    fn can_decrypt_latest() {
+        let key = Key::new(from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap());
+        let payload = from_base64(&String::from("AAYBAAzGNuOg4N1zkQ2BlAiBbjNiYibICOs1NW18Jh/QfvdS+fR70+5kMnNCjXUSND05fU3m/FrcFZKPd3yQAl5gsP+4hWqkbWd+6/ip6HISeEz0NPBNTCWedSVgKYiEdnORSoiunl4l61vBmsyzQGnQl8fCYuerTLeGpq6j6Y5fBVmqmjWbmc5zeKqmg+LTfFUq9iNg5HoUPVKfjVm1aYlFG/fjMSk25j5zIgecFHAJOlQqtHXXPPCxwYLBoHBPsZE3kMu8jzE1QO8SAPOPyp2o3pD8fX1OhvqRHL/W34dqQzasmrscgvdvAy69l6nwbByOsjwvNSm2jWiNWGqFqxLgLXLy00r8A3E3hBDtQur4uo6Vs9ZSYn4mfLjEAyhyUsZeaoti8pKK5FVcJA9a//Blztbdmd8SPysXxks/6RvHIjy+aRCVxs/8Bw2Mv+AiSZ59dohNN4OUoVy3hNXk0RfdCDakw5AVq7xocAwmMLZeoWUgUt+Nb8ntt5W8KpfZVGMuxqIQoJoRMG7kf6TEHpL4vBOmosV0MwtLWkXwyXsx+zkP3GRw9mIcCkm5wEWpELYYzrOLmVQs4QHMetWsmyfTFOFlzVFPl7ctKlKuUOfbKETmrafvCNmoeOAWn58CXeEsD06ejrlg9zuPf5Vc3eIMSJ+EKIy8/eMLLFIDEzYkutqOfZoG6LJgevbgivLV7oXnG4kBF5pGVvwnpED4fTUFCFnc+MWATCN9aIJ58aLIdmF7TLYQwwXwNyyo9MvTJn/sEVjsbX/kpYrtknW1pjJ44e11du2Q5GpJXA4630g7BOOxooYTQgumoo/P3pPJnLjt9TJWPw7Q2h5rb2tqJowhltN19upncbOwMl1HPJcCqtOZOmttskMiDZGAjytiGOuD15TnfDUoZu3b97x0O6Nzm3RxGGBg4kQjC0q0RW0700EGGeCaiq9XAfUFIsS5XQ==")).unwrap();
+        let plain = decrypt(&key, payload).unwrap();
+        let plain_str = String::from_utf8(plain).unwrap();
+        assert_eq!(plain_str, r#"{"title":"libertarian quotes","body":"Moreover, the institution of child labor is an honorable one, with a long and glorious history of good works. And the villains of the piece are not the employers, but rather those who prohibit the free market in child labor. These do-gooders are responsible for the untold immiseration of those who are thus forced out of employment. Although the harm done was greater in the past, when great poverty made widespread child labor necessary, there are still people in dire straits today. Present prohibitions of child labor are thus an unconscionable interference with their lives.","tags":["moron"],"mod":1468007942,"created":1468007942.493,"keys":[]}"#);
+    }
+
+    #[test]
+    fn catches_truncated_ciphertext() {
+        let key = Key::new(from_base64(&String::from("2gtrzmvEQkfK9Lq+0eGqLjDrmlKBabp7T212Zdv35T0=")).unwrap());
+        let payload = from_base64(&String::from("AAYBAA")).unwrap();
+        let err = decrypt(&key, payload);
+        match err {
+            Err(CryptoError::BadData(x)) => {
+                assert!(x.contains("bad data length"));
+            }
+            _ => { panic!("Unexpected error: {:?}", err); }
+        }
+        let payload = from_base64(&String::from("AAYBAAzGNuOg4N1z")).unwrap();
+        let err = decrypt(&key, payload);
+        match err {
+            Err(CryptoError::BadData(x)) => {
+                assert!(x.contains("malformed data"));
+            }
+            _ => { panic!("Unexpected error: {:?}", err); }
+        }
     }
 
     #[test]
