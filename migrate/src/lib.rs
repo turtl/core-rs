@@ -192,8 +192,10 @@ fn get_profile<F>(user_id: &String, auth: &String, evfn: &mut F) -> MResult<Prof
                 continue;
             }
         };
-        // we only want to include records that belong to us
-        if &rec_user_id != user_id { continue; }
+        // we only want to include notes that belong to us
+        if ty == "note" && &rec_user_id != user_id {
+            continue;
+        }
 
         match ty.as_ref() {
             "keychain" => {
