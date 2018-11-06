@@ -496,6 +496,48 @@ pub fn random_iv() -> CResult<Vec<u8>> {
     low::rand_bytes(low::aes_block_size())
 }
 
+/// converts a string to a Vec<u8> using a horrible conversion employed in the
+/// js app many moons ago. forgive me.
+///
+/// NOTE: this function is horribly lossy for any kind of non-ascii text. oops.
+fn bin_to_words(jsstr: &str) -> Vec<u8> {
+    fn bitarray_partial(len: i64, x: i64) -> i64 {
+        if len == 32 { return x; }
+        (((x << (32 - len)) as i32) as i64) + (len * 0x10000000000)
+    }
+    // basically convert a utf16 string into an sjcl word array
+    let mut pass_bytes: Vec<i64> = Vec::with_capacity(jsstr.len() + 4);
+    let mut tmp: i64 = 0;
+    let mut i: i64 = 0;
+    let u16chars = jsstr.encode_utf16().collect::<Vec<u16>>();
+    for x in 0..u16chars.len() {
+        i = x as i64;
+        tmp = ((tmp << 8) as i32 | (u16chars[x] as i32)) as i64;
+        if (i & 3) == 3 {
+            pass_bytes.push(tmp);
+            tmp = 0;
+        }
+    }
+    i += 1;
+    if (i & 3) != 0 {
+        let push_byte = bitarray_partial(8 * (i & 3), tmp);
+        pass_bytes.push(push_byte);
+    }
+
+    // now convert the horrible sjcl word array to a byte array
+    let mut bytes: Vec<u8> = Vec::with_capacity(pass_bytes.len() * 4);
+    let mut tmp: i32 = 0;
+    for i in 0..u16chars.len() {
+        if (i & 3) == 0 {
+            if (i / 4) >= pass_bytes.len() { break; }
+            tmp = pass_bytes[i / 4] as i32;
+        }
+        bytes.push((tmp >> 24) as u8);
+        tmp = tmp << 8;
+    }
+    bytes
+}
+
 /// Generate a cryptographic key, given a password/salt combination. We also
 /// specify the hasher we want to use (Hasher::SHA1, Hasher::SHA256, ...) along
 /// with the number of iterations to run our key generator (the more iterations,
@@ -506,7 +548,8 @@ pub fn random_iv() -> CResult<Vec<u8>> {
 ///
 /// Generated keys are always 256-bit.
 pub fn gen_key(hasher: Hasher, pass: &str, salt: &[u8], iter: usize) -> CResult<Key> {
-    Ok(Key::new(low::pbkdf2(hasher, pass.as_bytes(), salt, iter, 32)?))
+    let pass_bytes = bin_to_words(pass);
+    Ok(Key::new(low::pbkdf2(hasher, &pass_bytes[..], salt, iter, 32)?))
 }
 
 #[allow(dead_code)]
@@ -783,6 +826,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn bin_to_words_works() {
+        assert_eq!(bin_to_words(r#"i have a little rabbit"#), vec![105, 32, 104, 97, 118, 101, 32, 97, 32, 108, 105, 116, 116, 108, 101, 32, 114, 97, 98, 98, 105, 116]);
+        assert_eq!(bin_to_words(r#"привет, мое имя победитель"#), vec![63, 68, 60, 50, 53, 66, 44, 32, 60, 62, 53, 32, 60, 60, 79, 32, 63, 62, 53, 53, 52, 60, 70, 53, 63, 76]);
+        assert_eq!(bin_to_words(r#"у меня есть маленький кролик"#), vec![67, 36, 60, 53, 61, 79, 36, 53, 69, 70, 76, 32, 60, 52, 63, 53, 61, 76, 62, 56, 57, 36, 62, 64, 62, 63, 60, 58]);
+        assert_eq!(bin_to_words(r#"我有一只小兔子"#), vec![119, 79, 83, 234, 95, 95, 80]);
+        assert_eq!(bin_to_words(r#"من یک خرگوش کوچک دارم"#), vec![71, 70, 38, 204, 169, 38, 46, 49, 175, 78, 52, 32, 175, 78, 134, 169, 38, 47, 39, 49, 69]);
+        assert_eq!(bin_to_words(r#"मेरे पास थोड़ा खरगोश है"#), vec![47, 79, 57, 71, 41, 43, 63, 56, 41, 45, 75, 33, 61, 62, 41, 22, 57, 31, 75, 54, 41, 57, 72]);
+        assert_eq!(bin_to_words(r#"ຂ້າພະເຈົ້າມີ rabbit ພຽງເລັກນ້ອຍ"#), vec![142, 207, 190, 158, 190, 206, 142, 187, 207, 190, 175, 181, 32, 114, 97, 98, 98, 105, 116, 32, 158, 191, 143, 192, 175, 191, 143, 153, 207, 175, 141]);
     }
 }
 
