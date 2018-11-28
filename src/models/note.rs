@@ -1,7 +1,7 @@
 use ::turtl::Turtl;
 use ::error::TResult;
 use ::models::model::Model;
-use ::models::validate::Validate;
+use ::models::validate::{self, Validate};
 use ::models::protected::{Keyfinder, Protected};
 use ::models::keychain::{Keychain, KeyRef, KeyType};
 use ::models::file::{File, FileData};
@@ -64,7 +64,19 @@ protected! {
 
 make_storable!(Note, "notes");
 impl SyncModel for Note {}
-impl Validate for Note {}
+
+impl Validate for Note {
+    fn validate(&self) -> Vec<(String, String)> {
+        let mut errors = Vec::new();
+        if self.space_id == "" {
+            errors.push(validate::entry("space_id", t!("Please add a space id to this note")));
+        }
+        if self.type_.as_ref().map(|x| x == "").unwrap_or(true) {
+            errors.push(validate::entry("type", t!("This note is missing the `type` field")));
+        }
+        errors
+    }
+}
 
 impl Note {
     /// Remove the files attached to this note, if any.

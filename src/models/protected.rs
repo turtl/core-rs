@@ -447,6 +447,14 @@ mod tests {
         }
     }
 
+    protected! {
+        #[derive(Serialize, Deserialize)]
+        pub struct RequiredLol {
+            #[protected_field(public)]
+            pub space_id: String,
+        }
+    }
+
     #[test]
     fn returns_correct_public_fields() {
         let dog = Dog::new();
@@ -598,6 +606,12 @@ mod tests {
         // not the best test, but whatever. i suppose i could write a base64
         // regex. feeling lazy tonight.
         assert_eq!(dog.keys.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn error_on_missing_required() {
+        let note: Result<RequiredLol, jedi::JSONError> = jedi::parse(&String::from(r#"{"title":"omg"}"#));
+        assert!(note.is_err());
     }
 }
 

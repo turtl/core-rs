@@ -31,6 +31,7 @@ mod tests {
             {
                 "user_id": user_id,
                 "space_id": space_id,
+                "type": "text",
                 "title": "get a job",
                 "body": "do it",
             }
@@ -43,6 +44,7 @@ mod tests {
             {
                 "user_id": user_id,
                 "space_id": space_id,
+                "type": "text",
                 "title": "my bookmark",
                 "url": "http://howtobepunk.com",
             }

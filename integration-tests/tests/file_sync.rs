@@ -24,6 +24,7 @@ mod tests {
         let space_id: String = jedi::get(&["spaces", "0", "id"], &profile_data).unwrap();
         let notejson = &json!({
             "title": "mai file LOL",
+            "type": "file",
             "space_id": space_id,
             "user_id": user_id,
             "file": {

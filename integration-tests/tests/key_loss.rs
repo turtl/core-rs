@@ -52,6 +52,7 @@ mod tests {
                     "user_id": user_id,
                     "space_id": from_space_id,
                     "board_id": board_id,
+                    "type": "text",
                     "title": format!("get a job {}", i),
                     "body": format!("please break! {}", i),
                 }
