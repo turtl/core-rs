@@ -1,9 +1,10 @@
 //! The Api system is responsible for talking to our Turtl server, and manages
 //! our user authentication.
 
-use ::std::sync::RwLock;
+use ::std::sync::{RwLock, Mutex};
 use ::std::io::Read;
 use ::std::time::Duration;
+use ::std::collections::HashMap;
 use ::config;
 use ::jedi::{self, Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
@@ -14,6 +15,13 @@ pub use ::reqwest::StatusCode;
 
 /// Pull out our crate version to send to the api
 const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+lazy_static! {
+    /// A hash table that holds HTTP clients. we used to just create/destroy
+    /// clients on each request, but that exhausts connections so it's better to
+    /// cache the clients and let them use their internal connection pool.
+    static ref CLIENTS: Mutex<HashMap<String, Client>> = Mutex::new(HashMap::new());
+}
 
 /// Holds our Api configuration. This consists of any mutable fields the Api
 /// needs to build URLs or make decisions.
@@ -91,21 +99,36 @@ impl ApiCaller {
     }
 
     pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> TResult<T> {
+        let mut cachekey: Vec<String> = Vec::with_capacity(2);
         let mut client_builder = Client::builder();
         if let Some(builder) = builder_maybe {
             let ApiReq { timeout } = builder;
             client_builder = client_builder.timeout(timeout);
+            cachekey.push(format!("timeout-{}", timeout.as_secs()));
         }
         match config::get::<Option<String>>(&["api", "proxy"]) {
             Ok(x) => {
                 if let Some(proxy_cfg) = x {
                     debug!("api::call() -- req: using proxy: {}", proxy_cfg);
-                    client_builder = client_builder.proxy(Proxy::all(format!("http://{}", proxy_cfg).as_str())?);
+                    let proxystr = format!("http://{}", proxy_cfg);
+                    cachekey.push(format!("proxy-{}", proxystr));
+                    client_builder = client_builder.proxy(Proxy::all(proxystr.as_str())?);
                 }
             }
             Err(_) => {}
         }
-        let client = client_builder.build()?;
+        let cachekey_string: String = cachekey.join("///");
+        let client = {
+            let mut client_guard = lock!((*CLIENTS));
+            if !client_guard.contains_key(&cachekey_string) {
+                let client = client_builder.build()?;
+                debug!("api::call() -- creating new client with cachekey {}", cachekey_string);
+                client_guard.insert(cachekey_string.clone(), client);
+            }
+            // notice we clone here...the client lets us clone without messing
+            // up the pooling. very nice!
+            client_guard.get(&cachekey_string).unwrap().clone()
+        };
         let ApiCaller { req: reqb } = self;
         let req = reqb.build()?;
         let callinfo = CallInfo::new(req.method().clone(), String::from(req.url().as_str()));
