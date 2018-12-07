@@ -201,6 +201,7 @@ pub fn setup_logger() -> TResult<()> {
         .level_for("hyper", non_verbose_level.clone())
         .level_for("want", non_verbose_level.clone())
         .level_for("jni", non_verbose_level.clone())
+        .level_for("html5ever", non_verbose_level.clone())
         .chain(std::io::stdout());
     if let Some(filedest) = get_logfile() {
         config = config.chain(fern::log_file(filedest)?);
