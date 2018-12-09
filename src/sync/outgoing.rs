@@ -1,7 +1,7 @@
 use ::std::sync::{Arc, RwLock, Mutex};
 use ::error::TResult;
 use ::sync::{SyncConfig, Syncer};
-use ::sync::incoming::SyncIncoming;
+use ::sync::incoming::{SyncIncoming, SyncResponseExtra};
 use ::storage::Storage;
 use ::api::{Api, ApiReq};
 use ::messaging;
@@ -18,6 +18,9 @@ struct SyncResponse {
     /// records that weren't run because they were blocked by a failure
     #[serde(default)]
     blocked: Vec<SyncRecord>,
+    /// extra data returned from the sync system
+    #[serde(default)]
+    extra: Option<SyncResponseExtra>,
 }
 
 /// Holds the state for data going from turtl -> API (outgoing sync data).
@@ -153,6 +156,11 @@ impl Syncer for SyncOutgoing {
         // let the ui know we had an outgoing sync. there are cases where it
         // will want to know this happened.
         messaging::ui_event("sync:outgoing:complete", &())?;
+
+        // if we have extra sync data, send it off to the ui
+        if let Some(extra) = sync_result.extra.as_ref() {
+            messaging::ui_event("sync:outgoing:extra", extra)?;
+        }
 
         // if we did indeed get an error while deleting our sync records,
         // send the first error we got back. obviously there may be more

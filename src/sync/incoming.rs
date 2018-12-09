@@ -25,6 +25,14 @@ use ::util;
 
 const SYNC_IGNORE_KEY: &'static str = "sync:incoming:ignore";
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SyncResponseExtra {
+    #[serde(default)]
+    current_size: Option<i64>,
+    #[serde(default)]
+    max_size: Option<i64>,
+}
+
 /// Defines a struct for deserializing our incoming sync response
 #[derive(Deserialize, Debug)]
 struct SyncResponse {
@@ -33,6 +41,9 @@ struct SyncResponse {
     #[serde(default)]
     #[serde(deserialize_with = "::util::ser::str_i64_converter::deserialize")]
     sync_id: i64,
+    /// extra data returned from the sync system
+    #[serde(default)]
+    extra: Option<SyncResponseExtra>,
 }
 
 struct Handlers {
@@ -232,7 +243,7 @@ impl SyncIncoming {
         if !self.is_enabled() && !force { return Ok(()); }
 
         // destructure our response
-        let SyncResponse { sync_id, records } = syncdata;
+        let SyncResponse { sync_id, records, extra } = syncdata;
 
         // grab sync ids we're ignoring
         let ignored = self.get_ignored()?;
@@ -283,6 +294,11 @@ impl SyncIncoming {
         // this is what tells our dispatch thread to load the queued incoming
         // syncs and process them
         messaging::app_event("sync:incoming", &())?;
+
+        // if we have extra sync data, send it off to the ui
+        if let Some(extra) = extra.as_ref() {
+            messaging::ui_event("sync:incoming:extra", extra)?;
+        }
 
         // clear out the sync ignore list
         match self.clear_ignored() {
