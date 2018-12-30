@@ -4,6 +4,7 @@ VARS=vars.ios.mk
 TMP=/tmp/turtl-ios
 
 function cleanup() {
+	echo "Cleaning up (reverting Cargo.toml and removing ${TMP}..."
 	git checkout Cargo.toml
 	rm -rf "${TMP}"
 }
@@ -35,9 +36,10 @@ function build_arch() {
 
 }
 
+sed -i '' 's/crate-type = .*/crate-type = ["staticlib"]/g' Cargo.toml
+
 build_arch armv7 armv7-apple-ios
 build_arch armv7s armv7s-apple-ios
 build_arch arm64 aarch64-apple-ios
 build_arch x86_64 x86_64-apple-ios
 
-sed -i '' 's/crate-type = .*/crate-type = ["staticlib"]/g' Cargo.toml
