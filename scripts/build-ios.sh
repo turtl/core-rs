@@ -1,6 +1,9 @@
 #!/bin/bash
 
+VARS=vars.ios.mk
 TMP=/tmp/turtl-ios
+
+source "${VARS}"
 
 function cleanup() {
 	git checkout Cargo.toml
