@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 VARS=vars.ios.mk
 TMP=/tmp/turtl-ios
 
