@@ -10,7 +10,7 @@ function cleanup() {
 trap cleanup exit
 
 mkdir -p "${TMP}"
-cat "${VARS}" | sed 's/ := /=/g' > "${TMP}/vars.ios.sh"
+cat "${VARS}" | grep -v '^export INCLUDE ' | sed 's/ := /=/g' > "${TMP}/vars.ios.sh"
 source "${TMP}/vars.ios.sh"
 
 # creates a temporary directory for all our native libs and extracts the
