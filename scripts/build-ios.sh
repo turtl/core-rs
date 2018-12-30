@@ -3,13 +3,15 @@
 VARS=vars.ios.mk
 TMP=/tmp/turtl-ios
 
-source "${VARS}"
-
 function cleanup() {
 	git checkout Cargo.toml
 	rm -rf "${TMP}"
 }
 trap cleanup exit
+
+mkdir -p "${TMP}"
+cat "${VARS}" | sed 's/ := /=/g' > "${TMP}/vars.ios.sh"
+source "${TMP}/vars.ios.sh"
 
 # creates a temporary directory for all our native libs and extracts the
 # underlying static lib from the fat lipo archive into that tmp dir
