@@ -9,6 +9,7 @@ extern crate crossbeam;
 extern crate dumpy;
 extern crate encoding_rs;
 extern crate fern;
+#[cfg(not(feature = "wasm"))]
 extern crate fs2;
 extern crate futures;
 extern crate futures_cpupool;
@@ -59,9 +60,11 @@ mod turtl;
 use ::std::thread;
 use ::std::sync::Arc;
 use ::std::env;
+#[cfg(not(feature = "wasm"))]
 use ::std::fs;
 use ::jedi::Value;
 use ::error::TResult;
+#[cfg(not(feature = "wasm"))]
 use ::fs2::FileExt;
 
 /// Init any state/logging/etc the app needs
@@ -116,6 +119,31 @@ pub fn init(config_str: String) -> TResult<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "wasm"))]
+/// Lock the core so only one instance can run
+fn lock_core() -> TResult<Option<fs::File>> {
+    let data_folder = config::get::<String>(&["data_folder"])?;
+    if data_folder == ":memory:" {
+        return Ok(None);
+    }
+    let lockfile_path = format!("{}/run.lock", data_folder);
+    info!("main::start() -- locking data dir: {}", lockfile_path);
+    let lockfile = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lockfile_path.as_str())?;
+    match lockfile.try_lock_exclusive() {
+        Ok(_) => {}
+        Err(e) => {
+            error!("main::lock_core() -- cannot lock {} ...another instance of turtl is likely running", lockfile_path);
+            return Err(toterr!(e));
+        }
+    }
+    Ok(Some(lockfile))
+}
+
 /// Start our app...spawns all our worker/helper threads, including our comm
 /// system that listens for external messages.
 ///
@@ -131,28 +159,8 @@ pub fn start() -> thread::JoinHandle<()> {
     info!("main::start() -- begin");
     let handle = thread::Builder::new().name(String::from("turtl-main")).spawn(move || {
         let runner = move || -> TResult<()> {
-            // acquire our datadir lock
-            let data_folder = config::get::<String>(&["data_folder"])?;
-            let lockfile = if data_folder != ":memory:" {
-                let lockfile_path = format!("{}/run.lock", data_folder);
-                info!("main::start() -- locking data dir: {}", lockfile_path);
-                let lockfile = fs::OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .truncate(false)
-                    .open(lockfile_path.as_str())?;
-                match lockfile.try_lock_exclusive() {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("main::start() -- cannot lock {} ...another instance of turtl is likely running", lockfile_path);
-                        return Err(toterr!(e));
-                    }
-                }
-                Some(lockfile)
-            } else {
-                None
-            };
+            #[cfg(not(feature = "wasm"))]
+            let lockfile = lock_core()?;
 
             // create our turtl object
             let turtl = Arc::new(turtl::Turtl::new()?);
@@ -177,6 +185,7 @@ pub fn start() -> thread::JoinHandle<()> {
                 Ok(..) => {},
                 Err(e) => error!("main::start() -- messaging error: {}", e),
             }
+            #[cfg(not(feature = "wasm"))]
             drop(lockfile);
             info!("main::start() -- shutting down");
             Ok(())

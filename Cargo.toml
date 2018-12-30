@@ -14,10 +14,12 @@ crate-type = ["cdylib"]		# ["dylib", "staticlib"]
 doctest = false				# these annoy me
 
 [features]
-sqlite-static = ["rusqlite/bundled"]
 build-jni = ["jni"]
+file-lock = ["fs2"]
 panic-on-error = ["migrate/panic-on-error"]
 public-api-tests = []
+sqlite-static = ["rusqlite/bundled"]
+wasm = []
 
 [dependencies]
 base64 = "0.9.1"
@@ -29,7 +31,7 @@ crossbeam = "0.3.0"
 dumpy = { path = "dumpy" }
 encoding_rs = "0.8.6"
 fern = "0.5.5"
-fs2 = "0.4.3"
+fs2 = { version = "0.4.3", optional = true }
 futures = "0.1.14"
 futures-cpupool = "0.1.5"
 glob = "0.2.11"
@@ -43,14 +45,14 @@ migrate = { path = "migrate" }
 num_cpus = "1.8.0"
 protected_derive = { path = "protected_derive" }
 quick-error = "1.2.2"
-regex = "0.1.77"
+regex = "1.1.0"
 reqwest = "0.9.3"
 rusqlite = "0.13.0"
 serde = "1.0.8"
 serde_derive = "1.0.8"
 serde_json = "1.0.2"
-sodiumoxide = "0.0.16"
-time = "0.1.35"
+sodiumoxide = "0.2.0"
+time = "0.1.41"
 
 [dependencies.log-panics]
 version = "2.0.0"

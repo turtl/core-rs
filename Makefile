@@ -4,7 +4,7 @@
 -include vars.mk
 
 CARGO := $(shell which cargo)
-FEATURES ?= sqlite-static
+FEATURES ?= sqlite-static file-lock
 override CARGO_BUILD_ARGS += --features "$(FEATURES)"
 
 all: build
