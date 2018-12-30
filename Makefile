@@ -6,13 +6,12 @@ VARS ?= vars.mk
 
 CARGO ?= $(shell which cargo)
 FEATURES ?= sqlite-static
-BUILDCMD ?= build
 override CARGO_BUILD_ARGS += --features "$(FEATURES)"
 
 all: build
 
 build: 
-	$(CARGO) $(BUILDCMD) $(CARGO_BUILD_ARGS)
+	$(CARGO) build $(CARGO_BUILD_ARGS)
 
 release: override CARGO_BUILD_ARGS += --release
 release: build
