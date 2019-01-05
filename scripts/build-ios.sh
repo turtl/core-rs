@@ -46,6 +46,7 @@ build_arch arm64 aarch64-apple-ios
 build_arch x86_64 x86_64-apple-ios
 
 mkdir -p target/ios
+echo "Build finished, creating fat library in target/ios/libturtl_core.a"
 lipo \
 	-create \
 	target/armv7-apple-ios/release/libturtl_core.a \

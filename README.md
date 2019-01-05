@@ -88,3 +88,13 @@ publicly-exported capabilities of the core library, so they should help somewhat
 with documentation (I know it's not a substitute, but I'd rather release the
 project then toil away on docs than the other way around).
 
+## Notes
+
+This is a haphazard collection of random notes with no real organization. Sorry.
+
+- If you want to build the core for linux or android, see [buildo](https://github.com/turtl/buildo).
+- When building turtl core for iOS, you *need* to use a libsodium.a that was
+compiled *without* `--enable-minimal`!! This is worth noting because `libsodium/src/dist-build/ios.sh`
+uses `--enable-minimal` when building...remove these directives before building
+libsodium!
+
