@@ -33,7 +33,6 @@ function build_arch() {
 		SODIUM_LIB_DIR="${TMP}/target-${ios_target}" \
 		OPENSSL_LIB_DIR="${TMP}/target-${ios_target}" \
 		CARGO_BUILD_ARGS="--target ${rust_target}" \
-		FEATURES="sqlite-static ios" \
 		release
 
 }
