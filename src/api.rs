@@ -250,7 +250,7 @@ impl Api {
     fn build_url(&self, resource: &str) -> TResult<String> {
         let endpoint = config::get::<String>(&["api", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
-        url.push_str(&endpoint[..]);
+        url.push_str(endpoint.trim_end_matches('/'));
         url.push_str(resource);
         Ok(url)
     }
