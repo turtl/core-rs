@@ -110,9 +110,21 @@ impl ApiCaller {
             Ok(x) => {
                 if let Some(proxy_cfg) = x {
                     debug!("api::call() -- req: using proxy: {}", proxy_cfg);
-                    let proxystr = format!("http://{}", proxy_cfg);
+                    let proxystr = format!("{}", proxy_cfg);
                     cachekey.push(format!("proxy-{}", proxystr));
                     client_builder = client_builder.proxy(Proxy::all(proxystr.as_str())?);
+                }
+            }
+            Err(_) => {}
+        }
+        match config::get::<Option<bool>>(&["api", "allow_invalid_ssl"]) {
+            Ok(x) => {
+                if let Some(allow_invalid_ssl) = x {
+                    if allow_invalid_ssl {
+                        debug!("api::call() -- req: allow invalid ssl");
+                        cachekey.push(String::from("allow-invalid-ssl"));
+                        client_builder = client_builder.danger_accept_invalid_certs(true);
+                    }
                 }
             }
             Err(_) => {}
