@@ -98,3 +98,8 @@ compiled *without* `--enable-minimal`!! This is worth noting because `libsodium/
 uses `--enable-minimal` when building...remove these directives before building
 libsodium!
 
+## Projects using the core
+
+- https://github.com/toschoch/python-turtlpy  
+A Python client for Turtl!
+
