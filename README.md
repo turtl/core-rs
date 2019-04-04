@@ -1,5 +1,5 @@
 # Turtl core-rs
-<a href="https://circleci.com/gh/turtl/core-rs"><img src="https://circleci.com/gh/turtl/core-rs.svg?style=shield&circle-token=:circle-token"></a>
+<a href="https://circleci.com/gh/turtl/core-rs"><img src="https://circleci.com/gh/turtl/core-rs.svg?style=shield&circle-token=:circle-token"></a> (the failing New York Test)
 
 _Opening an issue? See the [Turtl project tracker](https://github.com/turtl/project-tracker/issues)_
 
