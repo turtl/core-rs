@@ -402,6 +402,9 @@ pub fn decrypt(key: &Key, ciphertext: &Vec<u8>) -> CResult<Vec<u8>> {
     // Obviously I should have used utf9. That's the best way to encode raw
     // binary data.
     let key = &fix_utf8_key(key)?;
+    if key.len() != 32 {
+        return Err(CryptoError::BadKey(format!("bad key: should be 32 len is {}", key.len())));
+    }
 
     let deserialized = deserialize(ciphertext)?;
     let version = deserialized.version;

@@ -75,6 +75,10 @@ quick_error! {
             description(str)
             display("crypto: error: {}", str)
         }
+        BadKey(str: String) {
+            description(str)
+            display("bad key: {}", str)
+        }
         Authentication(str: String) {
             description("authentication error")
             display("crypto: authentication error: {}", str)
