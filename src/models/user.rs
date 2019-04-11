@@ -2,7 +2,7 @@ use ::std::collections::HashMap;
 use ::jedi::{self, Value, Serialize};
 use ::error::{TResult, TError};
 use ::crypto::{self, Key, CryptoOp};
-use ::api::StatusCode;
+use ::api::{ApiReq, StatusCode};
 use ::models::model::{self, Model};
 use ::models::space::Space;
 use ::models::board::Board;
@@ -162,7 +162,8 @@ pub fn generate_auth(username: &String, password: &String, version: u16) -> TRes
 /// we get a match.
 fn do_login(turtl: &Turtl, username: &String, key: Key, auth: String) -> TResult<()> {
     turtl.api.set_auth(username.clone(), auth.clone())?;
-    let user_id: Value = turtl.api.post("/auth")?.call()?;
+    let opt = ApiReq::new().timeout(10);
+    let user_id: Value = turtl.api.post("/auth")?.call_opt(opt)?;
 
     let mut user_guard_w = lockw!(turtl.user);
     let id_err = TErr!(TError::BadValue(format!("auth was successful, but API returned strange id object: {:?}", user_id)));
