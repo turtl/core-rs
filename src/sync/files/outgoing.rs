@@ -3,7 +3,7 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::sync::incoming::SyncIncoming;
 use ::storage::Storage;
-use ::api::{Api, ApiReq};
+use ::api::{Api, ApiReq, StatusCode};
 use ::messaging;
 use ::error::{TResult, TError};
 use ::models::file::FileData;
@@ -117,16 +117,25 @@ impl FileSyncOutgoing {
                     None => {}
                 }
             }
-            Err(e) => {
+            Err(mut e) => {
+                e = e.shed();
                 warn!("FileSyncOutgoing.run_sync() -- failed to upload file: {}", e);
-                sync.set_error(&e);
-                // our upload failed? send to our sync failure handler
-                with_db!{ db, self.db,
-                    SyncRecord::handle_failed_sync(db, sync)?;
-                };
-                // we've handled this, return ok, otherwise our main thread will
-                // re-log the error which isn't but but kind of annoying
-                return Ok(());
+                match &e {
+                    &TError::Api(StatusCode::NOT_FOUND, _) => {
+                        warn!("FileSyncOutgoing.run_sync() -- the note we're attaching to doesn't exist, so we pretend the upload succeeded");
+                    }
+                    _ => {
+                        warn!("FileSyncOutgoing.run_sync() -- failed to upload file: {}", e);
+                        sync.set_error(&e);
+                        // our upload failed? send to our sync failure handler
+                        with_db!{ db, self.db,
+                            SyncRecord::handle_failed_sync(db, sync)?;
+                        };
+                        // we've handled this, return ok, otherwise our main thread will
+                        // re-log the error which isn't but but kind of annoying
+                        return Ok(());
+                    }
+                }
             }
         }
 
