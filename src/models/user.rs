@@ -21,6 +21,8 @@ use ::std::fs;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
 lazy_static! {
+    // this is the key used to encrypt login tokens. it's not meant as a real
+    // protection as much as it is a deterrent for lazy attackers
     static ref TOKEN_KEY: Key = Key::new(vec![33, 98, 95, 119, 236, 248, 150, 31, 91, 187, 94, 119, 18, 81, 190, 80, 46, 249, 173, 255, 214, 194, 176, 88, 197, 208, 38, 234, 144, 33, 144, 52]);
 }
 
