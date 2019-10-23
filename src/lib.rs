@@ -29,6 +29,7 @@ extern crate protected_derive;
 extern crate quick_error;
 extern crate regex;
 extern crate reqwest;
+#[macro_use]
 extern crate rusqlite;
 extern crate serde;
 #[macro_use]

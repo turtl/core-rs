@@ -138,9 +138,9 @@ fn rotate(logfile: &String) -> TResult<()> {
     Ok(())
 }
 
-/// if we are logging to a logfile, make sure that if it's over a certain size,
-/// we cut it down a bit.
 lazy_static! {
+    /// if we are logging to a logfile, make sure that if it's over a certain
+    /// size, we cut it down a bit.
     static ref PRUNE_COUNTER: Mutex<u32> = Mutex::new(0);
 }
 fn prune_logfile() -> TResult<()> {

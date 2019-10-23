@@ -4,7 +4,7 @@ quick_error! {
     /// Define a type for cryptography errors.
     #[derive(Debug)]
     pub enum CryptoError {
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("crypto: error: {}", err.description())
         }

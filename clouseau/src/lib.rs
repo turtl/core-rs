@@ -11,7 +11,7 @@ extern crate rusqlite;
 use ::std::error::Error;
 use ::std::mem;
 
-use ::rusqlite::Connection;
+use ::rusqlite::{Connection, NO_PARAMS};
 
 //                          ....~?=:::~M8.+$??Z$DON??=Z+,+=~.....               
 //           ...           ....~?IZO==+:=$+:+:?.$8=I.$~::+:=~....               
@@ -68,7 +68,7 @@ use ::rusqlite::Connection;
 quick_error! {
     #[derive(Debug)]
     pub enum CError {
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err)
         }
@@ -104,7 +104,7 @@ impl Clouseau {
     /// Very clever. Very clever indeed!
     pub fn new() -> CResult<Clouseau> {
         let conn = Connection::open_in_memory()?;
-        conn.execute("CREATE VIRTUAL TABLE objects USING fts4 (id VARCHAR(64) PRIMARY KEY, content TEXT)", &[])?;
+        conn.execute("CREATE VIRTUAL TABLE objects USING fts4 (id VARCHAR(64) PRIMARY KEY, content TEXT)", NO_PARAMS)?;
         Ok(Clouseau {
             conn: conn,
         })

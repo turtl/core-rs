@@ -14,7 +14,7 @@ quick_error! {
             description(str)
             display("error: {}", str)
         }
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err.description())
         }

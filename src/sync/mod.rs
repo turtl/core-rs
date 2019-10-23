@@ -97,10 +97,10 @@ impl SyncConfig {
 /// A structure that tracks some state for a running sync system.
 pub struct SyncState {
     pub join_handles: Vec<thread::JoinHandle<()>>,
-    pub shutdown: Box<Fn() + 'static + Sync + Send>,
-    pub pause: Box<Fn() + 'static + Sync + Send>,
-    pub resume: Box<Fn() + 'static + Sync + Send>,
-    pub enabled: Box<Fn() -> bool + 'static + Sync + Send>,
+    pub shutdown: Box<dyn Fn() + 'static + Sync + Send>,
+    pub pause: Box<dyn Fn() + 'static + Sync + Send>,
+    pub resume: Box<dyn Fn() + 'static + Sync + Send>,
+    pub enabled: Box<dyn Fn() -> bool + 'static + Sync + Send>,
 }
 
 /// Defines some common functions for our incoming/outgoing sync objects
