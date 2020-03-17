@@ -756,7 +756,8 @@ impl Turtl {
         kv_guard.close()?;
         let data_folder = data_folder()?;
         debug!("turtl.wipe_app_data() -- wiping everything in {}", data_folder);
-        let paths = fs::read_dir(data_folder)?;
+        fs::create_dir_all(&data_folder)?;
+        let paths = fs::read_dir(&data_folder)?;
         // wipe all databases
         for entry in paths {
             let entry = entry?;
