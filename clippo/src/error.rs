@@ -12,9 +12,9 @@ quick_error! {
             description(str)
             display("error: {}", str)
         }
-        Boxed(err: Box<Error + Send + Sync>) {
-            description(err.description())
-            display("error: {}", err.description())
+        Boxed(err: Box<dyn Error + Send + Sync>) {
+            description(err.to_string())
+            display("error: {}", err.to_string())
         }
         Http(status: ::reqwest::StatusCode, msg: String) {
             description("HTTP error")
@@ -54,7 +54,7 @@ macro_rules! from_err {
 }
 
 from_err!(::reqwest::Error);
-from_err!(::reqwest::UrlError);
+from_err!(::url::ParseError);
 
 impl From<IoError> for CError {
     fn from(err: IoError) -> CError { CError::Io(err) }

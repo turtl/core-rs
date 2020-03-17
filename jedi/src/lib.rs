@@ -21,7 +21,7 @@ pub use ::serde::ser::Serialize;
 quick_error! {
     #[derive(Debug)]
     pub enum JSONError {
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("json: error: {}", format!("{}", err))
         }

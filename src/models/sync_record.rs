@@ -72,8 +72,8 @@ pub struct SyncError {
     pub msg: String,
 }
 
-/// Define a container for our sync records
 protected! {
+    /// Define a container for our sync records
     #[derive(Serialize, Deserialize)]
     pub struct SyncRecord {
         #[protected_field(public)]

@@ -9,6 +9,6 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 crossbeam = "0.2.10"
-lazy_static = "0.2.1"
-quick-error = "1.2.2"
+lazy_static = "1.4.0"
+quick-error = "1.2.3"
 

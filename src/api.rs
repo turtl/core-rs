@@ -9,7 +9,7 @@ use ::config;
 use ::jedi::{self, Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
 use ::crypto;
-use ::reqwest::{self, RequestBuilder, Client, Url, Proxy};
+use ::reqwest::{self, blocking::RequestBuilder, blocking::Client, Url, Proxy};
 pub use ::reqwest::Method;
 pub use ::reqwest::StatusCode;
 
@@ -72,7 +72,7 @@ impl ApiCaller {
         ApiCaller::from_req(self.req.header(name, val.into()))
     }
 
-    pub fn body<T: Into<reqwest::Body>>(self, body: T) -> Self {
+    pub fn body<T: Into<reqwest::blocking::Body>>(self, body: T) -> Self {
         ApiCaller::from_req(self.req.body(body))
     }
 
@@ -110,9 +110,21 @@ impl ApiCaller {
             Ok(x) => {
                 if let Some(proxy_cfg) = x {
                     debug!("api::call() -- req: using proxy: {}", proxy_cfg);
-                    let proxystr = format!("http://{}", proxy_cfg);
+                    let proxystr = format!("{}", proxy_cfg);
                     cachekey.push(format!("proxy-{}", proxystr));
                     client_builder = client_builder.proxy(Proxy::all(proxystr.as_str())?);
+                }
+            }
+            Err(_) => {}
+        }
+        match config::get::<Option<bool>>(&["api", "allow_invalid_ssl"]) {
+            Ok(x) => {
+                if let Some(allow_invalid_ssl) = x {
+                    if allow_invalid_ssl {
+                        debug!("api::call() -- req: allow invalid ssl");
+                        cachekey.push(String::from("allow-invalid-ssl"));
+                        client_builder = client_builder.danger_accept_invalid_certs(true);
+                    }
                 }
             }
             Err(_) => {}
@@ -235,8 +247,7 @@ impl Api {
 
     /// Set our standard auth header into a Headers set
     fn set_standard_headers(&self, req: RequestBuilder) -> RequestBuilder {
-        let req = self.set_auth_headers(req)
-            .header("Content-Type", "application/json");
+        let req = self.set_auth_headers(req);
         match config::get::<String>(&["api", "client_version_string"]) {
             Ok(version) => {
                 let header_val = format!("{}/{}", version, CORE_VERSION);
@@ -250,7 +261,7 @@ impl Api {
     fn build_url(&self, resource: &str) -> TResult<String> {
         let endpoint = config::get::<String>(&["api", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
-        url.push_str(&endpoint[..]);
+        url.push_str(endpoint.trim_end_matches('/'));
         url.push_str(resource);
         Ok(url)
     }

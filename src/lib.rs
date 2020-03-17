@@ -30,6 +30,7 @@ extern crate protected_derive;
 extern crate quick_error;
 extern crate regex;
 extern crate reqwest;
+#[macro_use]
 extern crate rusqlite;
 extern crate serde;
 #[macro_use]
@@ -38,6 +39,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate sodiumoxide;
 extern crate time;
+extern crate url;
 
 #[macro_use]
 pub mod error;

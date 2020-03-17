@@ -14,13 +14,13 @@ quick_error! {
             description(str)
             display("error: {}", str)
         }
-        Boxed(err: Box<Error + Send + Sync>) {
-            description(err.description())
-            display("error: {}", err.description())
+        Boxed(err: Box<dyn Error + Send + Sync>) {
+            description(err.to_string())
+            display("error: {}", err.to_string())
         }
         SqlError(err: SqlError) {
-            description(err.description())
-            display("SQL error: {}", err.description())
+            description(err.to_string())
+            display("SQL error: {}", err.to_string())
         }
         JSON(err: JSONError) {
             cause(err)

@@ -16,15 +16,16 @@ config = { path = "../config" }
 encoding_rs = "0.8.6"
 fern = "0.5.5"
 jedi = { path = "../jedi" }
-lazy_static = "0.2.1"
+lazy_static = "1.4.0"
 log = "0.4.1"
-quick-error = "1.2.2"
+quick-error = "1.2.3"
 rand = "0.3.18"
-reqwest = "0.9.3"
+reqwest = { version = "0.10.4", features = ["blocking", "json"] }
 rust-crypto = { path = "rust-crypto" }
 rustc-serialize = "0.3.19"
 serde = "1.0.8"
 serde_derive = "1.0.8"
 serde_json = "1.0.2"
 time = "0.1.41"
+url = "2.1"
 

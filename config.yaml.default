@@ -39,7 +39,9 @@ api:
   client_version_string: 'core'
   # defines the proxy server we use for all outgoing connections. format is
   # <ip/host>:<port>: eg "10.67.23.144:6777"
-  proxy: false
+  proxy: null
+  # accept invalid certs
+  allow_invalid_ssl: false
   # point this at a v0.6 api (the old lisp server) if you want to enable
   # migration from the old system to the new.
   v6:

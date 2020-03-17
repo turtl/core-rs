@@ -5,6 +5,7 @@
 //!
 //! Note that this module only returns note IDs when returning search results.
 
+use ::rusqlite::NO_PARAMS;
 use ::rusqlite::types::ToSql;
 
 use ::clouseau::Clouseau;
@@ -57,8 +58,8 @@ impl Search {
     /// Create a new Search object
     pub fn new() -> TResult<Search> {
         let idx = Clouseau::new()?;
-        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, space_id VARCHAR(96), board_id VARCHAR(96), has_file BOOL, created INTEGER, mod INTEGER, type VARCHAR(32), color INTEGER, url VARCHAR(256))", &[])?;
-        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes_tags (id ROWID, note_id VARCHAR(64), tag VARCHAR(128))", &[])?;
+        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes (id VARCHAR(64) PRIMARY KEY, space_id VARCHAR(96), board_id VARCHAR(96), has_file BOOL, created INTEGER, mod INTEGER, type VARCHAR(32), color INTEGER, url VARCHAR(256))", NO_PARAMS)?;
+        idx.conn.execute("CREATE TABLE IF NOT EXISTS notes_tags (id ROWID, note_id VARCHAR(64), tag VARCHAR(128))", NO_PARAMS)?;
         Ok(Search {
             idx: idx,
         })
@@ -84,7 +85,7 @@ impl Search {
         let color = get_field!(note, color, 0);
         self.idx.conn.execute(
             "INSERT INTO notes (id, space_id, board_id, has_file, created, mod, type, color, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            &[&id, &space_id, &board_id, &has_file, &id_mod, &mod_, &type_, &color, &note.url]
+            params![id, space_id, board_id, has_file, id_mod, mod_, type_, color, note.url]
         )?;
 
         let tags = get_field!(note, tags, Vec::new());
@@ -268,9 +269,9 @@ impl Search {
         let total_query = format!("SELECT COUNT(search.id) AS total FROM ({}) AS search", filter_query);
 
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
-        let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
+        let mut values: Vec<&dyn ToSql> = Vec::with_capacity(qry_vals.len());
         for val in &qry_vals {
-            let ts: &ToSql = val;
+            let ts: &dyn ToSql = val;
             values.push(ts);
         }
         let rows = prepared_qry.query_map(values.as_slice(), |row| row.get(0))?;
@@ -319,12 +320,12 @@ impl Search {
 
         let final_query = tag_qry.as_slice().join("");
         let mut prepared_qry = self.idx.conn.prepare(final_query.as_str())?;
-        let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
+        let mut values: Vec<&dyn ToSql> = Vec::with_capacity(qry_vals.len());
         for val in &qry_vals {
-            let ts: &ToSql = val;
+            let ts: &dyn ToSql = val;
             values.push(ts);
         }
-        let rows = prepared_qry.query_map(values.as_slice(), |row| (row.get("tag"), row.get("tag_count")))?;
+        let rows = prepared_qry.query_map(values.as_slice(), |row| Ok((row.get_unwrap("tag"), row.get_unwrap("tag_count"))))?;
         let mut tags = Vec::new();
         for entry in rows {
             let val = entry?;

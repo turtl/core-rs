@@ -16,10 +16,10 @@ use ::crypto::Key;
 use ::messaging;
 use ::std::default::Default;
 
-/// Defines a Space, which is a container for notes and boards. It also acts as
-/// an organization of sorts, allowing multiple members to access the space,
-/// each with different permission levels.
 protected! {
+    /// Defines a Space, which is a container for notes and boards. It also acts as
+    /// an organization of sorts, allowing multiple members to access the space,
+    /// each with different permission levels.
     #[derive(Serialize, Deserialize)]
     pub struct Space {
         #[serde(with = "::util::ser::int_converter")]

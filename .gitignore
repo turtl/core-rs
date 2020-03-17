@@ -1,4 +1,5 @@
 vars.mk
+vars.ios.mk
 target
 config.yaml
 *sess.vim

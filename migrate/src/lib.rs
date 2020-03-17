@@ -24,6 +24,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate time;
+extern crate url;
 
 #[macro_use]
 pub mod error;
@@ -94,7 +95,7 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
         }
     };
     info!("migrate::download_file() -- grabbing file {}", url);
-    let mut client_builder = reqwest::Client::builder()
+    let mut client_builder = reqwest::blocking::Client::builder()
         .timeout(Duration::new(120, 0));
     match config::get::<Option<String>>(&["api", "proxy"]) {
         Ok(Some(proxy_cfg)) => {

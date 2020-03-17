@@ -405,7 +405,7 @@ pub fn dispatch(turtl: &Turtl, sync_record: SyncRecord) -> TResult<Value> {
                     Space::permission_check(turtl, &from_space_id, &Permission::DeleteBoard)?;
                     Space::permission_check(turtl, &to_space_id, &Permission::AddBoard)?;
                     let mut board = {
-                        let mut db_guard = lock!(turtl.db);
+                        let db_guard = lock!(turtl.db);
                         let db = match (*db_guard).as_ref() {
                             Some(x) => x,
                             None => return TErr!(TError::MissingField(String::from("Turtl.db"))),

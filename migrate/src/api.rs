@@ -4,7 +4,7 @@
 use ::std::io::Read;
 use ::std::time::Duration;
 use ::config;
-use ::reqwest::{Method, RequestBuilder, Client, Url, Proxy};
+use ::reqwest::{Method, blocking::RequestBuilder, blocking::Client, Url, Proxy};
 use ::reqwest::header::{HeaderMap, HeaderValue};
 pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
@@ -124,7 +124,7 @@ impl Api {
     fn build_url(&self, resource: &str) -> MResult<String> {
         let endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
-        url.push_str(&endpoint[..]);
+        url.push_str(endpoint.trim_end_matches('/'));
         url.push_str(resource);
         Ok(url)
     }

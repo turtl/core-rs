@@ -26,7 +26,7 @@ extern crate quick_error;
 extern crate rusqlite;
 extern crate serde_json;
 
-use ::rusqlite::Connection;
+use ::rusqlite::{Connection, NO_PARAMS};
 use ::rusqlite::types::Value as SqlValue;
 use ::rusqlite::types::{ToSql, ToSqlOutput};
 use ::rusqlite::Error as SqlError;
@@ -78,13 +78,13 @@ impl Dumpy {
 
     /// Init our dumpy store on an existing connection.
     pub fn init(&self, conn: &Connection) -> DResult<()> {
-        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_objects (id VARCHAR(64) PRIMARY KEY, table_name VARCHAR(32), data TEXT)", &[])?;
-        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id INTEGER PRIMARY KEY, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", &[])?;
-        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", &[])?;
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_objects (id VARCHAR(64) PRIMARY KEY, table_name VARCHAR(32), data TEXT)", NO_PARAMS)?;
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_index (id INTEGER PRIMARY KEY, table_name VARCHAR(32), index_name VARCHAR(32), vals VARCHAR(256), object_id VARCHAR(64))", NO_PARAMS)?;
+        conn.execute("CREATE TABLE IF NOT EXISTS dumpy_kv (key VARCHAR(32) PRIMARY KEY, value TEXT)", NO_PARAMS)?;
 
-        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", &[])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index_obj ON dumpy_index (table_name, object_id)", &[])?;
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS dumpy_idx_kv ON dumpy_kv (key)", &[])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index ON dumpy_index (table_name, index_name, vals)", NO_PARAMS)?;
+        conn.execute("CREATE INDEX IF NOT EXISTS dumpy_idx_index_obj ON dumpy_index (table_name, object_id)", NO_PARAMS)?;
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS dumpy_idx_kv ON dumpy_kv (key)", NO_PARAMS)?;
         Ok(())
     }
 
@@ -215,7 +215,7 @@ impl Dumpy {
     pub fn get(&self, conn: &Connection, table: &String, id: &String) -> DResult<Option<Value>> {
         let query = "SELECT data FROM dumpy_objects WHERE id = $1 AND table_name = $2";
         let res = conn.query_row_and_then(query, &[id, table], |row| -> DResult<Value> {
-            let data: SqlValue = row.get_checked("data")?;
+            let data: SqlValue = row.get("data")?;
             match data {
                 SqlValue::Text(ref x) => {
                     Ok(jedi::parse(x)?)
@@ -265,7 +265,7 @@ impl Dumpy {
         });
         let query = format!("SELECT data FROM dumpy_objects WHERE id IN ({}) ORDER BY id ASC", oids);
         let mut query = conn.prepare(&query[..])?;
-        let rows = query.query_map(&[], |row| {
+        let rows = query.query_map(NO_PARAMS, |row| {
             row.get("data")
         })?;
         let mut objects: Vec<Value> = Vec::new();
@@ -288,9 +288,9 @@ impl Dumpy {
         let merged_qry = qry_parts.as_slice().join("");
         let mut query = conn.prepare(merged_qry.as_str())?;
 
-        let values: Vec<&ToSql> = qry_vals.iter()
+        let values: Vec<&dyn ToSql> = qry_vals.iter()
             .map(|x| {
-                let ts: &ToSql = x;
+                let ts: &dyn ToSql = x;
                 ts
             })
             .collect::<Vec<_>>();
@@ -325,10 +325,10 @@ impl Dumpy {
         qry_parts.push(") ORDER BY id ASC");
         let final_query = qry_parts.as_slice().join("");
         let mut prepared_qry = conn.prepare(final_query.as_str())?;
-        let mut values: Vec<&ToSql> = Vec::with_capacity(qry_vals.len());
+        let mut values: Vec<&dyn ToSql> = Vec::with_capacity(qry_vals.len());
         for val in &qry_vals {
-            let ts: &ToSql = val;
-            values.push(ts);
+            //let ts: dyn ToSql = val;
+            values.push(val as &dyn ToSql);
         }
         let rows = prepared_qry.query_map(values.as_slice(), |row| row.get("data"))?;
         let mut objects: Vec<Value> = Vec::new();
@@ -340,7 +340,7 @@ impl Dumpy {
 
     /// Set a value into the key/val store
     pub fn kv_set(&self, conn: &Connection, key: &str, val: &String) -> DResult<()> {
-        conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val])?;
+        conn.execute("INSERT OR REPLACE INTO dumpy_kv (key, value) VALUES ($1, $2)", &[&key, val.as_str()])?;
         Ok(())
     }
 
@@ -348,7 +348,7 @@ impl Dumpy {
     pub fn kv_get(&self, conn: &Connection, key: &str) -> DResult<Option<String>> {
         let query = "SELECT value FROM dumpy_kv WHERE key = $1";
         let res = conn.query_row_and_then(query, &[&key], |row| -> DResult<String> {
-            let data: SqlValue = row.get_checked("value")?;
+            let data: SqlValue = row.get("value")?;
             match data {
                 SqlValue::Text(x) => {
                     Ok(x)
@@ -393,7 +393,7 @@ mod tests {
 
     fn index_count(conn: &Connection) -> i64 {
         conn.query_row_and_then("SELECT COUNT(*) AS count FROM dumpy_index", &[], |row| -> DResult<i64> {
-            let data: SqlValue = row.get_checked("count")?;
+            let data: SqlValue = row.get("count")?;
             match data {
                 SqlValue::Integer(ref x) => Ok(x.clone()),
                 _ => Err(DError::Msg(format!("error grabbing count"))),

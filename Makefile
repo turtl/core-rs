@@ -1,16 +1,17 @@
 .PHONY: all clean release build test test-panic test-st doc macros
 
 # non-versioned include
--include vars.mk
+VARS ?= vars.mk
+-include $(VARS)
 
-CARGO := $(shell which cargo)
+CARGO ?= $(shell which cargo)
 FEATURES ?= sqlite-static file-lock
 override CARGO_BUILD_ARGS += --features "$(FEATURES)"
 
 all: build
 
 build: 
-	cargo build $(CARGO_BUILD_ARGS)
+	$(CARGO) build $(CARGO_BUILD_ARGS)
 
 release: override CARGO_BUILD_ARGS += --release
 release: build

@@ -162,23 +162,16 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             turtl.wipe_app_data()?;
             Ok(json!({}))
         }
-        "app:api:set-endpoint" => {
-            let endpoint: String = jedi::get(&["2"], &data)?;
-            config::set(&["api", "endpoint"], &endpoint)?;
-            Ok(json!({}))
+        "app:api:set-config" => {
+            let api_config: Value = jedi::get(&["2"], &data)?;
+            let config_merge = json!({
+                "api": api_config,
+            });
+            config::merge(&config_merge)?;
+            Ok(json!(config::get::<Value>(&["api"])?))
         }
-        "app:api:set-old-endpoint" => {
-            let endpoint: String = jedi::get(&["2"], &data)?;
-            config::set(&["api", "v6", "endpoint"], &endpoint)?;
-            Ok(json!({}))
-        }
-        "app:api:get-endpoint" => {
-            let endpoint: String = config::get(&["api", "endpoint"])?;
-            Ok(Value::String(endpoint))
-        }
-        "app:api:get-old-endpoint" => {
-            let endpoint: String = config::get(&["api", "v6", "endpoint"])?;
-            Ok(Value::String(endpoint))
+        "app:api:get-config" => {
+            Ok(config::get::<Value>(&["api"])?)
         }
         "app:get-config" => {
             Ok(config::dump()?)
@@ -214,8 +207,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(json!({}))
         }
         "sync:get-pending" => {
-            let frozen = SyncRecord::get_all_pending(turtl)?;
-            Ok(jedi::to_val(&frozen)?)
+            let pending = SyncRecord::get_all_pending(turtl)?;
+            Ok(jedi::to_val(&pending)?)
         }
         "sync:unfreeze-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;

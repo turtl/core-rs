@@ -25,7 +25,7 @@ quick_error! {
             description("Turtl wrap error")
             display("{}", json!({"file": file, "line": line, "err": util::json_or_string(format!("{}", err)), "wrapped": true}))
         }
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("{}", quick_error_obj!("generic", err))
         }
@@ -253,8 +253,8 @@ impl From<DError> for TError {
         }
     }
 }
-impl From<Box<::std::any::Any + Send>> for TError {
-    fn from(err: Box<::std::any::Any + Send>) -> TError {
+impl From<Box<dyn (::std::any::Any) + Send>> for TError {
+    fn from(err: Box<dyn (::std::any::Any) + Send>) -> TError {
         if cfg!(feature = "panic-on-error") {
             panic!("{:?}", err);
         } else {
@@ -283,9 +283,9 @@ from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
 from_err!(::reqwest::Error);
-from_err!(::reqwest::UrlError);
+from_err!(::url::ParseError);
 
-pub type BoxFuture<T, E> = Box<::futures::Future<Item = T, Error = E> + Send>;
+pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
 

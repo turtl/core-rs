@@ -7,6 +7,15 @@ mod tests {
 
     #[test]
     fn key_loss_board_move_space() {
+        fn clear_sync() {
+            loop {
+                let pending = dispatch_ass(json!(["sync:get-pending"]));
+                let pending_syncs: Vec<Value> = jedi::from_val(pending).unwrap();
+                if pending_syncs.len() == 0 { break; }
+                sleep(1000);
+            }
+        }
+
         let handle = init();
         let password: String = config::get(&["integration_tests", "login", "password"]).unwrap();
 
@@ -67,7 +76,7 @@ mod tests {
         jedi::set::<String>(&["space_id"], &mut board, &to_space_id).unwrap();
         dispatch_ass(json!(["profile:sync:model", "move-space", "board", board]));
         wait_on("sync:outgoing:complete");
-        sleep(5000);
+        clear_sync();
 
         let profile = dispatch_ass(json!(["profile:load"]));
         let search = dispatch_ass(json!(["profile:find-notes", {"space_id": to_space_id}]));
@@ -76,15 +85,6 @@ mod tests {
 
         // this space is no match for my transmogrifying death ray
         dispatch_ass(json!(["profile:sync:model", "delete", "space", {"id": from_space_id}]));
-
-        fn clear_sync() {
-            loop {
-                let pending = dispatch_ass(json!(["sync:get-pending"]));
-                let pending_syncs: Vec<Value> = jedi::from_val(pending).unwrap();
-                if pending_syncs.len() == 0 { break; }
-                sleep(1000);
-            }
-        }
 
         clear_sync();
 
