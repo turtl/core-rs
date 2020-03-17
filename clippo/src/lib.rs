@@ -115,7 +115,7 @@ impl ClipResult {
 
 /// Convert a URL to HTML
 fn grab_url(url: &String, proxy: Option<String>) -> CResult<String> {
-    let mut client_builder = reqwest::Client::builder();
+    let mut client_builder = reqwest::blocking::Client::builder();
     if let Some(proxy_cfg) = proxy {
         client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
     }

@@ -38,6 +38,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate sodiumoxide;
 extern crate time;
+extern crate url;
 
 #[macro_use]
 pub mod error;

@@ -1,6 +1,7 @@
 use ::std::error::Error;
 use ::std::io::Error as IoError;
 use ::std::convert::From;
+use ::std::any::Any;
 use ::api::StatusCode;
 use ::jedi::JSONError;
 use ::crypto::CryptoError;
@@ -9,7 +10,7 @@ quick_error! {
     #[derive(Debug)]
     /// Turtl's main error object.
     pub enum MError {
-        Boxed(err: Box<Error + Send + Sync>) {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
             description(err.description())
             display("error: {}", err)
         }
@@ -119,8 +120,8 @@ impl From<JSONError> for MError {
         }
     }
 }
-impl From<Box<::std::any::Any + Send>> for MError {
-    fn from(err: Box<::std::any::Any + Send>) -> MError {
+impl From<Box<dyn Any + Send>> for MError {
+    fn from(err: Box<dyn Any + Send>) -> MError {
         MError::Msg(format!("{:?}", err))
     }
 }
@@ -128,7 +129,7 @@ from_err!(::fern::InitError);
 from_err!(::std::string::FromUtf8Error);
 from_err!(::std::num::ParseIntError);
 from_err!(::reqwest::Error);
-from_err!(::reqwest::UrlError);
+from_err!(::url::ParseError);
 
 pub type MResult<T> = Result<T, MError>;
 

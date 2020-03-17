@@ -94,7 +94,7 @@ impl FileSyncIncoming {
             let file_url: String = self.api.get(&url[..])?.call()?;
             info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
 
-            let mut client_builder = reqwest::Client::builder()
+            let mut client_builder = reqwest::blocking::Client::builder()
                 .timeout(Duration::new(30, 0));
             match config::get::<Option<String>>(&["api", "proxy"]) {
                 Ok(Some(proxy_cfg)) => {
@@ -113,13 +113,14 @@ impl FileSyncIncoming {
                 req
             };
             let mut res = client.execute(req.build()?)?;
-            if res.status().as_u16() >= 400 {
+            let status = res.status().clone();
+            if status.as_u16() >= 400 {
                 let errstr = res.text()?;
                 let val = match jedi::parse(&errstr) {
                     Ok(x) => x,
                     Err(_) => Value::String(errstr),
                 };
-                return TErr!(TError::Api(res.status(), val));
+                return TErr!(TError::Api(status, val));
             }
             // start streaming our API call into the file 4K at a time
             let mut buf = [0; 4096];

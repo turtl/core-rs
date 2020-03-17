@@ -283,7 +283,7 @@ from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
 from_err!(::reqwest::Error);
-from_err!(::reqwest::UrlError);
+from_err!(::url::ParseError);
 
 pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;
 pub type TResult<T> = Result<T, TError>;

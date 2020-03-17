@@ -9,7 +9,7 @@ use ::config;
 use ::jedi::{self, Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
 use ::crypto;
-use ::reqwest::{self, RequestBuilder, Client, Url, Proxy};
+use ::reqwest::{self, blocking::RequestBuilder, blocking::Client, Url, Proxy};
 pub use ::reqwest::Method;
 pub use ::reqwest::StatusCode;
 
@@ -72,7 +72,7 @@ impl ApiCaller {
         ApiCaller::from_req(self.req.header(name, val.into()))
     }
 
-    pub fn body<T: Into<reqwest::Body>>(self, body: T) -> Self {
+    pub fn body<T: Into<reqwest::blocking::Body>>(self, body: T) -> Self {
         ApiCaller::from_req(self.req.body(body))
     }
 

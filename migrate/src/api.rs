@@ -4,7 +4,7 @@
 use ::std::io::Read;
 use ::std::time::Duration;
 use ::config;
-use ::reqwest::{Method, RequestBuilder, Client, Url, Proxy};
+use ::reqwest::{Method, blocking::RequestBuilder, blocking::Client, Url, Proxy};
 use ::reqwest::header::{HeaderMap, HeaderValue};
 pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
