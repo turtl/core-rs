@@ -31,8 +31,8 @@ quick_error! {
             description("string err")
             display("{}", err)
         }
-        Boxed(err: Box<Error + Send + Sync>) {
-            description(err.description())
+        Boxed(err: Box<dyn Error + Send + Sync>) {
+            description(err.to_string())
             display("{:?}", err)
         }
         JSON(err: JSONError) {

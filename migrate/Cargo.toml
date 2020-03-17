@@ -18,7 +18,7 @@ fern = "0.5.5"
 jedi = { path = "../jedi" }
 lazy_static = "1.4.0"
 log = "0.4.1"
-quick-error = "1.2.2"
+quick-error = "1.2.3"
 rand = "0.3.18"
 reqwest = { version = "0.10.4", features = ["blocking", "json"] }
 rust-crypto = { path = "rust-crypto" }

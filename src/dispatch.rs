@@ -207,8 +207,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
             Ok(json!({}))
         }
         "sync:get-pending" => {
-            let frozen = SyncRecord::get_all_pending(turtl)?;
-            Ok(jedi::to_val(&frozen)?)
+            let pending = SyncRecord::get_all_pending(turtl)?;
+            Ok(jedi::to_val(&pending)?)
         }
         "sync:unfreeze-item" => {
             let sync_id: String = jedi::get(&["2"], &data)?;

@@ -247,8 +247,7 @@ impl Api {
 
     /// Set our standard auth header into a Headers set
     fn set_standard_headers(&self, req: RequestBuilder) -> RequestBuilder {
-        let req = self.set_auth_headers(req)
-            .header("Content-Type", "application/json");
+        let req = self.set_auth_headers(req);
         match config::get::<String>(&["api", "client_version_string"]) {
             Ok(version) => {
                 let header_val = format!("{}/{}", version, CORE_VERSION);
