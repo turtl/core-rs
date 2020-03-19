@@ -9,7 +9,7 @@ jedi = { path = "../jedi" }
 lazy_static = "1.4.0"
 log = "0.4.1"
 quick-error = "1.2.3"
-regex = "0.1.77"
+regex = "1.3.5"
 reqwest = { version = "0.10.4", features = ["blocking", "json"] }
 scraper = "0.11.0"
 #scraper = { path = "scraper" }

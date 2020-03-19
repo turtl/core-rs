@@ -13,11 +13,9 @@ extern crate fern;
 extern crate hex;
 extern crate hmac;
 extern crate jedi;
-#[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
-extern crate openssl;
 extern crate pbkdf2;
 #[macro_use]
 extern crate quick_error;
@@ -30,7 +28,6 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate sha1;
 extern crate sha2;
-extern crate time;
 extern crate url;
 
 #[macro_use]

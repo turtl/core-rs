@@ -25,14 +25,10 @@ use ::aes_gcm::{
 use ::base64;
 use ::hmac::{self, Mac};
 use ::hex;
-use ::openssl::symm;
 use ::pbkdf2;
 use ::rand;
 use ::sha1;
 use ::sha2::{self, Digest};
-use ::std::sync::Mutex;
-use ::std::ops::Sub;
-use ::time;
 
 /// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;

@@ -25,6 +25,7 @@ use ::scraper::{Html, Selector};
 use ::regex::Regex;
 use ::std::path::PathBuf;
 use ::std::fs::File;
+use ::std::borrow::Cow;
 use ::jedi::Value;
 
 lazy_static! {
@@ -201,7 +202,7 @@ pub fn clip(url: &String, parsers: &Vec<CustomParser>, proxy: Option<String>) ->
                                 Some(caps) => {
                                     match caps.name("json") {
                                         Some(mat) => {
-                                            Some(String::from(mat))
+                                            Some(String::from(mat.as_str()))
                                         }
                                         None => { None }
                                     }
@@ -323,7 +324,7 @@ pub fn clip(url: &String, parsers: &Vec<CustomParser>, proxy: Option<String>) ->
         ($elv:expr, $attr:expr) => {
             match $elv.attr($attr) {
                 Some(x) => {
-                    img = Some(String::from(x));
+                    img = Some(Cow::Borrowed(x));
                     break;
                 }
                 None => {}
@@ -340,7 +341,7 @@ pub fn clip(url: &String, parsers: &Vec<CustomParser>, proxy: Option<String>) ->
         }
     }
 
-    Ok(ClipResult::new(title, desc, img))
+    Ok(ClipResult::new(title, desc, img.map(|x| x.into_owned())))
 }
 
 
