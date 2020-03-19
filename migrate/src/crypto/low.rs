@@ -17,49 +17,23 @@
 
 use ::std::error::Error;
 
+use ::aes_frast;
+use ::aes_gcm::{
+    self,
+    aead::{self, Aead, NewAead}
+};
+use ::hmac::{self, Mac};
 use ::serialize::hex::{ToHex, FromHex};
 use ::serialize::base64::{self, ToBase64, FromBase64};
-use ::rust_crypto;
-use ::rust_crypto::buffer::{ReadBuffer, WriteBuffer};
-use ::rust_crypto::blockmodes::PaddingProcessor;
-use ::rust_crypto::aead::{AeadEncryptor, AeadDecryptor};
-use ::rust_crypto::digest::Digest;
-use ::rust_crypto::mac::Mac;
-use ::rand::{self, Rng, SeedableRng};
+use ::openssl::symm;
+use ::pbkdf2;
+use ::rand;
+use ::sha1;
+use ::sha2::{self, Digest};
 use ::std::sync::Mutex;
 use ::std::ops::Sub;
 use ::time;
 
-lazy_static! {
-    static ref RNG: Mutex<rust_crypto::fortuna::Fortuna> = {
-        // our random seed consists of the current time (w/ nanoseconds), a NON
-        // CS random number, some math based on that non-CS rand, and the
-        // duration it takes to compute that math (in nanoseconds). obviously
-        // this could be better, but this is two sources of high-resolution
-        // entropy, so should be good.
-        //
-        // keeping in mind that this crate is JUST for migrating data from v0.6
-        // to v0.7, and ALL the crypto is deterministic in that sense (both
-        // generating logins and decrypting existing data). a true CSPRNG isn't
-        // really necessary.
-        let start = time::now_utc();
-        let mut x: f64 = 888889999.0;
-        let simple_rand = rand::random::<u16>();
-        for _ in 0..simple_rand { x = x / 1.00001; }
-        let end = time::now_utc();
-        let dur = end.sub(start);
-        let seed = format!(
-            "t{}.{}/d{}/x{}:{}",
-            time::now_utc().rfc3339(),
-            time::now_utc().tm_nsec,
-            dur.num_nanoseconds().unwrap_or(dur.num_microseconds().unwrap_or(0)),
-            simple_rand,
-            x
-        );
-        let rng = rust_crypto::fortuna::Fortuna::from_seed(seed.as_bytes());
-        Mutex::new(rng)
-    };
-}
 /// Defines our GCM tag size
 const GCM_TAG_LENGTH: usize = 16;
 
@@ -87,16 +61,10 @@ quick_error! {
             description("not implemented")
             display("crypto: not implemented: {}", str)
         }
-        RustCrypto(err: rust_crypto::symmetriccipher::SymmetricCipherError) {
-            description("rust crypto error")
-            display("crypto: rust-crypto: {:?}", err)
-        }
-    }
-}
-
-impl From<rust_crypto::symmetriccipher::SymmetricCipherError> for CryptoError {
-    fn from(err: rust_crypto::symmetriccipher::SymmetricCipherError) -> CryptoError {
-        CryptoError::RustCrypto(err)
+        //RustCrypto(err: rust_crypto::symmetriccipher::SymmetricCipherError) {
+            //description("rust crypto error")
+            //display("crypto: rust-crypto: {:?}", err)
+        //}
     }
 }
 
@@ -113,6 +81,8 @@ make_boxed_err!(::std::string::FromUtf8Error);
 make_boxed_err!(::serialize::hex::FromHexError);
 
 pub type CResult<T> = Result<T, CryptoError>;
+
+// -----------------------------------------------------------------------------
 
 /// Specifies what type of padding we want to use when encrypting data via CBC.
 #[derive(Debug)]
@@ -136,25 +106,19 @@ pub enum Hasher {
 fn hash(hasher: Hasher, data: &[u8]) -> CResult<Vec<u8>> {
     match hasher {
         Hasher::SHA1 => {
-            let mut sha = rust_crypto::sha1::Sha1::new();
+            let mut sha = sha1::Sha1::new();
             sha.input(data);
-            let mut out = vec![0u8; sha.output_bytes()];
-            sha.result(out.as_mut_slice());
-            Ok(out)
+            Ok(sha.result().to_vec())
         }
         Hasher::SHA256 => {
-            let mut sha = rust_crypto::sha2::Sha256::new();
+            let mut sha = sha2::Sha256::new();
             sha.input(data);
-            let mut out = vec![0u8; sha.output_bytes()];
-            sha.result(out.as_mut_slice());
-            Ok(out)
+            Ok(sha.result().to_vec())
         }
         Hasher::SHA512 => {
-            let mut sha = rust_crypto::sha2::Sha512::new();
+            let mut sha = sha2::Sha512::new();
             sha.input(data);
-            let mut out = vec![0u8; sha.output_bytes()];
-            sha.result(out.as_mut_slice());
-            Ok(out)
+            Ok(sha.result().to_vec())
         }
     }
 }
@@ -203,26 +167,24 @@ pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
 pub fn hmac(hasher: Hasher, key: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
     match hasher {
         Hasher::SHA1 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha1::Sha1::new(), key);
-            hmac.input(data);
-            let mut out = vec![0u8; hmac.output_bytes()];
-            hmac.raw_result(out.as_mut_slice());
-            Ok(out)
+            type HmacSha1 = hmac::Hmac<sha1::Sha1>;
+            let mut mac = match HmacSha1::new_varkey(key) {
+                Ok(x) => x,
+                Err(e) => return Err(CryptoError::BadKey(format!("mac key: {:?}", e))),
+            };
+            mac.input(data);
+            Ok(mac.result().code().to_vec())
         }
         Hasher::SHA256 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha256::new(), key);
-            hmac.input(data);
-            let mut out = vec![0u8; hmac.output_bytes()];
-            hmac.raw_result(out.as_mut_slice());
-            Ok(out)
+            type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+            let mut mac = match HmacSha256::new_varkey(key) {
+                Ok(x) => x,
+                Err(e) => return Err(CryptoError::BadKey(format!("mac key: {:?}", e))),
+            };
+            mac.input(data);
+            Ok(mac.result().code().to_vec())
         }
-        Hasher::SHA512 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha512::new(), key);
-            hmac.input(data);
-            let mut out = vec![0u8; hmac.output_bytes()];
-            hmac.raw_result(out.as_mut_slice());
-            Ok(out)
-        }
+        _ => Err(CryptoError::NotImplemented(format!("hmac() -- SHA512 not implemented")))
     }
 }
 
@@ -243,10 +205,11 @@ pub fn secure_compare(arr1: &[u8], arr2: &[u8]) -> CResult<bool> {
 
 /// Generate N number of CS random bytes.
 pub fn rand_bytes(len: usize) -> CResult<Vec<u8>> {
-    let mut out = vec![0u8; len];
-    let mut guard = (*RNG).lock().expect("migrate::crypto::low::rand_bytes() -- failed to grab lock");
-    guard.fill_bytes(out.as_mut_slice());
-    Ok(out)
+    let mut res = Vec::with_capacity(len);
+    for _ in 0..len {
+        res.push(rand::random::<u8>());
+    }
+    Ok(res)
 }
 
 /// Generate a random u64. Uses rand_bytes() and bit shifting to build a u64.
@@ -273,17 +236,12 @@ pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usi
     let mut result: Vec<u8> = vec![0; keylen];
     match hasher {
         Hasher::SHA1 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha1::Sha1::new(), pass);
-            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
+            pbkdf2::pbkdf2::<hmac::Hmac<sha1::Sha1>>(pass, salt, iter, &mut result);
         },
         Hasher::SHA256 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha256::new(), pass);
-            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
+            pbkdf2::pbkdf2::<hmac::Hmac<sha2::Sha256>>(pass, salt, iter, &mut result);
         },
-        Hasher::SHA512 => {
-            let mut hmac = rust_crypto::hmac::Hmac::new(rust_crypto::sha2::Sha512::new(), pass);
-            rust_crypto::pbkdf2::pbkdf2(&mut hmac, salt, iter as u32, &mut result);
-        },
+        _ => return Err(CryptoError::Msg("Bad hasher for pbkdf2 (must be SHA1/SHA256)".into())),
     }
     Ok(result)
 }
@@ -294,123 +252,55 @@ pub fn aes_block_size() -> usize {
     16
 }
 
-struct AnsiPadding {}
-impl PaddingProcessor for AnsiPadding {
-    fn pad_input<W: WriteBuffer>(&mut self, input_buffer: &mut W) {
-        let rem = input_buffer.remaining();
-        assert!(rem != 0 && rem <= 255);
-        let mut i = 0;
-        for v in input_buffer.take_remaining().iter_mut() {
-            if i == (rem - 1) {
-                *v = rem as u8;
-            } else {
-                *v = 0;
-            }
-            i += 1;
-        }
-    }
-    fn strip_output<R: ReadBuffer>(&mut self, output_buffer: &mut R) -> bool {
-        let last_byte: u8;
-        {
-            let data = output_buffer.peek_remaining();
-            last_byte = *data.last().expect("migrate::crypto::low::PaddingProcessor.strip_output() -- failed to grab last data");
-        }
-        output_buffer.truncate(last_byte as usize);
-        true
-    }
-}
-
-/// Encrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_encrypt(key: &[u8], iv: &[u8], data: &[u8], pad_mode: PadMode) -> CResult<Vec<u8>> {
-    let mut encryptor = match pad_mode {
-        PadMode::PKCS7 => {
-            rust_crypto::aes::cbc_encryptor(
-                rust_crypto::aes::KeySize::KeySize256,
-                key,
-                iv,
-                rust_crypto::blockmodes::PkcsPadding {}
-            )
-        }
-        PadMode::ANSIX923 => {
-            rust_crypto::aes::cbc_encryptor(
-                rust_crypto::aes::KeySize::KeySize256,
-                key,
-                iv,
-                AnsiPadding {}
-            )
-        }
-    };
-    let mut result = Vec::<u8>::new();
-    let mut out = [0; 4096];
-    let mut reader = rust_crypto::buffer::RefReadBuffer::new(data);
-    let mut writer = rust_crypto::buffer::RefWriteBuffer::new(&mut out);
-
-    loop {
-        let res = encryptor.encrypt(&mut reader, &mut writer, true)?;
-        result.extend(writer.take_read_buffer().take_remaining().iter().map(|&i| i));
-        match res {
-            rust_crypto::buffer::BufferResult::BufferUnderflow => break,
-            rust_crypto::buffer::BufferResult::BufferOverflow => { }
-        }
+    let mut padded = Vec::from(data);
+    let outlen = data.len() + (16 - (data.len() % 16));
+    let mut out = vec![0u8; outlen];
+    let mut w_keys = vec![0u32; 60];
+    aes_frast::aes_core::setkey_enc_auto(key, &mut w_keys);
+    match pad_mode {
+        PadMode::PKCS7 => aes_frast::padding_128bit::pa_pkcs7(&mut padded),
+        PadMode::ANSIX923 => aes_frast::padding_128bit::pa_ansix923(&mut padded),
     }
-    Ok(result)
+    aes_frast::aes_with_operation_mode::cbc_enc(&padded, &mut out, &w_keys, iv);
+    Ok(out)
 }
 
-/// Decrypt data using a 256-bit length key via AES-CBC
 pub fn aes_cbc_decrypt(key: &[u8], iv: &[u8], data: &[u8]) -> CResult<Vec<u8>> {
-    let mut decryptor = rust_crypto::aes::cbc_decryptor(
-        rust_crypto::aes::KeySize::KeySize256,
-        key,
-        iv,
-        AnsiPadding {}
-    );
-    let mut result = Vec::<u8>::new();
-    let mut out = [0; 4096];
-    let mut reader = rust_crypto::buffer::RefReadBuffer::new(data);
-    let mut writer = rust_crypto::buffer::RefWriteBuffer::new(&mut out);
-
-    loop {
-        let res = decryptor.decrypt(&mut reader, &mut writer, true)?;
-        result.extend(writer.take_read_buffer().take_remaining().iter().map(|&i| i));
-        match res {
-            rust_crypto::buffer::BufferResult::BufferUnderflow => break,
-            rust_crypto::buffer::BufferResult::BufferOverflow => { }
-        }
-    }
-    Ok(result)
+    let mut out = vec![0u8; data.len()];
+    let mut w_keys = vec![0u32; 60];
+    aes_frast::aes_core::setkey_dec_auto(key, &mut w_keys);
+    aes_frast::aes_with_operation_mode::cbc_dec(&data, &mut out, &w_keys, iv);
+    aes_frast::padding_128bit::de_ansix923_pkcs7(&mut out);
+    Ok(out)
 }
 
 /// Encrypt data using a 256-bit length key via AES-GCM
 pub fn aes_gcm_encrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
-    let mut gcm = rust_crypto::aes_gcm::AesGcm::new(
-        rust_crypto::aes::KeySize::KeySize256,
-        key,
-        iv,
-        auth
-    );
-    let mut tag: Vec<u8> = vec![0; GCM_TAG_LENGTH];
-    let mut enc: Vec<u8> = vec![0; data.len()];
-    gcm.encrypt(data, enc.as_mut_slice(), tag.as_mut_slice());
-    enc.append(&mut tag);
-    Ok(enc)
+    let key = aes_gcm::aead::generic_array::GenericArray::clone_from_slice(key);
+    let aead = aes_gcm::Aes256Gcm::new(key);
+    let nonce = aes_gcm::aead::generic_array::GenericArray::from_slice(iv);
+    let payload = aead::Payload { msg: data, aad: auth };
+    let ciphertext = match aead.encrypt(nonce, payload) {
+        Ok(x) => x,
+        Err(e) => return Err(CryptoError::Msg(format!("aes_gcm_encrypt() -- {:?}", e))),
+    };
+    Ok(ciphertext)
 }
 
 /// Decrypt data using a 256-bit length key via AES-GCM
 pub fn aes_gcm_decrypt(key: &[u8], iv: &[u8], data: &[u8], auth: &[u8]) -> CResult<Vec<u8>> {
     let tag_cutoff: usize = data.len() - GCM_TAG_LENGTH;
-    let tag = &data[tag_cutoff..];
-    let data = &data[0..tag_cutoff];
-    let mut gcm = rust_crypto::aes_gcm::AesGcm::new(
-        rust_crypto::aes::KeySize::KeySize256,
-        key,
-        iv,
-        auth
-    );
-    let mut dec: Vec<u8> = vec![0; data.len()];
-    if !gcm.decrypt(data, dec.as_mut_slice(), tag) {
-        return Err(CryptoError::Authentication(String::from("Authentication error (bad key/corrupt data)")));
-    }
-    Ok(dec)
+
+    let key = aes_gcm::aead::generic_array::GenericArray::clone_from_slice(key);
+    let aead = aes_gcm::Aes256Gcm::new(key);
+    let nonce = aes_gcm::aead::generic_array::GenericArray::from_slice(iv);
+    let payload = aead::Payload { msg: data, aad: auth };
+    let plaintext = match aead.decrypt(nonce, payload) {
+        Ok(x) => x,
+        Err(e) => return Err(CryptoError::Authentication(format!("aes_gcm_decrypt() -- {:?}", e))),
+    };
+    Ok(Vec::from(&plaintext[0..tag_cutoff]))
 }
 
 #[cfg(test)]

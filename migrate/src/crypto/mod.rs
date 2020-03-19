@@ -374,7 +374,7 @@ pub fn authenticate(data: &CryptoData, hmac_key: &Key) -> CResult<()> {
     auth.append(&mut Vec::from(data.desc.as_vec().as_slice()));
     auth.append(&mut Vec::from(data.iv.as_slice()));
     auth.append(&mut Vec::from(data.ciphertext.as_slice()));
-    let hmac = low::hmac(low::Hasher::SHA256, hmac_key.data().as_slice(), auth.as_slice())?;
+    let hmac = low::hmac(Hasher::SHA256, hmac_key.data().as_slice(), auth.as_slice())?;
     if !(low::secure_compare(hmac.as_slice(), data.hmac.as_slice())?) {
         return Err(CryptoError::Authentication(format!("HMAC authentication failed")));
     }

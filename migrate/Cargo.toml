@@ -12,20 +12,27 @@ doctest = false				# these annoy me
 panic-on-error = []
 
 [dependencies]
+aes_frast = "0.1.5"
+aes-gcm = { path = "./aes-gcm" }
 config = { path = "../config" }
 encoding_rs = "0.8.6"
 fern = "0.5.5"
+hmac = "0.7.1"
 jedi = { path = "../jedi" }
 lazy_static = "1.4.0"
 log = "0.4.1"
+openssl = "0.10.28"
+pbkdf2 = "0.3.0"
 quick-error = "1.2.3"
-rand = "0.3.18"
+rand = "0.7.3"
 reqwest = { version = "0.10.4", features = ["blocking", "json"] }
-rust-crypto = { path = "rust-crypto" }
-rustc-serialize = "0.3.19"
+#rust-crypto = { path = "rust-crypto" }
+rustc-serialize = "0.3.24"
 serde = "1.0.8"
 serde_derive = "1.0.8"
 serde_json = "1.0.2"
+sha-1 = "0.8.2"
+sha2 = "0.8.1"
 time = "0.1.41"
 url = "2.1"
 

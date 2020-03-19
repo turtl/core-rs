@@ -4,15 +4,19 @@
 //! much for a well-oiled machine here, it just needs to work. This code is
 //! somewhat throwaway.
 
+extern crate aes_frast;
+extern crate aes_gcm;
 extern crate config;
-extern crate crypto as rust_crypto;
 extern crate encoding_rs;
 extern crate fern;
+extern crate hmac;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate openssl;
+extern crate pbkdf2;
 #[macro_use]
 extern crate quick_error;
 extern crate rand;
@@ -23,6 +27,8 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
+extern crate sha1;
+extern crate sha2;
 extern crate time;
 extern crate url;
 
