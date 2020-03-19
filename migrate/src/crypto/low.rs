@@ -22,9 +22,9 @@ use ::aes_gcm::{
     self,
     aead::{self, Aead, NewAead}
 };
+use ::base64;
 use ::hmac::{self, Mac};
-use ::serialize::hex::{ToHex, FromHex};
-use ::serialize::base64::{self, ToBase64, FromBase64};
+use ::hex;
 use ::openssl::symm;
 use ::pbkdf2;
 use ::rand;
@@ -61,10 +61,6 @@ quick_error! {
             description("not implemented")
             display("crypto: not implemented: {}", str)
         }
-        //RustCrypto(err: rust_crypto::symmetriccipher::SymmetricCipherError) {
-            //description("rust crypto error")
-            //display("crypto: rust-crypto: {:?}", err)
-        //}
     }
 }
 
@@ -78,7 +74,7 @@ macro_rules! make_boxed_err {
     }
 }
 make_boxed_err!(::std::string::FromUtf8Error);
-make_boxed_err!(::serialize::hex::FromHexError);
+make_boxed_err!(::hex::FromHexError);
 
 pub type CResult<T> = Result<T, CryptoError>;
 
@@ -143,22 +139,22 @@ pub fn sha512(data: &[u8]) -> CResult<Vec<u8>> {
 
 /// Convert a u8 vector to a hex string.
 pub fn to_hex(data: &Vec<u8>) -> CResult<String> {
-    Ok(data[..].to_hex())
+    Ok(hex::encode(data))
 }
 
 /// Convert a hex string to a u8 vector.
 pub fn from_hex(data: &String) -> CResult<Vec<u8>> {
-    Ok(data.from_hex()?)
+    Ok(hex::decode(data)?)
 }
 
 /// Convert a u8 vector of binary data into a base64 string.
 pub fn to_base64(data: &Vec<u8>) -> CResult<String> {
-    Ok(data[..].to_base64(base64::STANDARD))
+    Ok(base64::encode(data))
 }
 
 /// Convert a base64 string to a vector of u8 data.
 pub fn from_base64(data: &String) -> CResult<Vec<u8>> {
-    data.from_base64()
+    base64::decode(data)
         .map_err(|e| CryptoError::Msg(format!("base64: {}", e)))
 }
 

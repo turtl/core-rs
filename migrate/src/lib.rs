@@ -6,9 +6,11 @@
 
 extern crate aes_frast;
 extern crate aes_gcm;
+extern crate base64;
 extern crate config;
 extern crate encoding_rs;
 extern crate fern;
+extern crate hex;
 extern crate hmac;
 extern crate jedi;
 #[macro_use]
@@ -21,7 +23,6 @@ extern crate pbkdf2;
 extern crate quick_error;
 extern crate rand;
 extern crate reqwest;
-extern crate rustc_serialize as serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
