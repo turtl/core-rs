@@ -5,13 +5,10 @@ use ::std::sync::{RwLock, Mutex};
 use ::std::io::Read;
 use ::std::time::Duration;
 use ::std::collections::HashMap;
-use ::config;
-use ::jedi::{self, Value, DeserializeOwned, Serialize};
+use ::jedi::{Value, DeserializeOwned, Serialize};
 use ::error::{TResult, TError};
-use ::crypto;
-use ::reqwest::{self, blocking::RequestBuilder, blocking::Client, Url, Proxy};
-pub use ::reqwest::Method;
-pub use ::reqwest::StatusCode;
+use ::reqwest::{blocking::RequestBuilder, blocking::Client, Url, Proxy};
+pub use ::reqwest::{Method, StatusCode};
 
 /// Pull out our crate version to send to the api
 const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -219,7 +216,7 @@ impl Api {
     /// Set the API's authentication
     pub fn set_auth(&self, username: String, auth: String) -> TResult<()> {
         let auth_str = format!("{}:{}", username, auth);
-        let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
+        let base_auth = base64::encode(&Vec::from(auth_str.as_bytes()));
         let ref mut config_guard = lockw!(self.config);
         config_guard.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())

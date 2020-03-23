@@ -282,7 +282,7 @@ from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
-from_err!(::reqwest::Error);
+from_err!(::api::reqwest::Error);
 from_err!(::url::ParseError);
 
 pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;

@@ -2,7 +2,8 @@ use ::std::sync::{Arc, RwLock, Mutex};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
-use ::api::{Api, Method};
+// TODO: remove leaky reqwest abstraction
+use ::api::{reqwest, Api, Method};
 use ::messaging;
 use ::error::{TResult, TError};
 use ::models::sync_record::{SyncType, SyncRecord};
@@ -13,7 +14,6 @@ use ::std::io::{Read, Write};
 use ::jedi::{self, Value};
 use ::util;
 use ::config;
-use ::reqwest;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {

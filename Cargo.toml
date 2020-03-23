@@ -1,5 +1,5 @@
 [workspace]
-members = ["carrier", "clippo", "config", "clouseau", "dumpy", "jedi", "migrate"]
+members = ["api", "carrier", "clippo", "config", "clouseau", "dumpy", "jedi", "migrate"]
 exclude = ["integration-tests", "cwrap", "client", "sock"]
 
 [package]
@@ -19,9 +19,10 @@ file-lock = ["fs2"]
 panic-on-error = ["migrate/panic-on-error"]
 public-api-tests = []
 sqlite-static = ["rusqlite/bundled"]
-wasm = []
+wasm = ["api/wasm"]
 
 [dependencies]
+api = { path = "api" }
 base64 = "0.9.1"
 carrier = { path = "carrier" }
 config = { path = "config" }
@@ -47,7 +48,6 @@ num_cpus = "1.8.0"
 protected_derive = { path = "protected_derive" }
 quick-error = "1.2.2"
 regex = "1.3.5"
-reqwest = { version = "0.10.4", features = ["blocking", "json"] }
 rusqlite = "0.20.0"
 serde = "1.0.8"
 serde_derive = "1.0.8"
