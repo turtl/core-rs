@@ -1,5 +1,6 @@
 #!/bin/bash
 
+source /home/andrew/src/emsdk/emsdk_env.sh
 make \
 	FEATURES="sqlite-static wasm" \
 	CARGO_BUILD_ARGS="--target wasm32-unknown-emscripten" \
