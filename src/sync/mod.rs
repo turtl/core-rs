@@ -112,7 +112,7 @@ pub trait Syncer {
     fn get_config(&self) -> Arc<RwLock<SyncConfig>>;
 
     /// Set this sync thread's run version
-    fn set_run_version(&mut self, i64);
+    fn set_run_version(&mut self, version: i64);
 
     /// Get this sync thread's run version
     fn get_run_version(&self) -> i64;

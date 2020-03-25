@@ -1,12 +1,12 @@
 //! Low-level crypto primitives/modules.
 
-use ::hex;
-use ::base64;
-use ::sodiumoxide;
-use ::sodiumoxide::crypto::hash;
-use ::sodiumoxide::crypto::auth as sodium_auth;
-use ::sodiumoxide::crypto::pwhash;
-use ::crypto::error::{CResult, CryptoError};
+use hex;
+use base64;
+use sodiumoxide;
+use sodiumoxide::crypto::hash;
+use sodiumoxide::crypto::auth as sodium_auth;
+use sodiumoxide::crypto::pwhash;
+use crate::crypto::error::{CResult, CryptoError};
 
 /// Abstract the size of hmac keys
 #[allow(dead_code)]
@@ -178,9 +178,9 @@ pub mod chacha20poly1305 {
 }
 
 pub mod asym {
-    use ::crypto::error::{CryptoError, CResult};
-    use ::sodiumoxide::crypto::box_ as crypto_box;
-    use ::sodiumoxide::crypto::sealedbox;
+    use sodiumoxide::crypto::box_ as crypto_box;
+    use sodiumoxide::crypto::sealedbox;
+    use crate::crypto::error::{CryptoError, CResult};
 
     /// Generate a public/private keypair for use with the crypto::box lib
     pub fn keygen() -> CResult<(Vec<u8>, Vec<u8>)> {

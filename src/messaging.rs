@@ -169,7 +169,7 @@ impl Messenger {
 /// bitches about lifetimes and lifetimes are so horribly infectious that I
 /// can't justify rewriting a bunch of shit to satisfy it.
 pub trait MsgThunk: Send + 'static {
-    fn call_box(self: Box<Self>, &mut Messenger);
+    fn call_box(self: Box<Self>, msg: &mut Messenger);
 }
 impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
     fn call_box(self: Box<Self>, messenger: &mut Messenger) {

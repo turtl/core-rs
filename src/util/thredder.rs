@@ -1,12 +1,12 @@
 //! Thredder is a wrapper around a cpu thread pooling implementation. It works
 //! using promises.
 
-use ::std::marker::Send;
+use std::marker::Send;
 
-use ::futures::Future;
-use ::futures_cpupool::CpuPool;
+use futures::Future;
+use futures_cpupool::CpuPool;
 
-use ::error::{TResult, TFutureResult};
+use crate::error::{TResult, TFutureResult};
 
 /// Stores state information for a thread we've spawned.
 pub struct Thredder {

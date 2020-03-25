@@ -1,46 +1,5 @@
 #![recursion_limit="128"]
 
-extern crate api;
-extern crate base64;
-extern crate carrier;
-extern crate clippo;
-extern crate clouseau;
-extern crate config;
-extern crate crossbeam;
-extern crate dumpy;
-extern crate encoding_rs;
-extern crate fern;
-#[cfg(not(feature = "wasm"))]
-extern crate fs2;
-extern crate futures;
-extern crate futures_cpupool;
-extern crate glob;
-extern crate hex;
-extern crate jedi;
-#[macro_use]
-extern crate lazy_static;
-extern crate lib_permissions;
-#[macro_use]
-extern crate log;
-extern crate log_panics;
-extern crate migrate;
-extern crate num_cpus;
-#[macro_use]
-extern crate protected_derive;
-#[macro_use]
-extern crate quick_error;
-extern crate regex;
-#[macro_use]
-extern crate rusqlite;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
-extern crate sodiumoxide;
-extern crate time;
-extern crate url;
-
 #[macro_use]
 pub mod error;
 #[macro_use]
