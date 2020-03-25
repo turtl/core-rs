@@ -3,15 +3,18 @@
 
 use std::sync::{RwLock, Mutex};
 use std::error::Error;
-use std::io::{Read, Write, Error as IoError};
+use std::io::{Read, Error as IoError};
 use std::time::Duration;
 use std::collections::HashMap;
-use std::fs::File;
 use log::{debug, error, info, trace, warn};
 use lazy_static::lazy_static;
 use quick_error::quick_error;
 use jedi::{Value, DeserializeOwned, Serialize};
-use reqwest::{blocking::RequestBuilder, blocking::Client, Url, Proxy};
+use reqwest::{
+    blocking::{RequestBuilder, Client, Response},
+    Url,
+    Proxy
+};
 pub use reqwest::{self, Method, StatusCode};
 use serde_json::json;
 
@@ -351,7 +354,9 @@ impl Api {
         self.req(Method::DELETE, resource)
     }
 
-    pub fn download_file(&self, file_url: &str, file: &mut File) -> AResult<()> {
+    pub fn download_file<F>(&self, file_url: &str, mut res_cb: F) -> AResult<()>
+        where F: FnMut(Response) -> AResult<()>
+    {
         let mut client_builder = reqwest::blocking::Client::builder()
             .timeout(Duration::new(30, 0));
         match config::get::<Option<String>>(&["api", "proxy"]) {
@@ -370,7 +375,7 @@ impl Api {
         } else {
             req
         };
-        let mut res = client.execute(req.build()?)?;
+        let res = client.execute(req.build()?)?;
         let status = res.status().clone();
         if status.as_u16() >= 400 {
             let errstr = res.text()?;
@@ -380,18 +385,7 @@ impl Api {
             };
             return Err(APIError::Api(status, val));
         }
-        // start streaming our API call into the file 4K at a time
-        let mut buf = [0; 4096];
-        loop {
-            let read = res.read(&mut buf[..])?;
-            // all done! (EOF)
-            if read <= 0 { break; }
-            let (read_bytes, _) = buf.split_at(read);
-            let written = file.write(read_bytes)?;
-            if read != written {
-                return Err(APIError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
-            }
-        }
+        res_cb(res)?;
         Ok(())
     }
 }
