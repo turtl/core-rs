@@ -767,7 +767,7 @@ mod tests {
     #[test]
     fn catches_truncated_ciphertext() {
         let key = Key::new(from_base64(&String::from("js8BsJMw2jeqdB/NoidMhP1MDwxCF+XUYf3b+r0fTXs=")).unwrap());
-        let enc = from_base64(&String::from(r#"AAUCAAFKp4T7iuwnVM6+OY"#)).unwrap();
+        let enc = from_base64(&String::from(r#"AAUCAAFKp4T7iuwnVM6+OY+n"#)).unwrap();
         let err = decrypt(&key, &enc);
         match err {
             Err(CryptoError::Msg(x)) => {

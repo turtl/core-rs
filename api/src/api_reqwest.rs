@@ -1,21 +1,80 @@
 //! The Api system is responsible for talking to our Turtl server, and manages
 //! our user authentication.
 
-use ::std::sync::{RwLock, Mutex};
-use ::std::io::Read;
-use ::std::time::Duration;
-use ::std::collections::HashMap;
-use ::config;
-use ::jedi::{self, Value, DeserializeOwned, Serialize};
-use ::error::{TResult, TError};
-use ::crypto;
-use ::reqwest::{self, blocking::RequestBuilder, blocking::Client, Url, Proxy};
-pub use ::reqwest::Method;
-pub use ::reqwest::StatusCode;
+use std::sync::{RwLock, Mutex};
+use std::error::Error;
+use std::io::{Read, Error as IoError};
+use std::time::Duration;
+use std::collections::HashMap;
+use log::{debug, error, info, trace, warn};
+use lazy_static::lazy_static;
+use quick_error::quick_error;
+use jedi::{Value, DeserializeOwned, Serialize};
+use reqwest::{
+    blocking::{RequestBuilder, Client, Response},
+    Url,
+    Proxy
+};
+pub use reqwest::{self, Method, StatusCode};
+use serde_json::json;
 
 /// Pull out our crate version to send to the api
 const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+quick_error! {
+    #[derive(Debug)]
+    pub enum APIError {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
+            description(err.description())
+            display("json: error: {}", format!("{}", err))
+        }
+        Io(err: IoError) {
+            cause(err)
+            description("io error")
+            display("{}", format!("{}", err))
+        }
+        Api(status: StatusCode, msg: Value) {
+            description("API error")
+            display("{}", json!({"type": "api", "subtype": status.canonical_reason().unwrap_or("unknown"), "message": msg}))
+        }
+        Msg(msg: String) {
+            description(msg)
+            display("{}", msg)
+        }
+    }
+}
+
+pub type AResult<T> = Result<T, APIError>;
+
+impl From<IoError> for APIError {
+    fn from(err: IoError) -> APIError {
+        APIError::Io(err)
+    }
+}
+
+/// A macro to make it easy to create From impls for APIError
+macro_rules! from_err {
+    ($t:ty) => (
+        impl From<$t> for APIError {
+            fn from(err: $t) -> APIError {
+                APIError::Boxed(Box::new(err))
+            }
+        }
+    )
+}
+
+from_err!(reqwest::Error);
+from_err!(jedi::JSONError);
+from_err!(url::ParseError);
+
+macro_rules! toterr {
+    ($e:expr) => (
+        {
+            let err: APIError = From::from($e);
+            err
+        }
+    )
+}
 lazy_static! {
     /// A hash table that holds HTTP clients. we used to just create/destroy
     /// clients on each request, but that exhausts connections so it's better to
@@ -90,15 +149,15 @@ impl ApiCaller {
         ApiCaller::from_req(self.req.form(form))
     }
 
-    pub fn call<T: DeserializeOwned>(self) -> TResult<T> {
+    pub fn call<T: DeserializeOwned>(self) -> AResult<T> {
         self.call_opt_impl(None)
     }
 
-    pub fn call_opt<T: DeserializeOwned>(self, apireq: ApiReq) -> TResult<T> {
+    pub fn call_opt<T: DeserializeOwned>(self, apireq: ApiReq) -> AResult<T> {
         self.call_opt_impl(Some(apireq))
     }
 
-    pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> TResult<T> {
+    pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> AResult<T> {
         let mut cachekey: Vec<String> = Vec::with_capacity(2);
         let mut client_builder = Client::builder();
         if let Some(builder) = builder_maybe {
@@ -165,7 +224,7 @@ impl ApiCaller {
                         Ok(x) => x,
                         Err(_) => Value::String(errstr),
                     };
-                    return TErr!(TError::Api(res.status(), val));
+                    return Err(APIError::Api(res.status(), val));
                 }
                 str_res.map(move |x| (x, res))
             })
@@ -217,9 +276,9 @@ impl Api {
     }
 
     /// Set the API's authentication
-    pub fn set_auth(&self, username: String, auth: String) -> TResult<()> {
+    pub fn set_auth(&self, username: String, auth: String) -> AResult<()> {
         let auth_str = format!("{}:{}", username, auth);
-        let base_auth = crypto::to_base64(&Vec::from(auth_str.as_bytes()))?;
+        let base_auth = base64::encode(&Vec::from(auth_str.as_bytes()));
         let ref mut config_guard = lockw!(self.config);
         config_guard.auth = Some(String::from("Basic ") + &base_auth);
         Ok(())
@@ -258,7 +317,7 @@ impl Api {
     }
 
     /// Build a full URL given a resource
-    fn build_url(&self, resource: &str) -> TResult<String> {
+    fn build_url(&self, resource: &str) -> AResult<String> {
         let endpoint = config::get::<String>(&["api", "endpoint"])?;
         let mut url = String::with_capacity(endpoint.len() + resource.len());
         url.push_str(endpoint.trim_end_matches('/'));
@@ -267,7 +326,7 @@ impl Api {
     }
 
     /// Given a method an url, return a Reqwest RequestBuilder
-    pub fn req(&self, method: Method, resource: &str) -> TResult<ApiCaller> {
+    pub fn req(&self, method: Method, resource: &str) -> AResult<ApiCaller> {
         debug!("api::req() -- begin: {} {}", method, resource);
         let url = self.build_url(resource)?;
         let req = Client::builder().build()?.request(method, Url::parse(url.as_str())?);
@@ -276,23 +335,55 @@ impl Api {
     }
 
     /// Convenience function for api.call(GET)
-    pub fn get(&self, resource: &str) -> TResult<ApiCaller> {
+    pub fn get(&self, resource: &str) -> AResult<ApiCaller> {
         self.req(Method::GET, resource)
     }
 
     /// Convenience function for api.call(POST)
-    pub fn post(&self, resource: &str) -> TResult<ApiCaller> {
+    pub fn post(&self, resource: &str) -> AResult<ApiCaller> {
         self.req(Method::POST, resource)
     }
 
     /// Convenience function for api.call(PUT)
-    pub fn put(&self, resource: &str) -> TResult<ApiCaller> {
+    pub fn put(&self, resource: &str) -> AResult<ApiCaller> {
         self.req(Method::PUT, resource)
     }
 
     /// Convenience function for api.call(DELETE)
-    pub fn delete(&self, resource: &str) -> TResult<ApiCaller> {
+    pub fn delete(&self, resource: &str) -> AResult<ApiCaller> {
         self.req(Method::DELETE, resource)
+    }
+
+    pub fn download_file(&self, file_url: &str) -> AResult<Response> {
+        let mut client_builder = reqwest::blocking::Client::builder()
+            .timeout(Duration::new(30, 0));
+        match config::get::<Option<String>>(&["api", "proxy"]) {
+            Ok(Some(proxy_cfg)) => {
+                client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+            }
+            Ok(None) => {}
+            Err(_) => {}
+        }
+        let client = client_builder.build()?;
+        let req = client.request(Method::GET, reqwest::Url::parse(file_url)?);
+        // only add our auth junk if we're calling back to the turtl api!
+        let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+        let req = if file_url.contains(&turtl_api_url) {
+            self.set_auth_headers(req)
+        } else {
+            req
+        };
+        let res = client.execute(req.build()?)?;
+        let status = res.status().clone();
+        if status.as_u16() >= 400 {
+            let errstr = res.text()?;
+            let val = match jedi::parse(&errstr) {
+                Ok(x) => x,
+                Err(_) => Value::String(errstr),
+            };
+            return Err(APIError::Api(status, val));
+        }
+        Ok(res)
     }
 }
 

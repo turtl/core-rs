@@ -647,7 +647,7 @@ impl User {
     /// Given an email address, find a matching user (pubkey and all)
     pub fn find_by_email(turtl: &Turtl, email: &String) -> TResult<Option<User>> {
         let url = format!("/users/email/{}", email.to_lowercase());
-        turtl.api.get(url.as_str())?.call()
+        turtl.api.get(url.as_str())?.call().map_err(|x| From::from(x))
     }
 }
 

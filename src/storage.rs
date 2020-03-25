@@ -178,7 +178,7 @@ mod tests {
     use super::*;
 
     use ::jedi::{self, Value};
-    use ::rusqlite::types::Value as SqlValue;
+    use ::rusqlite::{NO_PARAMS, types::Value as SqlValue};
 
     use ::error::TResult;
     use ::models::model::{self, Model};
@@ -208,11 +208,11 @@ mod tests {
     #[test]
     fn runs_queries() {
         let storage = pretest();
-        storage.conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name VARCHAR(16))", &[]).unwrap();
+        storage.conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, name VARCHAR(16))", NO_PARAMS).unwrap();
         storage.conn.execute("INSERT INTO test (name) VALUES ($1)", &[&String::from("bartholomew")]).unwrap();
         let then = "SELECT * FROM test LIMIT 1";
-        let res = storage.conn.query_row_and_then(then, &[], |row| -> TResult<String> {
-            let name_sql: SqlValue = row.get_checked("name").unwrap();
+        let res = storage.conn.query_row_and_then(then, NO_PARAMS, |row| -> TResult<String> {
+            let name_sql: SqlValue = row.get("name").unwrap();
             match name_sql {
                 SqlValue::Text(ref x) => Ok(x.clone()),
                 _ => panic!("bad dates (name field was not a string)"),

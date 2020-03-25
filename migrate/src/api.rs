@@ -4,7 +4,12 @@
 use ::std::io::Read;
 use ::std::time::Duration;
 use ::config;
-use ::reqwest::{Method, blocking::RequestBuilder, blocking::Client, Url, Proxy};
+use ::reqwest::{
+    Method,
+    blocking::{RequestBuilder, Client, Response},
+    Url,
+    Proxy,
+};
 use ::reqwest::header::{HeaderMap, HeaderValue};
 pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
@@ -199,6 +204,30 @@ impl Api {
     #[allow(dead_code)]
     pub fn delete<T: DeserializeOwned>(&self, resource: &str, builder: ApiReq) -> MResult<T> {
         self.call(Method::DELETE, resource, builder)
+    }
+
+    pub fn download_file(&self, file_url: &str) -> MResult<Response> {
+        let mut client_builder = reqwest::blocking::Client::builder()
+            .timeout(Duration::new(120, 0));
+        match config::get::<Option<String>>(&["api", "proxy"]) {
+            Ok(Some(proxy_cfg)) => {
+                client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+            }
+            Ok(None) => {}
+            Err(_) => {}
+        }
+        let client = client_builder.build()?;
+        let mut req = client.request(reqwest::Method::GET, reqwest::Url::parse(file_url)?);
+        let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
+        if file_url.contains(api_endpoint.as_str()) {
+            let auth_header = self.get_auth().expect("migrate::download_file() -- failed to get auth header");
+            req = req.header("Authorization", auth_header);
+        }
+        client.execute(req.build()?)
+            .map_err(|e| {
+                warn!("migrate::download_file() -- download error: {}", e);
+                tomerr!(e)
+            })
     }
 }
 

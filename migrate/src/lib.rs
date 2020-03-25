@@ -42,7 +42,6 @@ use ::api::{Api, ApiReq};
 use ::error::{MError, MResult};
 use ::jedi::Value;
 pub use crypto::Key;
-use ::std::time::Duration;
 use ::std::path::PathBuf;
 use ::std::fs;
 use ::std::collections::HashMap;
@@ -99,27 +98,7 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
         }
     };
     info!("migrate::download_file() -- grabbing file {}", url);
-    let mut client_builder = reqwest::blocking::Client::builder()
-        .timeout(Duration::new(120, 0));
-    match config::get::<Option<String>>(&["api", "proxy"]) {
-        Ok(Some(proxy_cfg)) => {
-            client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
-        }
-        Ok(None) => {}
-        Err(_) => {}
-    }
-    let client = client_builder.build()?;
-    let mut req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?);
-    let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
-    if url.contains(api_endpoint.as_str()) {
-        let auth_header = api.get_auth().expect("migrate::download_file() -- failed to get auth header");
-        req = req.header("Authorization", auth_header);
-    }
-    let res = client.execute(req.build()?)
-        .map_err(|e| {
-            warn!("migrate::download_file() -- download error: {}", e);
-            tomerr!(e)
-        })
+    let res = api.download_file(&url)
         .and_then(|mut res| {
             let mut out = Vec::new();
             res.read_to_end(&mut out)?;

@@ -7,7 +7,7 @@ use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
 use ::migrate::error::MError as MigrateError;
 use ::rusqlite;
-use ::api::StatusCode;
+use ::api::{APIError, StatusCode};
 use ::crypto::CryptoError;
 use ::util;
 
@@ -241,6 +241,20 @@ impl From<JSONError> for TError {
         }
     }
 }
+impl From<APIError> for TError {
+    fn from(err: APIError) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            match err {
+                APIError::Boxed(x) => TError::Boxed(x),
+                APIError::Api(status, msg) => TError::Api(status, msg),
+                APIError::Io(err) => TError::Io(err),
+                APIError::Msg(err) => TError::Msg(format!("Api Error: {}", err)),
+            }
+        }
+    }
+}
 impl From<DError> for TError {
     fn from(err: DError) -> TError {
         if cfg!(feature = "panic-on-error") {
@@ -282,7 +296,6 @@ from_err!(::std::sync::mpsc::RecvError);
 from_err!(::glob::PatternError);
 from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
-from_err!(::reqwest::Error);
 from_err!(::url::ParseError);
 
 pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;
