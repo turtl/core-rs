@@ -354,9 +354,7 @@ impl Api {
         self.req(Method::DELETE, resource)
     }
 
-    pub fn download_file<F>(&self, file_url: &str, res_cb: F) -> AResult<()>
-        where F: FnOnce(Response) -> AResult<()>
-    {
+    pub fn download_file(&self, file_url: &str) -> AResult<Response> {
         let mut client_builder = reqwest::blocking::Client::builder()
             .timeout(Duration::new(30, 0));
         match config::get::<Option<String>>(&["api", "proxy"]) {
@@ -385,8 +383,7 @@ impl Api {
             };
             return Err(APIError::Api(status, val));
         }
-        res_cb(res)?;
-        Ok(())
+        Ok(res)
     }
 }
 
