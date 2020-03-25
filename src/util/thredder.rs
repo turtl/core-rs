@@ -2,10 +2,7 @@
 //! using promises.
 
 use ::std::marker::Send;
-
-use ::futures::Future;
-use ::futures_cpupool::CpuPool;
-
+use ::futures::{Future, executor::ThreadPool};
 use ::error::{TResult, TFutureResult};
 
 /// Stores state information for a thread we've spawned.
@@ -13,7 +10,7 @@ pub struct Thredder {
     /// Our Thredder's name
     pub name: String,
     /// Stores the thread pooler for this Thredder
-    pool: CpuPool,
+    pool: ThreadPool,
 }
 
 impl Thredder {
@@ -22,19 +19,30 @@ impl Thredder {
         if workers <= 0 {
             workers = 1;
         }
+        let mut builder = ThreadPool::builder();
+        builder.pool_size(workers as usize);
         Thredder {
             name: String::from(name),
-            pool: CpuPool::new(workers as usize),
+            pool: builder.create().expect("Problem creating thread pool"),
         }
     }
 
     /// Run an operation on this pool, returning the Future to be waited on at
     /// a later time.
-    pub fn run_async<F, T>(&self, run: F) -> TFutureResult<T>
+    pub fn run_async<F, T>(&self, run: F) -> impl Future<Output = TResult<T>>
         where T: Sync + Send + 'static,
               F: FnOnce() -> TResult<T> + Send + 'static
     {
-        Box::new(self.pool.spawn_fn(run))
+        let (tx, rx) = futures::channel::mpsc::unbounded::<String>();
+        let op_fut = async move {
+            let res = run();
+            tx.unbounded_send(res).expect("Thredder::run_async() -- bad send");
+        };
+        self.pool.spawn_ok(op_fut);
+        async {
+            let res = rx.collect().await;
+            res[0]
+        }
     }
 
     /// Run an operation on this pool

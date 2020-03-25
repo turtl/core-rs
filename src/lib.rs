@@ -13,7 +13,6 @@ extern crate fern;
 #[cfg(not(feature = "wasm"))]
 extern crate fs2;
 extern crate futures;
-extern crate futures_cpupool;
 extern crate glob;
 extern crate hex;
 extern crate jedi;

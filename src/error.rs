@@ -298,9 +298,8 @@ from_err!(::glob::GlobError);
 from_err!(::log::SetLoggerError);
 from_err!(::url::ParseError);
 
-pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;
 pub type TResult<T> = Result<T, TError>;
-pub type TFutureResult<T> = BoxFuture<T, TError>;
+pub type TFutureResult<T> = Box<dyn (::futures::Future<Output = TResult<T>>) + Send>;
 
 /// A helper to make reporting errors easier
 #[macro_export]
@@ -319,7 +318,7 @@ macro_rules! try_or {
 #[macro_export]
 macro_rules! FOk {
     ($ex:expr) => {
-        Box::new(::futures::finished($ex))
+        Box::new(::futures::future::ok($ex))
     }
 }
 
@@ -327,7 +326,7 @@ macro_rules! FOk {
 #[macro_export]
 macro_rules! FErr {
     ($ex:expr) => {
-        Box::new(::futures::failed(From::from($ex)))
+        Box::new(::futures::future::err(From::from($ex)))
     }
 }
 

@@ -21,7 +21,7 @@
 //! logs.
 
 use ::std::fmt;
-use ::futures::{future, Future};
+use ::futures::{self, future};
 use ::jedi::{self, Value, Map as JsonMap};
 use ::error::{TResult, TError, TFutureResult};
 use ::turtl::Turtl;
@@ -67,32 +67,30 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
 
     debug!("protected::map_deserialize() -- starting on {} items", vec.len());
     let ref work = turtl.work;
-    let futures = vec.into_iter()
-        .map(|mut model| -> TFutureResult<_> {
-            // don't bother with models that don't have a key...
-            if model.key().is_none() {
-                warn!("map_deserialize: model {:?} has no key", model.id());
-                return FOk!(DeserializeResult::Failed);
-            }
-            let mut model_clone = ftry!(model.clone());
-            let model_type = String::from(model.model_type());
-            let model_id = model.id().expect("turtl::protected::map_deserialize() -- mode.id() is None").clone();
-            // run the deserialize, return the result into our future chain
-            let fut = work.run_async(move || model_clone.deserialize())
-                .and_then(move |item_mapped: Value| -> TFutureResult<DeserializeResult<T>> {
-                    ftry!(model.merge_fields(&item_mapped));
-                    FOk!(DeserializeResult::Model(model))
-                })
-                .or_else(move |e| -> TFutureResult<DeserializeResult<T>> {
-                    error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
-                    FOk!(DeserializeResult::Failed)
-                });
-            Box::new(fut)
-        })
-        .collect::<Vec<_>>();
-    // wait for all our futures to finish. this will return them in order of
-    // starting (NOT order of completion).
-    let mapped = future::join_all(futures).wait()?;
+    let (tx, rx) = futures::channel::mpsc::unbounded::<String>();
+    let decrypt_all_future = async {
+        for mut model in vec {
+            let tx = tx.clone();
+            let fut_res = async {
+                // don't bother with models that don't have a key...
+                if model.key().is_none() {
+                    warn!("map_deserialize: model {:?} has no key", model.id());
+                    tx.unbounded_send(DeserializeResult::Failed).expect("bad send");
+                    return;
+                }
+
+                let res = match model.deserialize() {
+                    Ok(_) => DeserializeResult::Model(model)
+                    Err(e) => DeserializeResult::Failed,
+                };
+                tx.unbounded_send(res).expect("bad send");
+            };
+            work.run_async::<DeserializeResult>(fut_res);
+        }
+        drop(tx);
+        rx.collect().await
+    };
+    let mapped: Vec<DeserializeResult> = futures::executor::block_on(decrypt_all_future);
     // only return the models that succeeded deserialization, preserving
     // the order.
     // TODO: benchmark if using an iterator is faster here
