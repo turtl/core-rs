@@ -87,11 +87,14 @@ version = "0.1.0"
 dependencies = [
  "base64 0.12.0",
  "config",
+ "fern",
  "jedi",
  "lazy_static",
  "log",
  "quick-error",
  "reqwest",
+ "serde_json",
+ "url",
 ]
 
 [[package]]

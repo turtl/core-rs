@@ -6,7 +6,7 @@ use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::{SyncModel, MemorySaver};
 use ::storage::Storage;
 use ::rusqlite::NO_PARAMS;
-use ::api::{Api, ApiReq};
+use ::api::{AResult, APIError, Api, ApiReq};
 use ::messaging;
 use ::models;
 use ::models::protected::{Protected, Keyfinder};
@@ -185,7 +185,7 @@ impl SyncIncoming {
             _ => 10
         };
         let reqopt = ApiReq::new().timeout(timeout);
-        let syncres: TResult<SyncResponse> = self.api.get(url.as_str())?.call_opt(reqopt);
+        let syncres: AResult<SyncResponse> = self.api.get(url.as_str())?.call_opt(reqopt);
 
         // ^ this call can take a while. if sync got disabled while it was
         // taking its sweet time, then bail on the result.
@@ -196,9 +196,8 @@ impl SyncIncoming {
         let syncdata = match syncres {
             Ok(x) => x,
             Err(e) => {
-                let e = e.shed();
                 match e {
-                    TError::Io(io) => {
+                    APIError::Io(io) => {
                         match io.kind() {
                             ErrorKind::TimedOut => return Ok(()),
                             // android throws this at us quite often, would
@@ -212,11 +211,11 @@ impl SyncIncoming {
                             }
                         }
                     }
-                    TError::Api(status, msg) => {
+                    APIError::Api(status, msg) => {
                         self.set_connected(false);
                         return TErr!(TError::Api(status, msg));
                     }
-                    _ => return Err(e),
+                    _ => return Err(From::from(e)),
                 }
             },
         };

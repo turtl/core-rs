@@ -7,7 +7,7 @@ use ::dumpy::DError;
 use ::clippo::error::CError as ClippoError;
 use ::migrate::error::MError as MigrateError;
 use ::rusqlite;
-use ::api::StatusCode;
+use ::api::{APIError, StatusCode};
 use ::crypto::CryptoError;
 use ::util;
 
@@ -237,6 +237,19 @@ impl From<JSONError> for TError {
             match err {
                 JSONError::Boxed(x) => TError::Boxed(x),
                 _ => TError::JSON(err),
+            }
+        }
+    }
+}
+impl From<APIError> for TError {
+    fn from(err: APIError) -> TError {
+        if cfg!(feature = "panic-on-error") {
+            panic!("{:?}", err);
+        } else {
+            match err {
+                APIError::Boxed(x) => TError::Boxed(x),
+                APIError::Api(status, msg) => TError::Api(status, msg),
+                APIError::Io(err) => TError::Io(err),
             }
         }
     }

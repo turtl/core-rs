@@ -1,5 +1,6 @@
 #![recursion_limit="128"]
 
+extern crate api;
 extern crate base64;
 extern crate carrier;
 extern crate clippo;
@@ -46,7 +47,6 @@ pub mod error;
 mod util;
 mod crypto;
 mod messaging;
-mod api;
 #[macro_use]
 mod sync;
 #[macro_use]

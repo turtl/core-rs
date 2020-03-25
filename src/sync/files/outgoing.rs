@@ -98,6 +98,7 @@ impl FileSyncOutgoing {
                 .header("Content-Type", "application/octet-stream")
                 .body(file)
                 .call_opt(ApiReq::new().timeout(60))
+                .map_err(|x| From::from(x))
         };
 
         match upload(&note_id) {

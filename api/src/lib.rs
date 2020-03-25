@@ -1,15 +1,8 @@
 //! The Api system is responsible for talking to our Turtl server, and manages
 //! our user authentication.
 
-extern crate base64;
-extern crate config;
-extern crate jedi;
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-extern crate quick_error;
-extern crate reqwest;
+mod util;
 
 #[cfg(feature = "wasm")]
 mod api_wasm;
