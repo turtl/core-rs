@@ -2,18 +2,13 @@ use ::std::sync::{Arc, RwLock, Mutex};
 use ::sync::{SyncConfig, Syncer};
 use ::sync::sync_model::SyncModel;
 use ::storage::Storage;
-// TODO: remove leaky reqwest abstraction
-use ::api::{reqwest, Api, Method};
+use ::api::Api;
 use ::messaging;
 use ::error::{TResult, TError};
 use ::models::sync_record::{SyncType, SyncRecord};
 use ::models::file::FileData;
-use ::std::time::Duration;
 use ::std::fs;
-use ::std::io::{Read, Write};
-use ::jedi::{self, Value};
 use ::util;
-use ::config;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {
@@ -94,46 +89,7 @@ impl FileSyncIncoming {
             let file_url: String = self.api.get(&url[..])?.call()?;
             info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
 
-            let mut client_builder = reqwest::blocking::Client::builder()
-                .timeout(Duration::new(30, 0));
-            match config::get::<Option<String>>(&["api", "proxy"]) {
-                Ok(Some(proxy_cfg)) => {
-                    client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
-                }
-                Ok(None) => {}
-                Err(_) => {}
-            }
-            let client = client_builder.build()?;
-            let req = client.request(Method::GET, reqwest::Url::parse(file_url.as_str())?);
-            // only add our auth junk if we're calling back to the turtl api!
-            let turtl_api_url: String = config::get(&["api", "endpoint"])?;
-            let req = if file_url.contains(turtl_api_url.as_str()) {
-                self.api.set_auth_headers(req)
-            } else {
-                req
-            };
-            let mut res = client.execute(req.build()?)?;
-            let status = res.status().clone();
-            if status.as_u16() >= 400 {
-                let errstr = res.text()?;
-                let val = match jedi::parse(&errstr) {
-                    Ok(x) => x,
-                    Err(_) => Value::String(errstr),
-                };
-                return TErr!(TError::Api(status, val));
-            }
-            // start streaming our API call into the file 4K at a time
-            let mut buf = [0; 4096];
-            loop {
-                let read = res.read(&mut buf[..])?;
-                // all done! (EOF)
-                if read <= 0 { break; }
-                let (read_bytes, _) = buf.split_at(read);
-                let written = file.write(read_bytes)?;
-                if read != written {
-                    return TErr!(TError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
-                }
-            }
+            self.api.download_file(&file_url, &mut file)?;
             Ok(())
         };
 

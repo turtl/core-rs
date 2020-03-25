@@ -3,9 +3,10 @@
 
 use std::sync::{RwLock, Mutex};
 use std::error::Error;
-use std::io::{Read, Error as IoError};
+use std::io::{Read, Write, Error as IoError};
 use std::time::Duration;
 use std::collections::HashMap;
+use std::fs::File;
 use log::{debug, error, info, trace, warn};
 use lazy_static::lazy_static;
 use quick_error::quick_error;
@@ -32,6 +33,10 @@ quick_error! {
         Api(status: StatusCode, msg: Value) {
             description("API error")
             display("{}", json!({"type": "api", "subtype": status.canonical_reason().unwrap_or("unknown"), "message": msg}))
+        }
+        Msg(msg: String) {
+            description(msg)
+            display("{}", msg)
         }
     }
 }
@@ -344,6 +349,50 @@ impl Api {
     /// Convenience function for api.call(DELETE)
     pub fn delete(&self, resource: &str) -> AResult<ApiCaller> {
         self.req(Method::DELETE, resource)
+    }
+
+    pub fn download_file(&self, file_url: &str, file: &mut File) -> AResult<()> {
+        let mut client_builder = reqwest::blocking::Client::builder()
+            .timeout(Duration::new(30, 0));
+        match config::get::<Option<String>>(&["api", "proxy"]) {
+            Ok(Some(proxy_cfg)) => {
+                client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+            }
+            Ok(None) => {}
+            Err(_) => {}
+        }
+        let client = client_builder.build()?;
+        let req = client.request(Method::GET, reqwest::Url::parse(file_url)?);
+        // only add our auth junk if we're calling back to the turtl api!
+        let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+        let req = if file_url.contains(&turtl_api_url) {
+            self.set_auth_headers(req)
+        } else {
+            req
+        };
+        let mut res = client.execute(req.build()?)?;
+        let status = res.status().clone();
+        if status.as_u16() >= 400 {
+            let errstr = res.text()?;
+            let val = match jedi::parse(&errstr) {
+                Ok(x) => x,
+                Err(_) => Value::String(errstr),
+            };
+            return Err(APIError::Api(status, val));
+        }
+        // start streaming our API call into the file 4K at a time
+        let mut buf = [0; 4096];
+        loop {
+            let read = res.read(&mut buf[..])?;
+            // all done! (EOF)
+            if read <= 0 { break; }
+            let (read_bytes, _) = buf.split_at(read);
+            let written = file.write(read_bytes)?;
+            if read != written {
+                return Err(APIError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
+            }
+        }
+        Ok(())
     }
 }
 
