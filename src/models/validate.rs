@@ -1,6 +1,6 @@
 //! Defines a trait that performs model data validation.
 
-use ::error::{TResult, TError};
+use crate::error::{TResult, TError};
 
 pub trait Validate {
     /// Determines if the model is fit for saving.

@@ -2,7 +2,9 @@ use std::error::Error;
 use std::io::Error as IoError;
 use std::convert::From;
 use std::sync::Arc;
+use quick_error::quick_error;
 use jedi::{Value, JSONError};
+use serde_json::json;
 use dumpy::DError;
 use clippo::error::CError as ClippoError;
 use migrate::error::MError as MigrateError;
@@ -153,7 +155,7 @@ macro_rules! function {
 #[macro_export]
 macro_rules! twrap {
     ($terror:expr) => {
-        ::error::TError::Wrapped(function!(), file!(), line!(), ::std::sync::Arc::new($terror))
+        crate::error::TError::Wrapped(function!(), file!(), line!(), std::sync::Arc::new($terror))
     }
 }
 
@@ -172,7 +174,7 @@ macro_rules! TErr {
 macro_rules! toterr {
     ($e:expr) => (
         {
-            let err: ::error::TError = From::from($e);
+            let err: crate::error::TError = From::from($e);
             twrap!(err)
         }
     )
@@ -181,8 +183,8 @@ macro_rules! toterr {
 /// A macro to make it easy to create From impls for TError
 macro_rules! from_err {
     ($t:ty) => (
-        impl From<$t> for ::error::TError {
-            fn from(err: $t) -> ::error::TError {
+        impl From<$t> for crate::error::TError {
+            fn from(err: $t) -> crate::error::TError {
                 if cfg!(feature = "panic-on-error") {
                     panic!("{:?}", err);
                 } else {
@@ -267,8 +269,8 @@ impl From<DError> for TError {
         }
     }
 }
-impl From<Box<dyn (::std::any::Any) + Send>> for TError {
-    fn from(err: Box<dyn (::std::any::Any) + Send>) -> TError {
+impl From<Box<dyn (std::any::Any) + Send>> for TError {
+    fn from(err: Box<dyn (std::any::Any) + Send>) -> TError {
         if cfg!(feature = "panic-on-error") {
             panic!("{:?}", err);
         } else {
@@ -285,20 +287,20 @@ impl From<(rusqlite::Connection, rusqlite::Error)> for TError {
         }
     }
 }
-from_err!(::fern::InitError);
-from_err!(::carrier::CError);
-from_err!(::clouseau::CError);
-from_err!(::std::string::FromUtf8Error);
-from_err!(::rusqlite::Error);
-from_err!(::std::num::ParseIntError);
-from_err!(::regex::Error);
-from_err!(::std::sync::mpsc::RecvError);
-from_err!(::glob::PatternError);
-from_err!(::glob::GlobError);
-from_err!(::log::SetLoggerError);
-from_err!(::url::ParseError);
+from_err!(fern::InitError);
+from_err!(carrier::CError);
+from_err!(clouseau::CError);
+from_err!(std::string::FromUtf8Error);
+from_err!(rusqlite::Error);
+from_err!(std::num::ParseIntError);
+from_err!(regex::Error);
+from_err!(std::sync::mpsc::RecvError);
+from_err!(glob::PatternError);
+from_err!(glob::GlobError);
+from_err!(log::SetLoggerError);
+from_err!(url::ParseError);
 
-pub type BoxFuture<T, E> = Box<dyn (::futures::Future<Item = T, Error = E>) + Send>;
+pub type BoxFuture<T, E> = Box<dyn (futures::Future<Item = T, Error = E>) + Send>;
 pub type TResult<T> = Result<T, TError>;
 pub type TFutureResult<T> = BoxFuture<T, TError>;
 
@@ -319,7 +321,7 @@ macro_rules! try_or {
 #[macro_export]
 macro_rules! FOk {
     ($ex:expr) => {
-        Box::new(::futures::finished($ex))
+        Box::new(futures::finished($ex))
     }
 }
 
@@ -327,7 +329,7 @@ macro_rules! FOk {
 #[macro_export]
 macro_rules! FErr {
     ($ex:expr) => {
-        Box::new(::futures::failed(From::from($ex)))
+        Box::new(futures::failed(From::from($ex)))
     }
 }
 

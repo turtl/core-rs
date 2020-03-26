@@ -21,20 +21,21 @@ pub mod files;
 #[macro_use]
 pub mod sync_model;
 
-use ::std::thread;
-use ::std::sync::{Arc, RwLock, Mutex, mpsc};
-use ::config;
-use ::sync::outgoing::SyncOutgoing;
-use ::sync::incoming::SyncIncoming;
-use ::sync::files::outgoing::FileSyncOutgoing;
-use ::sync::files::incoming::FileSyncIncoming;
-use ::models::sync_record::SyncRecord;
-use ::util;
-use ::error::{TResult, TError};
-use ::storage::Storage;
-use ::api::Api;
-use ::messaging;
-use ::crossbeam::sync::MsQueue;
+use std::thread;
+use std::sync::{Arc, RwLock, Mutex, mpsc};
+use log::{info, warn, error};
+use config;
+use crate::sync::outgoing::SyncOutgoing;
+use crate::sync::incoming::SyncIncoming;
+use crate::sync::files::outgoing::FileSyncOutgoing;
+use crate::sync::files::incoming::FileSyncIncoming;
+use crate::models::sync_record::SyncRecord;
+use crate::util;
+use crate::error::{TResult, TError};
+use crate::storage::Storage;
+use api::Api;
+use crate::messaging;
+use crossbeam::sync::MsQueue;
 
 /// This holds the configuration for the sync system (whether it's enabled, the
 /// current user id/api endpoint, and any other information we need to make
@@ -356,13 +357,12 @@ pub fn start(config: Arc<RwLock<SyncConfig>>, api: Arc<Api>, db: Arc<Mutex<Optio
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use ::std::sync::{Arc, RwLock, Mutex};
-
-    use ::jedi::{self, Value};
-    use ::storage::Storage;
-    use ::api::Api;
-    use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
+    use std::sync::{Arc, RwLock, Mutex};
+    use serde_json::json;
+    use jedi::{self, Value};
+    use crate::storage::Storage;
+    use api::Api;
+    use crate::models::sync_record::{SyncAction, SyncType, SyncRecord};
 
     #[test]
     fn serializes_sync_record() {

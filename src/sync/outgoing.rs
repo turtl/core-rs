@@ -1,13 +1,14 @@
-use ::std::sync::{Arc, RwLock, Mutex};
-use ::error::TResult;
-use ::sync::{SyncConfig, Syncer};
-use ::sync::incoming::{SyncIncoming, SyncResponseExtra};
-use ::storage::Storage;
-use ::api::{Api, ApiReq};
-use ::messaging;
-use ::models::sync_record::{SyncType, SyncRecord};
+use std::sync::{Arc, RwLock, Mutex};
+use log::{debug, info, warn};
+use crate::error::TResult;
+use crate::sync::{SyncConfig, Syncer};
+use crate::sync::incoming::{SyncIncoming, SyncResponseExtra};
+use crate::storage::Storage;
+use api::{Api, ApiReq};
+use crate::messaging;
+use crate::models::sync_record::{SyncType, SyncRecord};
 
-#[derive(Deserialize, Debug)]
+#[derive(serde_derive::Deserialize, Debug)]
 struct SyncResponse {
     /// successful sync records
     #[serde(default)]
@@ -172,10 +173,11 @@ impl Syncer for SyncOutgoing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::std::sync::{Arc, RwLock, Mutex};
-    use ::models::sync_record::SyncRecord;
-    use ::jedi;
-    use ::schema;
+    use std::sync::{Arc, RwLock, Mutex};
+    use serde_json::json;
+    use crate::models::sync_record::SyncRecord;
+    use jedi;
+    use crate::schema;
 
     #[test]
     fn ignores_frozen_syncs() {

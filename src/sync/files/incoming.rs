@@ -1,15 +1,17 @@
-use ::std::sync::{Arc, RwLock, Mutex};
-use ::std::io::{Read, Write};
-use ::sync::{SyncConfig, Syncer};
-use ::sync::sync_model::SyncModel;
-use ::storage::Storage;
-use ::api::Api;
-use ::messaging;
-use ::error::{TResult, TError};
-use ::models::sync_record::{SyncType, SyncRecord};
-use ::models::file::FileData;
-use ::std::fs;
-use ::util;
+use std::sync::{Arc, RwLock, Mutex};
+use std::io::{Read, Write};
+use log::{info};
+use serde_json::json;
+use crate::sync::{SyncConfig, Syncer};
+use crate::sync::sync_model::SyncModel;
+use crate::storage::Storage;
+use api::Api;
+use crate::messaging;
+use crate::error::{TResult, TError};
+use crate::models::sync_record::{SyncType, SyncRecord};
+use crate::models::file::FileData;
+use std::fs;
+use crate::util;
 
 /// Holds the state for incoming files (download)
 pub struct FileSyncIncoming {

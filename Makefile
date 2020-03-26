@@ -34,7 +34,7 @@ doc:
 	$(CARGO) doc -p turtl_core --no-deps
 
 macros:
-	$(CARGO) rustc -- -Z unstable-options --pretty=expanded
+	$(CARGO) rustc $(CARGO_BUILD_ARGS) -- -Z unstable-options --pretty=expanded
 
 clean:
 	rm -rf target/

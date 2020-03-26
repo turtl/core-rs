@@ -1,23 +1,26 @@
-use ::std::collections::HashMap;
-use ::jedi::{self, Value, Serialize};
-use ::error::{TResult, TError};
-use ::crypto::{self, Key, CryptoOp};
-use ::api::{ApiReq, StatusCode};
-use ::models::model::{self, Model};
-use ::models::space::Space;
-use ::models::board::Board;
-use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
-use ::models::validate::{self, Validate};
-use ::turtl::Turtl;
-use ::util;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::sync::incoming::SyncIncoming;
-use ::messaging;
-use ::migrate::MigrateResult;
-use ::std::path::PathBuf;
-use ::std::io::prelude::*;
-use ::std::fs;
+use std::collections::HashMap;
+use log::{debug, info, error};
+use serde_json::json;
+use jedi::{self, Value, Serialize};
+use lazy_static::lazy_static;
+use crate::error::{TResult, TError};
+use crate::crypto::{self, Key, CryptoOp};
+use api::{ApiReq, StatusCode};
+use crate::models::model::{self, Model};
+use crate::models::space::Space;
+use crate::models::board::Board;
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::sync_record::{SyncType, SyncAction, SyncRecord};
+use crate::models::validate::{self, Validate};
+use crate::turtl::Turtl;
+use crate::util;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use crate::sync::incoming::SyncIncoming;
+use crate::messaging;
+use migrate::MigrateResult;
+use std::path::PathBuf;
+use std::io::prelude::*;
+use std::fs;
 
 pub const CURRENT_AUTH_VERSION: u16 = 0;
 lazy_static! {
@@ -27,7 +30,7 @@ lazy_static! {
 }
 
 protected! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct User {
         #[serde(skip)]
         pub auth: Option<String>,
@@ -59,7 +62,7 @@ protected! {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Default)]
 struct LoginToken {
     id: String,
     key: Key,
@@ -325,10 +328,10 @@ impl User {
             new_keys
         };
 
-        #[derive(Deserialize, Debug)]
+        #[derive(serde_derive::Deserialize, Debug)]
         struct PWChangeResponse {
             #[serde(default)]
-            #[serde(deserialize_with = "::util::ser::opt_vec_str_i64_converter::deserialize")]
+            #[serde(deserialize_with = "crate::util::ser::opt_vec_str_i64_converter::deserialize")]
             sync_ids: Option<Vec<i64>>,
         }
         let auth_change = json!({

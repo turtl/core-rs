@@ -1,21 +1,21 @@
-use ::jedi::Value;
-
-use ::error::TResult;
-use ::crypto::Key;
-use ::models::model::Model;
-use ::models::validate::{self, Validate};
-use ::models::protected::{Keyfinder, Protected};
-use ::models::note::Note;
-use ::models::keychain::{Keychain, KeyRef, KeyType};
-use ::models::sync_record::{SyncRecord, SyncAction};
-use ::turtl::Turtl;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::models::storable::Storable;
+use jedi::Value;
+use log::{warn};
+use crate::error::TResult;
+use crate::crypto::Key;
+use crate::models::model::Model;
+use crate::models::validate::{self, Validate};
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::note::Note;
+use crate::models::keychain::{Keychain, KeyRef, KeyType};
+use crate::models::sync_record::{SyncRecord, SyncAction};
+use crate::turtl::Turtl;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use crate::models::storable::Storable;
 
 protected! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct Board {
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(with = "crate::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
         #[protected_field(public)]

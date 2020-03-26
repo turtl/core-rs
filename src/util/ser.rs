@@ -21,7 +21,7 @@ pub mod int_converter {
         impl<'de> Visitor<'de> for StringOrInt {
             type Value = String;
 
-            fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("string or i64")
             }
 
@@ -93,9 +93,9 @@ pub mod int_converter {
 }
 
 pub mod int_opt_converter {
-    use ::serde::ser::Serializer;
-    use ::serde::de::{Deserialize, Deserializer};
-    use ::jedi::Value;
+    use serde::ser::Serializer;
+    use serde::de::{Deserialize, Deserializer};
+    use jedi::Value;
 
     #[allow(dead_code)]
     pub fn serialize<S>(val: &Option<String>, ser: S) -> Result<S::Ok, S::Error>
@@ -139,7 +139,7 @@ pub mod base64_converter {
     use serde::ser::{self, Serializer};
     use serde::de::{self, Deserializer, Deserialize};
     use jedi::Value;
-    use crypto;
+    use crate::crypto;
     use crate::error::{TResult, TError};
 
     #[allow(dead_code)]
@@ -182,10 +182,10 @@ pub mod base64_converter {
 }
 
 pub mod str_i64_converter {
-    use ::std::str::FromStr;
-    use ::serde::ser::Serializer;
-    use ::serde::de::{self, Deserializer, Deserialize};
-    use ::jedi::Value;
+    use std::str::FromStr;
+    use serde::ser::Serializer;
+    use serde::de::{self, Deserializer, Deserialize};
+    use jedi::Value;
 
     #[allow(dead_code)]
     pub fn serialize<S>(val: &i64, ser: S) -> Result<S::Ok, S::Error>

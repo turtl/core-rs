@@ -1,20 +1,22 @@
-use ::jedi::Value;
-use ::error::{TResult, TError};
-use ::storage::Storage;
-use ::models::model::Model;
-use ::models::protected::{Keyfinder, Protected};
-use ::models::note::Note;
-use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
-use ::models::validate::Validate;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::turtl::Turtl;
-use ::std::mem;
-use ::crypto;
-use ::util;
-use ::std::fs;
-use ::std::io::prelude::*;
-use ::std::path::PathBuf;
-use ::glob;
+use log::{error};
+use serde_json::json;
+use jedi::Value;
+use crate::error::{TResult, TError};
+use crate::storage::Storage;
+use crate::models::model::Model;
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::note::Note;
+use crate::models::sync_record::{SyncAction, SyncType, SyncRecord};
+use crate::models::validate::Validate;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use crate::turtl::Turtl;
+use std::mem;
+use crate::crypto;
+use crate::util;
+use std::fs;
+use std::io::prelude::*;
+use std::path::PathBuf;
+use glob;
 
 /// Return the location where we store files
 pub fn file_folder() -> TResult<String> {
@@ -24,7 +26,7 @@ pub fn file_folder() -> TResult<String> {
 protected! {
     /// Defines the object we find inside of Note.File (a description of the
     /// note's file with no actual file data...name, mime type, etc).
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct File {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
@@ -45,10 +47,10 @@ protected! {
 protected! {
     /// Defines the object that holds actual file body data separately from the
     /// metadata that lives in the Note object.
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     #[protected_modeltype(file)]
     pub struct FileData {
-        #[serde(with = "::util::ser::base64_converter")]
+        #[serde(with = "crate::util::ser::base64_converter")]
         #[serde(skip_serializing_if = "Option::is_none")]
         #[serde(default)]
         #[protected_field(private)]
@@ -293,7 +295,7 @@ impl FileData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi;
+    use jedi;
 
     #[test]
     fn filedata_serializes_to_from_base64() {
@@ -310,7 +312,7 @@ mod tests {
 
     #[test]
     fn can_save_and_load_files() {
-        let turtl = ::turtl::tests::with_test(true);
+        let turtl = crate::turtl::tests::with_test(true);
         let user_id = turtl.user_id().unwrap();
 
         let mut note: Note = jedi::from_val(json!({

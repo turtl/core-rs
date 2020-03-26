@@ -1,20 +1,20 @@
 //! The storage module stores things. Don't worry, those things are encrypted.
 //! Probably.
 
-use ::std::sync::{Arc, RwLock};
-use ::std::mem;
+use std::sync::{Arc, RwLock};
+use std::mem;
 
-use ::crypto;
-use ::rusqlite::{self, Connection};
-use ::jedi::{self, Value};
-use ::dumpy::Dumpy;
-use ::config;
+use crate::crypto;
+use rusqlite::{self, Connection};
+use jedi::{self, Value};
+use dumpy::Dumpy;
+use config;
 
-use ::models::model::{self};
-use ::models::protected::Protected;
-use ::models::storable::Storable;
+use crate::models::model::{self};
+use crate::models::protected::Protected;
+use crate::models::storable::Storable;
 
-use ::error::TResult;
+use crate::error::TResult;
 
 /// Given a db filename, return the foll path we'll use for the db file
 pub fn db_location(db_name: &String) -> TResult<String> {
@@ -177,15 +177,15 @@ unsafe impl Sync for Storage {}
 mod tests {
     use super::*;
 
-    use ::jedi::{self, Value};
-    use ::rusqlite::{NO_PARAMS, types::Value as SqlValue};
+    use jedi::{self, Value};
+    use rusqlite::{NO_PARAMS, types::Value as SqlValue};
 
-    use ::error::TResult;
-    use ::models::model::{self, Model};
-    use ::models::protected::Protected;
+    use crate::error::TResult;
+    use crate::models::model::{self, Model};
+    use crate::models::protected::Protected;
 
     protected! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct Shiba {
             #[protected_field(public)]
             pub color: Option<String>,

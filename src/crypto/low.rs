@@ -98,7 +98,7 @@ pub fn rand_int() -> CResult<u64> {
 /// and divides it by u64::MAX to get the value.
 #[allow(dead_code)]
 pub fn rand_float() -> CResult<f64> {
-    Ok((rand_int()? as f64) / (::std::u64::MAX as f64))
+    Ok((rand_int()? as f64) / (std::u64::MAX as f64))
 }
 
 /// Generate a random salt for use with the key deriver (gen_key())
@@ -124,8 +124,8 @@ pub fn gen_key(password: &[u8], salt: &[u8], cpu: usize, mem: usize) -> CResult<
 pub mod chacha20poly1305 {
     //! Our chacha20poly1305 wrapper.
 
-    use ::sodiumoxide::crypto::aead::chacha20poly1305_ietf as aead;
-    use ::crypto::{CResult, CryptoError};
+    use sodiumoxide::crypto::aead::chacha20poly1305_ietf as aead;
+    use crate::crypto::{CResult, CryptoError};
 
     /// Get the key length for chacha20poly1305
     pub fn keylen() -> usize {

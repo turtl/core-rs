@@ -8,30 +8,32 @@
 //! where the arg\* can be any valid JSON object. The Message ID is passed in
 //! when responding so the client knows which request we are responding to.
 
-use ::jedi::{self, Value};
-use ::error::{TResult, TError};
-use ::config;
-use ::util::{self, logger};
-use ::turtl::Turtl;
-use ::search::Query;
-use ::profile::{Profile, Export, ImportMode};
-use ::models::model::Model;
-use ::models::protected::Protected;
-use ::models::user::User;
-use ::models::space::Space;
-use ::models::space_member::SpaceMember;
-use ::models::note::Note;
-use ::models::invite::{Invite, InviteRequest};
-use ::models::file::FileData;
-use ::models::sync_record::{SyncAction, SyncType, SyncRecord};
-use ::models::feedback::Feedback;
-use ::clippo::{self, CustomParser};
-use ::sync::sync_model;
-use ::sync;
-use ::messaging::{self, Event};
-use ::migrate;
-use ::crypto::{self, Key};
-use ::std::panic;
+use log::{info, warn, error};
+use serde_json::json;
+use jedi::{self, Value};
+use crate::error::{TResult, TError};
+use config;
+use crate::util::{self, logger};
+use crate::turtl::Turtl;
+use crate::search::Query;
+use crate::profile::{Profile, Export, ImportMode};
+use crate::models::model::Model;
+use crate::models::protected::Protected;
+use crate::models::user::User;
+use crate::models::space::Space;
+use crate::models::space_member::SpaceMember;
+use crate::models::note::Note;
+use crate::models::invite::{Invite, InviteRequest};
+use crate::models::file::FileData;
+use crate::models::sync_record::{SyncAction, SyncType, SyncRecord};
+use crate::models::feedback::Feedback;
+use clippo::{self, CustomParser};
+use crate::sync::sync_model;
+use crate::sync;
+use crate::messaging::{self, Event};
+use migrate;
+use crate::crypto::{self, Key};
+use std::panic;
 
 /// Does our actual message dispatching
 fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
@@ -89,8 +91,8 @@ fn dispatch(cmd: &String, turtl: &Turtl, data: Value) -> TResult<Value> {
         "user:migrate-auth-debug" => {
             let old_username: String = jedi::get(&["2"], &data)?;
             let old_password: String = jedi::get(&["3"], &data)?;
-            let result_v0 = ::migrate::user::generate_auth_debug(&old_username, &old_password, 0)?;
-            let result_v1 = ::migrate::user::generate_auth_debug(&old_username, &old_password, 1)?;
+            let result_v0 = migrate::user::generate_auth_debug(&old_username, &old_password, 0)?;
+            let result_v1 = migrate::user::generate_auth_debug(&old_username, &old_password, 1)?;
             Ok(json!({
                 "v0": result_v0.1,
                 "v1": result_v1.1,

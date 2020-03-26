@@ -17,15 +17,18 @@ mod dispatch;
 mod schema;
 mod turtl;
 
-use ::std::thread;
-use ::std::sync::Arc;
-use ::std::env;
+use std::thread;
+use std::sync::Arc;
+use std::env;
 #[cfg(not(feature = "wasm"))]
-use ::std::fs;
-use ::jedi::Value;
-use ::error::TResult;
+use std::fs;
+use log::{info, error};
+use serde_json::json;
+use lazy_static::lazy_static;
+use jedi::Value;
+use crate::error::TResult;
 #[cfg(not(feature = "wasm"))]
-use ::fs2::FileExt;
+use fs2::FileExt;
 
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
@@ -230,13 +233,13 @@ pub fn recv_event_nb() -> TResult<Option<String>> {
 // -----------------------------------------------------------------------------
 pub mod c_api {
     use super::*;
-    use ::std::os::raw::c_char;
-    use ::std::ptr;
-    use ::std::ffi::{CStr, CString};
-    use ::std::panic;
-    use ::carrier;
-    use ::config;
-    use ::std::sync::RwLock;
+    use std::os::raw::c_char;
+    use std::ptr;
+    use std::ffi::{CStr, CString};
+    use std::panic;
+    use carrier;
+    use config;
+    use std::sync::RwLock;
 
     lazy_static! {
         static ref LAST_ERR: RwLock<Option<String>> = RwLock::new(None);
@@ -413,8 +416,8 @@ pub mod android {
     use self::jni::JNIEnv;
     use self::jni::objects::{JObject, JClass, JString};
     use self::jni::sys::{jint, jbyteArray, jstring};
-    use ::std::ffi::{CString, CStr};
-    use ::std::slice;
+    use std::ffi::{CString, CStr};
+    use std::slice;
 
     macro_rules! to_c_string {
         ($fn:expr, $env:ident, $str:ident, $ret:expr) => {{
@@ -584,8 +587,8 @@ pub mod android {
 #[cfg(feature = "public-api-tests")]
 mod tests {
     use super::*;
-    use ::std::{thread, slice, str};
-    use ::std::ffi::CString;
+    use std::{thread, slice, str};
+    use std::ffi::CString;
 
     fn recv_str(mid: &str) -> String {
         let mut len: usize = 0;
