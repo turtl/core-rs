@@ -1,17 +1,18 @@
-use ::jedi::{self, Value};
-use ::error::{TResult, TError};
-use ::models::model::Model;
-use ::models::protected::{Protected, Keyfinder};
-use ::storage::Storage;
-use ::turtl::Turtl;
-use ::sync::sync_model::SyncModel;
-use ::std::fmt::Display;
+use log::{debug};
+use jedi::{self, Value};
+use crate::error::{TResult, TError};
+use crate::models::model::Model;
+use crate::models::protected::{Protected, Keyfinder};
+use crate::storage::Storage;
+use crate::turtl::Turtl;
+use crate::sync::sync_model::SyncModel;
+use std::fmt::Display;
 
 /// How many times a sync record can fail before it's "frozen"
 static MAX_ALLOWED_FAILURES: u32 = 3;
 
 /// Makes sure we only accept certain actions for syncing
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone, PartialEq)]
 pub enum SyncAction {
     #[serde(rename = "add")]
     Add,
@@ -30,7 +31,7 @@ impl Default for SyncAction {
     fn default() -> Self { SyncAction::Edit }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone, PartialEq)]
 pub enum SyncType {
     #[serde(rename = "user")]
     User,
@@ -65,23 +66,23 @@ impl Default for SyncType {
 }
 
 /// A helpful struct for dealing with sync errors
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Clone)]
 pub struct SyncError {
-    #[serde(with = "::util::ser::int_converter")]
+    #[serde(with = "crate::util::ser::int_converter")]
     pub code: String,
     pub msg: String,
 }
 
 protected! {
     /// Define a container for our sync records
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct SyncRecord {
         #[protected_field(public)]
         pub action: SyncAction,
-        #[serde(deserialize_with = "::util::ser::int_converter::deserialize")]
+        #[serde(deserialize_with = "crate::util::ser::int_converter::deserialize")]
         #[protected_field(public)]
         pub item_id: String,
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(with = "crate::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
         #[serde(rename = "type")]
@@ -91,7 +92,7 @@ protected! {
         #[serde(default)]
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]
-        #[serde(with = "::util::ser::opt_vec_str_i64_converter")]
+        #[serde(with = "crate::util::ser::opt_vec_str_i64_converter")]
         pub sync_ids: Option<Vec<i64>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[protected_field(public)]

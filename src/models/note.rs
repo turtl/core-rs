@@ -1,24 +1,24 @@
-use ::turtl::Turtl;
-use ::error::TResult;
-use ::models::model::Model;
-use ::models::validate::{self, Validate};
-use ::models::protected::{Keyfinder, Protected};
-use ::models::keychain::{Keychain, KeyRef, KeyType};
-use ::models::file::{File, FileData};
-use ::models::sync_record::{SyncRecord, SyncAction};
-use ::crypto::Key;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::std::fs;
-use ::models::storable::Storable;
+use crate::turtl::Turtl;
+use crate::error::TResult;
+use crate::models::model::Model;
+use crate::models::validate::{self, Validate};
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::keychain::{Keychain, KeyRef, KeyType};
+use crate::models::file::{File, FileData};
+use crate::models::sync_record::{SyncRecord, SyncAction};
+use crate::crypto::Key;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use std::fs;
+use crate::models::storable::Storable;
 
 protected! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct Note {
         #[protected_field(public)]
         pub space_id: String,
         #[protected_field(public)]
         pub board_id: Option<String>,
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(with = "crate::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
         #[serde(default)]

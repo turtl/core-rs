@@ -1,14 +1,14 @@
-use ::error::TResult;
-use ::lib_permissions::{Role, Permission};
-use ::turtl::Turtl;
-use ::jedi::{self, Value};
-use ::sync::incoming;
+use crate::error::TResult;
+use lib_permissions::{Role, Permission};
+use crate::turtl::Turtl;
+use jedi::{self, Value};
+use crate::sync::incoming;
 
 /// Holds information about a member of a space.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Default)]
 pub struct SpaceMember {
     /// Member id
-    #[serde(with = "::util::ser::str_i64_converter")]
+    #[serde(with = "crate::util::ser::str_i64_converter")]
     pub id: i64,
     /// Member's user_id
     pub user_id: String,

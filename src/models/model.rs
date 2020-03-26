@@ -5,14 +5,15 @@
 //! The most important aspect of models is that they are (De)Serialize(able),
 //! making them easy to save/load to various data sources.
 
-use ::std::sync::RwLock;
-
-use ::time;
-use ::serde::ser::Serialize;
-use ::serde::de::DeserializeOwned;
-use ::jedi::{self, Value};
-use ::crypto;
-use ::error::{TError, TResult};
+use std::sync::RwLock;
+use log::{debug};
+use time;
+use lazy_static::lazy_static;
+use serde::ser::Serialize;
+use serde::de::DeserializeOwned;
+use jedi::{self, Value};
+use crate::crypto;
+use crate::error::{TError, TResult};
 
 lazy_static! {
     /// create a static/global cid counter
@@ -39,7 +40,7 @@ macro_rules! model_getter {
             ($model:ident, $field:ident) => {
                 match $model.$field.as_ref() {
                     Some(val) => val.clone(),
-                    None => return TErr!(::error::TError::MissingField(format!("{}", stringify!($field)))),
+                    None => return TErr!(crate::error::TError::MissingField(format!("{}", stringify!($field)))),
                 }
             };
 
@@ -172,7 +173,7 @@ macro_rules! model {
         pub struct $name {
             #[serde(default)]
             #[serde(skip_serializing_if = "Option::is_none")]
-            #[serde(deserialize_with = "::util::ser::int_opt_converter::deserialize")]
+            #[serde(deserialize_with = "crate::util::ser::int_opt_converter::deserialize")]
             pub id: Option<String>,
             $( $inner )*
         }
@@ -184,14 +185,14 @@ macro_rules! model {
             }
 
             #[allow(dead_code)]
-            pub fn new_with_id() -> ::error::TResult<$name> {
+            pub fn new_with_id() -> crate::error::TResult<$name> {
                 let mut model = Self::new();
-                model.id = Some(::models::model::cid()?);
+                model.id = Some(crate::models::model::cid()?);
                 Ok(model)
             }
         }
 
-        impl ::models::model::Model for $name {
+        impl crate::models::model::Model for $name {
             fn id<'a>(&'a self) -> Option<&'a String> {
                 match self.id {
                     Some(ref x) => Some(x),
@@ -199,10 +200,10 @@ macro_rules! model {
                 }
             }
 
-            fn id_or_else(&self) -> ::error::TResult<String> {
+            fn id_or_else(&self) -> crate::error::TResult<String> {
                 match self.id() {
                     Some(id) => Ok(id.clone()),
-                    None => TErr!(::error::TError::MissingField(format!("{}.id", stringify!($name)))),
+                    None => TErr!(crate::error::TError::MissingField(format!("{}.id", stringify!($name)))),
                 }
             }
 
@@ -210,9 +211,9 @@ macro_rules! model {
                 self.id = Some(id);
             }
 
-            fn generate_id<'a>(&'a mut self) -> ::error::TResult<&'a String> {
+            fn generate_id<'a>(&'a mut self) -> crate::error::TResult<&'a String> {
                 if self.id.is_none() {
-                    self.id = Some(::models::model::cid()?);
+                    self.id = Some(crate::models::model::cid()?);
                 }
                 Ok(self.id.as_ref().expect("turtl::Model.generate_id() -- self.id is None. No, that's not true. THAT'S IMPOSSIBLE!!"))
             }
@@ -223,12 +224,12 @@ macro_rules! model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi::{self, Value};
+    use jedi::{self, Value};
 
-    use ::error::TResult;
+    use crate::error::TResult;
 
     model! {
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct Rabbit {
             name: Option<String>,
             #[serde(rename = "type")]

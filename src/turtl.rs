@@ -2,37 +2,40 @@
 //! functions/interfaces for updating or retrieving stateful info, and is passed
 //! around to various pieces of the app running in the main thread.
 
-use ::std::sync::{Arc, RwLock, Mutex};
-use ::std::ops::Drop;
-use ::std::fs;
-use ::regex::Regex;
-use ::num_cpus;
-use ::jedi::{self, Value};
-use ::config;
-use ::error::{TResult, TError};
-use ::crypto::Key;
-use ::util;
-use ::util::thredder::Thredder;
-use ::storage::{self, Storage};
-use ::api::Api;
-use ::profile::Profile;
-use ::models::protected::{self, Keyfinder, Protected};
-use ::models::model::Model;
-use ::models::user::{self, User};
-use ::models::space::Space;
-use ::models::board::Board;
-use ::models::invite::Invite;
-use ::models::keychain::KeychainEntry;
-use ::models::note::Note;
-use ::models::file::FileData;
-use ::models::sync_record::{SyncRecord, SyncAction};
-use ::messaging::{self, Messenger, Response};
-use ::sync::{self, SyncConfig, SyncState};
-use ::sync::sync_model::MemorySaver;
-use ::search::Search;
-use ::schema;
-use ::migrate::{self, MigrateResult};
-use ::std::collections::HashMap;
+use std::sync::{Arc, RwLock, Mutex};
+use std::ops::Drop;
+use std::fs;
+use log::{debug, info, warn, error};
+use serde_json::json;
+use regex::Regex;
+use num_cpus;
+use jedi::{self, Value};
+use lazy_static::lazy_static;
+use config;
+use crate::error::{TResult, TError};
+use crate::crypto::Key;
+use crate::util;
+use crate::util::thredder::Thredder;
+use crate::storage::{self, Storage};
+use api::Api;
+use crate::profile::Profile;
+use crate::models::protected::{self, Keyfinder, Protected};
+use crate::models::model::Model;
+use crate::models::user::{self, User};
+use crate::models::space::Space;
+use crate::models::board::Board;
+use crate::models::invite::Invite;
+use crate::models::keychain::KeychainEntry;
+use crate::models::note::Note;
+use crate::models::file::FileData;
+use crate::models::sync_record::{SyncRecord, SyncAction};
+use crate::messaging::{self, Messenger, Response};
+use crate::sync::{self, SyncConfig, SyncState};
+use crate::sync::sync_model::MemorySaver;
+use crate::search::Search;
+use crate::schema;
+use migrate::{self, MigrateResult};
+use std::collections::HashMap;
 
 pub fn data_folder() -> TResult<String> {
     let integration = config::get::<String>(&["integration_tests", "data_folder"])?;
@@ -829,23 +832,23 @@ impl Drop for Turtl {
 pub mod tests {
     use super::*;
 
-    use ::std::sync::{RwLock, Mutex};
+    use std::sync::{RwLock, Mutex};
 
-    use ::jedi;
+    use jedi;
 
-    use ::crypto::{self, Key};
-    use ::search::Query;
-    use ::models::model::Model;
-    use ::models::protected::Protected;
-    use ::models::keychain::KeychainEntry;
-    use ::models::user::User;
-    use ::models::note::Note;
-    use ::models::board::Board;
-    use ::models::sync_record::{SyncRecord, SyncAction, SyncType};
-    use ::sync::sync_model;
+    use crate::crypto::{self, Key};
+    use crate::search::Query;
+    use crate::models::model::Model;
+    use crate::models::protected::Protected;
+    use crate::models::keychain::KeychainEntry;
+    use crate::models::user::User;
+    use crate::models::note::Note;
+    use crate::models::board::Board;
+    use crate::models::sync_record::{SyncRecord, SyncAction, SyncType};
+    use crate::sync::sync_model;
 
     protected! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct Dog {
             #[protected_field(public)]
             pub user_id: Option<String>,
@@ -857,7 +860,7 @@ pub mod tests {
 
     /// Give us a new Turtl to start running tests on
     pub fn with_test(logged_in: bool) -> Turtl {
-        ::init(String::from("{}")).unwrap();
+        crate::init(String::from("{}")).unwrap();
         let turtl = Turtl::new().unwrap();
         if logged_in {
             let user_key = Key::new(crypto::from_base64(&String::from("jlz71VUIns1xM3Hq0fETZT98dxzhlqUxqb0VXYq1KtQ=")).unwrap());

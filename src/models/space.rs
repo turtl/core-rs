@@ -1,28 +1,29 @@
-use ::error::{TResult, TError};
-use ::models::model::Model;
-use ::models::board::Board;
-use ::models::note::Note;
-use ::models::invite::{Invite, InviteRequest};
-use ::models::protected::{Keyfinder, Protected};
-use ::models::space_member::SpaceMember;
-use ::models::sync_record::{SyncRecord, SyncAction};
-use ::models::validate::{self, Validate};
-use ::models::keychain;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::turtl::Turtl;
-use ::lib_permissions::{Role, Permission};
-use ::jedi::{self, Value};
-use ::crypto::Key;
-use ::messaging;
-use ::std::default::Default;
+use serde_json::json;
+use crate::error::{TResult, TError};
+use crate::models::model::Model;
+use crate::models::board::Board;
+use crate::models::note::Note;
+use crate::models::invite::{Invite, InviteRequest};
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::space_member::SpaceMember;
+use crate::models::sync_record::{SyncRecord, SyncAction};
+use crate::models::validate::{self, Validate};
+use crate::models::keychain;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use crate::turtl::Turtl;
+use lib_permissions::{Role, Permission};
+use jedi::{self, Value};
+use crate::crypto::Key;
+use crate::messaging;
+use std::default::Default;
 
 protected! {
     /// Defines a Space, which is a container for notes and boards. It also acts as
     /// an organization of sorts, allowing multiple members to access the space,
     /// each with different permission levels.
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     pub struct Space {
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(with = "crate::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
         #[serde(default)]

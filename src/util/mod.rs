@@ -1,13 +1,13 @@
-use ::std::thread;
-use ::std::time::Duration;
-use ::error::{TResult, TError};
-use ::std::io;
-use ::std::fs;
-use ::std::path::Path;
-use ::std::fmt::Debug;
-use ::jedi::{self, Value, Serialize};
-use ::config;
-use ::encoding_rs;
+use std::thread;
+use std::time::Duration;
+use std::io;
+use std::fs;
+use std::path::Path;
+use std::fmt::Debug;
+use jedi::{self, Value, Serialize};
+use crate::error::{TResult, TError};
+use config;
+use encoding_rs;
 
 macro_rules! do_lock {
     ($lock:expr) => {{

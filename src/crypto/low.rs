@@ -1,12 +1,12 @@
 //! Low-level crypto primitives/modules.
 
-use ::hex;
-use ::base64;
-use ::sodiumoxide;
-use ::sodiumoxide::crypto::hash;
-use ::sodiumoxide::crypto::auth as sodium_auth;
-use ::sodiumoxide::crypto::pwhash;
-use ::crypto::error::{CResult, CryptoError};
+use hex;
+use base64;
+use sodiumoxide;
+use sodiumoxide::crypto::hash;
+use sodiumoxide::crypto::auth as sodium_auth;
+use sodiumoxide::crypto::pwhash;
+use crate::crypto::error::{CResult, CryptoError};
 
 /// Abstract the size of hmac keys
 #[allow(dead_code)]
@@ -98,7 +98,7 @@ pub fn rand_int() -> CResult<u64> {
 /// and divides it by u64::MAX to get the value.
 #[allow(dead_code)]
 pub fn rand_float() -> CResult<f64> {
-    Ok((rand_int()? as f64) / (::std::u64::MAX as f64))
+    Ok((rand_int()? as f64) / (std::u64::MAX as f64))
 }
 
 /// Generate a random salt for use with the key deriver (gen_key())
@@ -124,8 +124,8 @@ pub fn gen_key(password: &[u8], salt: &[u8], cpu: usize, mem: usize) -> CResult<
 pub mod chacha20poly1305 {
     //! Our chacha20poly1305 wrapper.
 
-    use ::sodiumoxide::crypto::aead::chacha20poly1305_ietf as aead;
-    use ::crypto::{CResult, CryptoError};
+    use sodiumoxide::crypto::aead::chacha20poly1305_ietf as aead;
+    use crate::crypto::{CResult, CryptoError};
 
     /// Get the key length for chacha20poly1305
     pub fn keylen() -> usize {
@@ -178,9 +178,9 @@ pub mod chacha20poly1305 {
 }
 
 pub mod asym {
-    use ::crypto::error::{CryptoError, CResult};
-    use ::sodiumoxide::crypto::box_ as crypto_box;
-    use ::sodiumoxide::crypto::sealedbox;
+    use sodiumoxide::crypto::box_ as crypto_box;
+    use sodiumoxide::crypto::sealedbox;
+    use crate::crypto::error::{CryptoError, CResult};
 
     /// Generate a public/private keypair for use with the crypto::box lib
     pub fn keygen() -> CResult<(Vec<u8>, Vec<u8>)> {

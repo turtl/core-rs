@@ -1,17 +1,17 @@
-use ::std::collections::HashMap;
-use ::serde::{ser, de};
-use ::error::{TResult, TError};
-use ::crypto::Key;
-use ::models::model::Model;
-use ::models::protected::{Keyfinder, Protected};
-use ::models::sync_record::{SyncRecord, SyncAction};
-use ::models::validate::Validate;
-use ::sync::sync_model::{self, SyncModel, MemorySaver};
-use ::turtl::Turtl;
-use ::jedi::{self, Value};
+use std::collections::HashMap;
+use serde::{ser, de};
+use crate::error::{TResult, TError};
+use crate::crypto::Key;
+use crate::models::model::Model;
+use crate::models::protected::{Keyfinder, Protected};
+use crate::models::sync_record::{SyncRecord, SyncAction};
+use crate::models::validate::Validate;
+use crate::sync::sync_model::{self, SyncModel, MemorySaver};
+use crate::turtl::Turtl;
+use jedi::{self, Value};
 
 /// An enum used to 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum KeyType {
     #[serde(rename = "s")]
     Space,
@@ -98,7 +98,7 @@ impl<'de> de::Deserialize<'de> for KeyRef<String> {
 }
 
 protected! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
     #[protected_modeltype(keychain)]
     pub struct KeychainEntry {
         #[serde(rename = "type")]
@@ -106,7 +106,7 @@ protected! {
         pub ty: String,
         #[protected_field(public)]
         pub item_id: String,
-        #[serde(with = "::util::ser::int_converter")]
+        #[serde(with = "crate::util::ser::int_converter")]
         #[protected_field(public)]
         pub user_id: String,
 
@@ -333,11 +333,11 @@ pub fn remove_key(turtl: &Turtl, item_id: &String, skip_remote_sync: bool) -> TR
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use ::crypto::Key;
+    use crate::crypto::Key;
 
     #[test]
     fn upserts_keys_properly() {
-        let turtl = ::turtl::tests::with_test(true);
+        let turtl = crate::turtl::tests::with_test(true);
         let mut kc = Keychain::new();
         let key1 = Key::random().unwrap();
         let mut key2 = Key::random().unwrap();

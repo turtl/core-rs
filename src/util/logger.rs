@@ -1,15 +1,17 @@
-use ::config;
-use ::fern;
-use ::log;
-use ::time;
-use ::error::{TResult, TError};
-use ::std::{self, env};
-use ::std::fs::{self, File};
-use ::std::io::BufReader;
-use ::std::io::prelude::*;
-use ::std::sync::{Mutex, RwLock};
-use ::glob;
-use ::std::path::PathBuf;
+use std::{self, env};
+use std::fs::{self, File};
+use std::io::BufReader;
+use std::io::prelude::*;
+use std::sync::{Mutex, RwLock};
+use std::path::PathBuf;
+use log::{info, warn, trace};
+use lazy_static::lazy_static;
+use config;
+use fern;
+use log;
+use time;
+use glob;
+use crate::error::{TResult, TError};
 
 lazy_static! {
     static ref LOG_SETUP_DONE: RwLock<bool> = RwLock::new(false);

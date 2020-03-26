@@ -14,7 +14,7 @@ pub trait Storable {
 #[macro_export]
 macro_rules! make_storable {
     ($ty:ty, $tbl:expr) => {
-        impl ::models::storable::Storable for $ty {
+        impl crate::models::storable::Storable for $ty {
             fn tablename() -> &'static str {
                 $tbl
             }

@@ -1,8 +1,8 @@
 //! This submodule defines a a cryptographic key
 
-use ::serde::{ser, de};
+use serde::{ser, de};
 
-use ::crypto::error::CResult;
+use crate::crypto::error::CResult;
 
 /// A type we'll use to represent crypto keys
 #[derive(Debug, Default)]
@@ -21,7 +21,7 @@ impl Key {
 
     /// Create a new random key
     pub fn random() -> CResult<Key> {
-        Ok(Key::new(::crypto::low::chacha20poly1305::random_key()?))
+        Ok(Key::new(crate::crypto::low::chacha20poly1305::random_key()?))
     }
 
     /// Return a ref to this key's data
@@ -58,7 +58,7 @@ impl ser::Serialize for Key {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: ser::Serializer
     {
-        let base64: String = match ::crypto::to_base64(self.data()) {
+        let base64: String = match crate::crypto::to_base64(self.data()) {
             Ok(x) => x,
             Err(e) => return Err(ser::Error::custom(format!("Key.serialize() -- error converting to base64: {}", e))),
         };
@@ -72,7 +72,7 @@ impl<'de> de::Deserialize<'de> for Key {
     {
         de::Deserialize::deserialize(deserializer)
             .and_then(|x| {
-                match ::crypto::from_base64(&x) {
+                match crate::crypto::from_base64(&x) {
                     Ok(x) => Ok(Key::new(x)),
                     Err(_) => return Err(de::Error::invalid_value(de::Unexpected::Str(&x.as_str()), &"Key.deserialize() -- invalid base64")),
                 }
@@ -83,7 +83,7 @@ impl<'de> de::Deserialize<'de> for Key {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi;
+    use jedi;
 
     #[test]
     fn openparen_de_closeparen_serializes() {

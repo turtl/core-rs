@@ -4,11 +4,12 @@
 //! This module is essentially the window into the app, essentially acting as an
 //! event bus to/from our remote sender (generally, this is a UI of some sort).
 
-use ::carrier;
-use ::jedi::{self, Value, Serialize};
-use ::util;
-use ::config;
-use ::error::{TResult, TError};
+use log::{trace, info, error};
+use carrier;
+use jedi::{self, Value, Serialize};
+use crate::util;
+use config;
+use crate::error::{TResult, TError};
 
 /// Defines a container for sending responses to the client. We could use a hash
 /// table, but then the elements might serialize out of order. This allows us to
@@ -19,7 +20,7 @@ use ::error::{TResult, TError};
 /// any supporting data (the error that occurred, or the data we requested).
 ///
 /// NOTE: this is mainly used by the `Turtl` object
-#[derive(Serialize)]
+#[derive(serde_derive::Serialize)]
 #[serde(rename = "res")]
 pub struct Response {
     /// The message id
@@ -45,7 +46,7 @@ impl Response {
 
 /// Defines a container for sending events to the client. See the `Response`
 /// object for notes.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug)]
 #[serde(rename = "ev")]
 pub struct Event {
     /// Our event's name
@@ -165,11 +166,11 @@ impl Messenger {
 
 /// Defines our callback type for the messaging system.
 ///
-/// NOTE!! I'd love to just use util::Thunk<&mut Messenger> here, however it
+/// NOTE!! I'd love to just use crate::util::Thunk<&mut Messenger> here, however it
 /// bitches about lifetimes and lifetimes are so horribly infectious that I
 /// can't justify rewriting a bunch of shit to satisfy it.
 pub trait MsgThunk: Send + 'static {
-    fn call_box(self: Box<Self>, &mut Messenger);
+    fn call_box(self: Box<Self>, msg: &mut Messenger);
 }
 impl<F: FnOnce(&mut Messenger) + Send + 'static> MsgThunk for F {
     fn call_box(self: Box<Self>, messenger: &mut Messenger) {
@@ -240,7 +241,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use ::error::TError;
+    use crate::error::TError;
 
     /// given a thread-safe bool, return a copy of the bool
     fn grab_locked_bool(val: &Arc<Mutex<bool>>) -> bool {

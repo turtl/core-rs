@@ -9,7 +9,7 @@ macro_rules! with_db {
                     $( $rest )*
                 }
                 None => {
-                    return TErr!(::error::TError::MissingField(format!("{}", stringify!($dbobj))));
+                    return TErr!(crate::error::TError::MissingField(format!("{}", stringify!($dbobj))));
                 }
             }
         }

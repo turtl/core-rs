@@ -1,4 +1,5 @@
-use ::std::error::Error;
+use std::error::Error;
+use quick_error::quick_error;
 
 quick_error! {
     /// Define a type for cryptography errors.
@@ -40,8 +41,8 @@ macro_rules! make_boxed_err {
         }
     }
 }
-make_boxed_err!(::hex::FromHexError);
-make_boxed_err!(::base64::DecodeError);
+make_boxed_err!(hex::FromHexError);
+make_boxed_err!(base64::DecodeError);
 
 pub type CResult<T> = Result<T, CryptoError>;
 

@@ -20,14 +20,15 @@
 //! models so they don't go around spraying their private fields into debug
 //! logs.
 
-use ::std::fmt;
-use ::futures::{self, future};
-use ::jedi::{self, Value, Map as JsonMap};
-use ::error::{TResult, TError, TFutureResult};
-use ::turtl::Turtl;
-use ::models::model::Model;
-use ::crypto::{self, Key, CryptoOp};
-use ::models::keychain::{KeyRef, Keychain};
+use std::fmt;
+use log::{debug, warn, error};
+use futures::{future, Future};
+use jedi::{self, Value, Map as JsonMap};
+use crate::error::{TResult, TError, TFutureResult};
+use crate::turtl::Turtl;
+use crate::models::model::Model;
+use crate::crypto::{self, Key, CryptoOp};
+use crate::models::keychain::{KeyRef, Keychain};
 
 // -----------------------------------------------------------------------------
 // NOTE: [encrypt|decrypt]_key() do not use async crypto.
@@ -388,14 +389,14 @@ macro_rules! protected {
     ) => {
         model! {
             $(#[$struct_meta])*
-            #[derive(Protected)]
+            #[derive(protected_derive::Protected)]
             pub struct $name {
                 #[serde(skip)]
-                _key: Option<::crypto::Key>,
+                _key: Option<crate::crypto::Key>,
 
                 #[serde(skip_serializing_if = "Option::is_none")]
                 #[protected_field(public)]
-                keys: Option<Vec<::models::keychain::KeyRef<String>>>,
+                keys: Option<Vec<crate::models::keychain::KeyRef<String>>>,
                 #[protected_field(public)]
                 body: Option<String>, 
 
@@ -408,14 +409,14 @@ macro_rules! protected {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::jedi;
-    use ::crypto::{self, Key};
-    use ::models::model::Model;
-    use ::models::keychain::{KeyRef, KeyType};
-    use ::models::note::Note;
+    use jedi;
+    use crate::crypto::{self, Key};
+    use crate::models::model::Model;
+    use crate::models::keychain::{KeyRef, KeyType};
+    use crate::models::note::Note;
 
     protected! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct Dog {
             #[serde(skip)]
             pub active: bool,
@@ -434,7 +435,7 @@ mod tests {
     }
 
     protected! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct Junkyard {
             #[protected_field(public)]
             pub name: Option<String>,
@@ -446,7 +447,7 @@ mod tests {
     }
 
     protected! {
-        #[derive(Serialize, Deserialize)]
+        #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
         pub struct RequiredLol {
             #[protected_field(public)]
             pub space_id: String,

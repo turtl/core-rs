@@ -5,24 +5,26 @@
 //! data from the API and it's a note, we pass it through the NoteSync object
 //! which handles saving to the local disk.
 
-use ::error::{TError, TResult};
-use ::storage::Storage;
-use ::models::model::Model;
-use ::models::protected::{Protected, Keyfinder};
-use ::models::keychain;
-use ::models::sync_record::{SyncType, SyncAction, SyncRecord};
-use ::models::storable::Storable;
-use ::models::validate::Validate;
-use ::models::space::Space;
-use ::models::board::Board;
-use ::models::note::Note;
-use ::models::file::FileData;
-use ::lib_permissions::Permission;
-use ::jedi::{self, Value};
-use ::turtl::Turtl;
-use ::std::mem;
-use ::time;
-use ::messaging;
+use serde_json::json;
+use log::{debug};
+use crate::error::{TError, TResult};
+use crate::storage::Storage;
+use crate::models::model::Model;
+use crate::models::protected::{Protected, Keyfinder};
+use crate::models::keychain;
+use crate::models::sync_record::{SyncType, SyncAction, SyncRecord};
+use crate::models::storable::Storable;
+use crate::models::validate::Validate;
+use crate::models::space::Space;
+use crate::models::board::Board;
+use crate::models::note::Note;
+use crate::models::file::FileData;
+use lib_permissions::Permission;
+use jedi::{self, Value};
+use crate::turtl::Turtl;
+use std::mem;
+use time;
+use crate::messaging;
 
 pub trait SyncModel: Protected + Storable + Keyfinder + Sync + Send + 'static {
     /// Allows a model to handle an incoming sync item for its type.

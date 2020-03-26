@@ -1,44 +1,41 @@
 #![recursion_limit = "512"]
 
-extern crate proc_macro;
-#[macro_use]
-extern crate quote;
-extern crate syn;
-
+use proc_macro2::TokenStream;
 use std::collections::HashMap;
-use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
 
 #[proc_macro_derive(Protected, attributes(protected_modeltype, protected_field))]
-pub fn protected(input: TokenStream) -> TokenStream {
-    let s = input.to_string();
-
-    let ast = syn::parse_derive_input(&s).expect("protected_derive::protected() -- failed to parse tokens or something");
-    let gen = impl_protected(&ast);
-    gen.parse().expect("protected_derive::protected() -- failed to parse")
+pub fn protected(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    impl_protected(&input).into()
 }
 
 /// Find all fields that have a serde(rename = ...) attribute and add them into
 /// a original -> renamed hash.
-fn field_map(body: &syn::Body, attr_type: &str, attr_name: &str) -> HashMap<String, String> {
+fn field_map(body: &syn::Data, attr_type: &str, attr_name: &str) -> HashMap<String, String> {
     let mut map: HashMap<String, String> = HashMap::new();
     match body {
-        &syn::Body::Struct(ref data) => {
-            for field in data.fields() {
+        &syn::Data::Struct(ref data) => {
+            for field in &data.fields {
                 for attr in &field.attrs {
-                    match attr.value {
-                        syn::MetaItem::List(ref id, ref nested) => {
-                            // [MetaItem(NameValue(Ident("rename"), Str("mod", Cooked)))]
-                            if id.as_ref() == attr_type {
-                                for meta in nested {
+                    let meta = match attr.parse_meta() {
+                        Ok(x) => x,
+                        Err(_) => continue,
+                    };
+                    match meta {
+                        syn::Meta::List(syn::MetaList { path: ref id, ref nested, .. }) => {
+                            if id.is_ident(attr_type) {
+                                for meta in nested.iter() {
                                     match meta {
-                                        &syn::NestedMetaItem::MetaItem(ref meta) => {
+                                        &syn::NestedMeta::Meta(ref meta) => {
                                             match meta {
-                                                &syn::MetaItem::NameValue(ref ident, ref lit) => {
-                                                    if ident.as_ref() == attr_name {
+                                                &syn::Meta::NameValue(syn::MetaNameValue { path: ref ident, ref lit, .. }) => {
+                                                    if ident.is_ident(attr_name) {
                                                         match lit {
-                                                            &syn::Lit::Str(ref renamed_field, ref _style) => {
-                                                                let field_str = String::from(field.ident.as_ref().expect("protected_derive::field_map() -- failed to grab field").as_ref());
-                                                                map.insert(field_str, renamed_field.clone());
+                                                            &syn::Lit::Str(ref renamed_field) => {
+                                                                let field_str = field.ident.clone().unwrap().to_string();
+                                                                map.insert(field_str, renamed_field.value());
                                                             },
                                                             _ => {},
                                                         }
@@ -64,13 +61,13 @@ fn field_map(body: &syn::Body, attr_type: &str, attr_name: &str) -> HashMap<Stri
 
 /// Find all fields that have a serde(rename = ...) attribute and add them into
 /// a original -> renamed hash.
-fn find_rename_fields(body: &syn::Body) -> HashMap<String, String> {
+fn find_rename_fields(body: &syn::Data) -> HashMap<String, String> {
     field_map(body, "serde", "rename")
 }
 
 /// Find all fields that have a serde(with = ...) attribute and add them into
 /// a field -> converter hash.
-fn find_convert_fields(body: &syn::Body) -> HashMap<String, String> {
+fn find_convert_fields(body: &syn::Data) -> HashMap<String, String> {
     field_map(body, "serde", "with")
 }
 
@@ -79,7 +76,7 @@ fn find_convert_fields(body: &syn::Body) -> HashMap<String, String> {
 fn match_rename_fields(map: &HashMap<String, String>, fields: Vec<&syn::Ident>) -> Vec<String> {
     fields.into_iter()
         .map(|x| {
-            let field_str: String = String::from(x.clone().as_ref());
+            let field_str: String = x.to_string();
             let matched: String = match map.get(&field_str) {
                 Some(renamed) => renamed.clone(),
                 None => field_str,
@@ -93,25 +90,28 @@ fn match_rename_fields(map: &HashMap<String, String>, fields: Vec<&syn::Ident>) 
 ///   #[protected_field(...)]
 /// meta item and match the given field type (probably either "public",
 /// "private", or "submodel").
-fn find_protected_fields<'a>(body: &'a syn::Body, field_type: &str, restrict: bool) -> Vec<&'a syn::Ident> {
+fn find_protected_fields<'a>(body: &'a syn::Data, field_type: &str, restrict: bool) -> Vec<&'a syn::Ident> {
     match body {
-        &syn::Body::Struct(ref data) => {
-            data.fields()
-                .into_iter()
+        &syn::Data::Struct(ref data) => {
+            data.fields
+                .iter()
                 .filter(|ref x| {
                     let mut is_pub = false;
-                    // [Attribute { style: Outer, value: List(Ident("protected_field"), [MetaItem(Word(Ident("public")))]), is_sugared_doc: false }
                     for attr in &x.attrs {
-                        match attr.value {
-                            syn::MetaItem::List(ref id, ref nested) => {
-                                if id.as_ref() == "protected_field" {
+                        let meta = match attr.parse_meta() {
+                            Ok(x) => x,
+                            Err(_) => continue,
+                        };
+                        match meta {
+                            syn::Meta::List(syn::MetaList { path: ref id, ref nested, .. }) => {
+                                if id.is_ident("protected_field") {
                                     if !restrict || (restrict && nested.len() <= 1) {
                                         for meta in nested {
                                             match meta {
-                                                &syn::NestedMetaItem::MetaItem(ref submeta) => {
+                                                &syn::NestedMeta::Meta(ref submeta) => {
                                                     match submeta {
-                                                        &syn::MetaItem::Word(ref subident) => {
-                                                            if subident.as_ref() == field_type {
+                                                        &syn::Meta::Path(ref subident) => {
+                                                            if subident.is_ident(field_type) {
                                                                 is_pub = true;
                                                             }
                                                         },
@@ -136,26 +136,22 @@ fn find_protected_fields<'a>(body: &'a syn::Body, field_type: &str, restrict: bo
     }
 }
 
-fn get_struct_modeltype(attrs: &Vec<::syn::Attribute>) -> Option<String> {
-    // [Attribute {
-    //      style: Outer,
-    //      value: List(
-    //        Ident("protected_modeltype"),
-    //        [MetaItem(Word(Ident("keychain")))]
-    //      ),
-    //      is_sugared_doc: false
-    // }]
+fn get_struct_modeltype(attrs: &Vec<syn::Attribute>) -> Option<String> {
     let mut modeltype = None;
     for attr in attrs {
-        match attr.value {
-            ::syn::MetaItem::List(ref id, ref nested) => {
-                if id.as_ref() == "protected_modeltype" {
+        let meta = match attr.parse_meta() {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        match meta {
+            syn::Meta::List(syn::MetaList { path: ref id, ref nested, .. }) => {
+                if id.is_ident("protected_modeltype") {
                     for meta in nested {
                         match meta {
-                            &syn::NestedMetaItem::MetaItem(ref meta) => {
+                            &syn::NestedMeta::Meta(ref meta) => {
                                 match meta {
-                                    &syn::MetaItem::Word(ref ident) => {
-                                        modeltype = Some(String::from(ident.as_ref()));
+                                    &syn::Meta::Path(ref ident) => {
+                                        modeltype = Some(ident.get_ident().unwrap().to_string());
                                     }
                                     _ => {}
                                 }
@@ -171,22 +167,22 @@ fn get_struct_modeltype(attrs: &Vec<::syn::Attribute>) -> Option<String> {
     modeltype
 }
 
-fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
+fn impl_protected(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let modeltype = get_struct_modeltype(&ast.attrs);
-    let rename_field_map = find_rename_fields(&ast.body);
-    let convert_field_map = find_convert_fields(&ast.body);
-    let public_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.body, "public", false);
-    let public_fields_only: Vec<&syn::Ident> = find_protected_fields(&ast.body, "public", true);
+    let rename_field_map = find_rename_fields(&ast.data);
+    let convert_field_map = find_convert_fields(&ast.data);
+    let public_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.data, "public", false);
+    let public_fields_only: Vec<&syn::Ident> = find_protected_fields(&ast.data, "public", true);
     let public_fields_only2 = public_fields_only.clone();
     let public_fields_rename1 = match_rename_fields(&rename_field_map, public_fields1.clone());
     let public_only_fields_rename2 = match_rename_fields(&rename_field_map, public_fields_only);
-    let private_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.body, "private", false);
-    let private_fields_only: Vec<&syn::Ident> = find_protected_fields(&ast.body, "private", true);
+    let private_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.data, "private", false);
+    let private_fields_only: Vec<&syn::Ident> = find_protected_fields(&ast.data, "private", true);
     let private_fields_only2 = private_fields_only.clone();
     let private_fields_rename1 = match_rename_fields(&rename_field_map, private_fields1.clone());
     let private_only_fields_rename2 = match_rename_fields(&rename_field_map, private_fields_only);
-    let submodel_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.body, "submodel", false);
+    let submodel_fields1: Vec<&syn::Ident> = find_protected_fields(&ast.data, "submodel", false);
     let submodel_fields2 = submodel_fields1.clone();
     let submodel_fields3 = submodel_fields1.clone();
     let submodel_fields4 = submodel_fields1.clone();
@@ -198,14 +194,14 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
     let submodel_fields_rename1 = match_rename_fields(&rename_field_map, submodel_fields1.clone());
     let submodel_fields_rename2 = match_rename_fields(&rename_field_map, submodel_fields1.clone());
 
-    let des_mapper = |field: &syn::Ident| -> quote::Tokens {
-        let field_name = String::from(field.as_ref());
+    let des_mapper = |field: &syn::Ident| -> TokenStream {
+        let field_name = field.to_string();
         let field_none = field.clone();
         match convert_field_map.get(&field_name) {
-            Some(x) => {
-                let converter_mod: syn::Ident = From::from(x.clone());
+            Some(field_fn) => {
+                let path: syn::ExprPath = syn::parse_str(&field_fn).expect("protected_derive::impl_protected() -- error parsing path");
                 quote! {
-                    let converted = #converter_mod::from_value(x)?;
+                    let converted = #path::from_value(x)?;
                     if converted.is_some() {
                         self.#field = converted.expect("protected_derive::impl_protected() -- failed to grab converted");
                     };
@@ -213,7 +209,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
             },
             None => {
                 quote! {
-                    self.#field_none = ::jedi::from_val(x).map_err(|e| toterr!(e))?;
+                    self.#field_none = jedi::from_val(x).map_err(|e| toterr!(e))?;
                 }
             }
         }
@@ -234,9 +230,9 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
         .into_iter()
         .map(&des_mapper)
         .collect();
-    quote! {
-        impl ::std::fmt::Debug for #name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    let gen = quote! {
+        impl std::fmt::Debug for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 let fakeid = String::from("<no id>");
                 let id = match self.id() {
                     Some(x) => x,
@@ -247,18 +243,18 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
         }
 
         impl Protected for #name {
-            fn key<'a>(&'a self) -> Option<&'a ::crypto::Key> {
+            fn key<'a>(&'a self) -> Option<&'a crate::crypto::Key> {
                 self._key.as_ref()
             }
 
-            fn key_or_else(&self) -> ::error::TResult<::crypto::Key> {
+            fn key_or_else(&self) -> crate::error::TResult<crate::crypto::Key> {
                 match self.key() {
                     Some(x) => Ok(x.clone()),
-                    None => TErr!(::error::TError::MissingField(format!("{}.key", stringify!(#name)))),
+                    None => TErr!(crate::error::TError::MissingField(format!("{}.key", stringify!(#name)))),
                 }
             }
 
-            fn set_key(&mut self, key: Option<::crypto::Key>) {
+            fn set_key(&mut self, key: Option<crate::crypto::Key>) {
                 self._key = key;
                 self._set_key_on_submodels();
             }
@@ -287,18 +283,18 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
             }
 
             #[allow(unused_variables)]  // required in case we have no submodels
-            fn submodel_data(&self, field: &str, private: bool) -> ::error::TResult<::jedi::Value> {
+            fn submodel_data(&self, field: &str, private: bool) -> crate::error::TResult<jedi::Value> {
                 #(
                     if field == stringify!(#submodel_fields2) {
                         match self.#submodel_fields3.as_ref() {
                             Some(ref x) => {
                                 return Ok(x.get_serializable_data(private)?);
                             },
-                            None => return Ok(::jedi::Value::Null),
+                            None => return Ok(jedi::Value::Null),
                         }
                     }
                 )*
-                Err(::error::TError::MissingField(format!("The field {} wasn't found in this model", field)))
+                Err(crate::error::TError::MissingField(format!("The field {} wasn't found in this model", field)))
             }
 
             fn _set_key_on_submodels(&mut self) {
@@ -314,7 +310,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 )*
             }
 
-            fn serialize_submodels(&mut self) -> ::error::TResult<()> {
+            fn serialize_submodels(&mut self) -> crate::error::TResult<()> {
                 #(
                     match self.#submodel_fields5.as_mut() {
                         Some(ref mut x) => {
@@ -326,7 +322,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 Ok(())
             }
 
-            fn deserialize_submodels(&mut self) -> ::error::TResult<()> {
+            fn deserialize_submodels(&mut self) -> crate::error::TResult<()> {
                 #(
                     match self.#submodel_fields6.as_mut() {
                         Some(ref mut x) => {
@@ -340,26 +336,26 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 Ok(())
             }
 
-            fn clone(&self) -> ::error::TResult<Self> {
-                let mut model = Self::clone_from(::jedi::to_val(self).map_err(|e| toterr!(e))?)?;
+            fn clone(&self) -> crate::error::TResult<Self> {
+                let mut model = Self::clone_from(jedi::to_val(self).map_err(|e| toterr!(e))?)?;
                 let key = self.key().map(|x| x.clone());
                 model.set_key(key);
                 Ok(model)
             }
 
-            fn generate_key(&mut self) -> ::error::TResult<&::crypto::Key> {
+            fn generate_key(&mut self) -> crate::error::TResult<&crate::crypto::Key> {
                 if self.key().is_none() {
-                    let key = ::crypto::Key::random()?;
+                    let key = crate::crypto::Key::random()?;
                     self.set_key(Some(key));
                 }
                 Ok(self.key().expect("Protected.generate_key() -- failed to grab self key"))
             }
 
-            fn get_keys<'a>(&'a self) -> Option<&'a Vec<::models::keychain::KeyRef<String>>> {
+            fn get_keys<'a>(&'a self) -> Option<&'a Vec<crate::models::keychain::KeyRef<String>>> {
                 self.keys.as_ref()
             }
 
-            fn set_keys(&mut self, keydata: Vec<::models::keychain::KeyRef<String>>) {
+            fn set_keys(&mut self, keydata: Vec<crate::models::keychain::KeyRef<String>>) {
                 self.keys = Some(keydata);
             }
 
@@ -378,9 +374,9 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 self.body = None;
             }
 
-            fn merge_fields(&mut self, data: &::jedi::Value) -> ::error::TResult<()> {
+            fn merge_fields(&mut self, data: &::jedi::Value) -> crate::error::TResult<()> {
                 #({
-                    match ::jedi::get_opt::<::jedi::Value>(&[#public_only_fields_rename2], data) {
+                    match jedi::get_opt::<jedi::Value>(&[#public_only_fields_rename2], data) {
                         Some(x) => {
                             #public_fields_merge_map
                         },
@@ -388,7 +384,7 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                     }
                 })*
                 #({
-                    match ::jedi::get_opt::<::jedi::Value>(&[#private_only_fields_rename2], data) {
+                    match jedi::get_opt::<jedi::Value>(&[#private_only_fields_rename2], data) {
                         Some(x) => {
                             #private_fields_merge_map
                         },
@@ -396,12 +392,12 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                     }
                 })*
                 #({
-                    match ::jedi::get_opt::<::jedi::Value>(&[#submodel_fields_rename2], data) {
+                    match jedi::get_opt::<jedi::Value>(&[#submodel_fields_rename2], data) {
                         Some(x) => {
                             if self.#submodel_fields7.is_some() {
                                 self.#submodel_fields8.as_mut().expect("Protected.merge_fields() -- failed to grab self field as mut").merge_fields(&x)?;
                             } else {
-                                self.#submodel_fields9 = Some(::jedi::from_val(x).map_err(|e| toterr!(e))?);
+                                self.#submodel_fields9 = Some(jedi::from_val(x).map_err(|e| toterr!(e))?);
                             }
                         },
                         _ => {},
@@ -410,7 +406,8 @@ fn impl_protected(ast: &syn::MacroInput) -> quote::Tokens {
                 Ok(())
             }
         }
-    }
+    };
+    gen.into()
 }
 
 #[cfg(test)]
