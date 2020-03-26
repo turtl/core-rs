@@ -2,8 +2,8 @@
 //! using promises.
 
 use std::marker::Send;
-use futures::{Future, executor::ThreadPool};
-use crate::error::TResult;
+use log::{error};
+use futures::{executor::ThreadPool, StreamExt};
 
 /// Stores state information for a thread we've spawned.
 pub struct Thredder {
@@ -27,30 +27,30 @@ impl Thredder {
         }
     }
 
-    /// Run an operation on this pool, returning the Future to be waited on at
-    /// a later time.
-    pub fn run_async<F, T>(&self, run: F) -> impl Future<Output = TResult<T>>
-        where T: Sync + Send + 'static,
-              F: FnOnce() -> TResult<T> + Send + 'static
-    {
-        let (tx, rx) = futures::channel::mpsc::unbounded::<String>();
-        let op_fut = async move {
-            let res = run();
-            tx.unbounded_send(res).expect("Thredder::run_async() -- bad send");
-        };
-        self.pool.spawn_ok(op_fut);
-        async {
-            let res = rx.collect().await;
-            res[0]
-        }
+    pub fn pool(&self) -> &ThreadPool {
+        &self.pool
     }
 
     /// Run an operation on this pool
-    pub fn run<F, T>(&self, run: F) -> TResult<T>
+    pub fn run<F, T>(&self, run: F) -> T
         where T: Sync + Send + 'static,
-              F: FnOnce() -> TResult<T> + Send + 'static
+              F: FnOnce() -> T + Send + 'static
     {
-        self.pool.spawn_fn(run).wait()
+        let (tx, mut rx) = futures::channel::mpsc::unbounded::<T>();
+        let op_fut = async move {
+            let res: T = run();
+            match tx.unbounded_send(res) {
+                Ok(_) => {}
+                Err(e) => error!("Thredder.run() -- error sending result back to caller: {:?}", e),
+            };
+        };
+        self.pool.spawn_ok(op_fut);
+        let res_future = async move {
+            let res: Option<T> = rx.next().await;
+            res.unwrap()
+        };
+        let res: T = futures::executor::block_on(res_future);
+        res
     }
 }
 

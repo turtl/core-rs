@@ -218,7 +218,7 @@ impl FileData {
         };
 
         // decrypt the file using the turtl standard serialization format
-        let data = turtl.work.run(move || {
+        let data = turtl.work.run(move || -> TResult<Vec<u8>> {
             crypto::decrypt(&note_key, enc)
                 .map_err(|e| From::from(e))
         })?;
@@ -248,7 +248,7 @@ impl FileData {
         };
 
         // encrypt the file using the turtl standard serialization format
-        let enc = turtl.work.run(move || {
+        let enc = turtl.work.run(move || -> TResult<Vec<u8>> {
             crypto::encrypt(&note_key, data, crypto::CryptoOp::new("chacha20poly1305")?)
                 .map_err(|e| From::from(e))
         })?;

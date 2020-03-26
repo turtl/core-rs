@@ -22,9 +22,9 @@
 
 use std::fmt;
 use log::{debug, warn, error};
-use futures::{future, Future};
 use jedi::{self, Value, Map as JsonMap};
-use crate::error::{TResult, TError, TFutureResult};
+use futures::{StreamExt};
+use crate::error::{TResult, TError};
 use crate::turtl::Turtl;
 use crate::models::model::Model;
 use crate::crypto::{self, Key, CryptoOp};
@@ -61,6 +61,7 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
     // Allows our future to collect a single result type which can then be
     // filtered at the end so we only return models that successfully
     // deserialized
+    #[derive(Debug)]
     enum DeserializeResult<T> {
         Model(T),
         Failed,
@@ -68,30 +69,86 @@ pub fn map_deserialize<T>(turtl: &Turtl, vec: Vec<T>) -> TResult<Vec<T>>
 
     debug!("protected::map_deserialize() -- starting on {} items", vec.len());
     let ref work = turtl.work;
-    let (tx, rx) = futures::channel::mpsc::unbounded::<String>();
-    let decrypt_all_future = async {
-        for mut model in vec {
-            let tx = tx.clone();
-            let fut_res = async {
+
+    let rx_vec = vec.into_iter()
+        .map(|mut model| {
+            let (tx, rx) = futures::channel::mpsc::unbounded::<DeserializeResult<T>>();
+            let fut_res = async move {
                 // don't bother with models that don't have a key...
                 if model.key().is_none() {
                     warn!("map_deserialize: model {:?} has no key", model.id());
-                    tx.unbounded_send(DeserializeResult::Failed).expect("bad send");
+                    match tx.unbounded_send(DeserializeResult::Failed) {
+                        Ok(_) => {}
+                        Err(e) => error!("turtl::protected::map_deserialize() -- error sending deserialization failure (no key) message: {:?}", e),
+                    };
                     return;
                 }
 
                 let res = match model.deserialize() {
-                    Ok(_) => DeserializeResult::Model(model)
-                    Err(e) => DeserializeResult::Failed,
+                    Ok(_) => DeserializeResult::Model(model),
+                    Err(e) => {
+                        let model_type = String::from(model.model_type());
+                        let model_id = model.id().expect("turtl::protected::map_deserialize() -- mode.id() is None").clone();
+                        error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
+                        DeserializeResult::Failed
+                    }
                 };
-                tx.unbounded_send(res).expect("bad send");
+                match tx.unbounded_send(res) {
+                    Ok(_) => {}
+                    Err(e) => error!("turtl::protected::map_deserialize() -- error sending deserialization response: {:?}", e),
+                };
             };
-            work.run_async::<DeserializeResult>(fut_res);
+            work.pool().spawn_ok(fut_res);
+            rx
+        });
+    let result_future = async move {
+        let mut res: Vec<DeserializeResult<T>> = Vec::with_capacity(rx_vec.len());
+        for mut rx in rx_vec {
+            let model: Option<DeserializeResult<T>> = rx.next().await;
+            res.push(model.unwrap());
+        }
+        res
+    };
+    let mapped: Vec<DeserializeResult<T>> = futures::executor::block_on(result_future);
+
+    /*
+    let (tx, rx) = futures::channel::mpsc::unbounded::<DeserializeResult<T>>();
+    let decrypt_all_future = async {
+        for mut model in vec {
+            let tx_inner = tx.clone();
+            let fut_res = async move {
+                // don't bother with models that don't have a key...
+                if model.key().is_none() {
+                    warn!("map_deserialize: model {:?} has no key", model.id());
+                    match tx_inner.unbounded_send(DeserializeResult::Failed) {
+                        Ok(_) => {}
+                        Err(e) => error!("turtl::protected::map_deserialize() -- error sending deserialization failure (no key) message: {:?}", e),
+                    };
+                    return;
+                }
+
+                let res = match model.deserialize() {
+                    Ok(_) => DeserializeResult::Model(model),
+                    Err(e) => {
+                        let model_type = String::from(model.model_type());
+                        let model_id = model.id().expect("turtl::protected::map_deserialize() -- mode.id() is None").clone();
+                        error!("protected::map_deserialize() -- error deserializing {} model ({:?}): {}", model_type, model_id, e);
+                        DeserializeResult::Failed
+                    }
+                };
+                match tx_inner.unbounded_send(res) {
+                    Ok(_) => {}
+                    Err(e) => error!("turtl::protected::map_deserialize() -- error sending deserialization response: {:?}", e),
+                };
+            };
+            work.pool().spawn_ok(fut_res);
         }
         drop(tx);
-        rx.collect().await
+        rx.map(|x| x).collect().await
     };
-    let mapped: Vec<DeserializeResult> = futures::executor::block_on(decrypt_all_future);
+    let mapped: Vec<DeserializeResult<T>> = futures::executor::block_on(decrypt_all_future);
+    */
+
     // only return the models that succeeded deserialization, preserving
     // the order.
     // TODO: benchmark if using an iterator is faster here

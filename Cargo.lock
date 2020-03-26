@@ -766,8 +766,8 @@ checksum = "9a5081aa3de1f7542a794a397cde100ed903b0630152d0973479018fd85423a7"
 dependencies = [
  "proc-macro-hack",
  "proc-macro2",
- "quote 1.0.3",
- "syn 1.0.16",
+ "quote",
+ "syn",
 ]
 
 [[package]]

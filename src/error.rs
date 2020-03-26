@@ -301,7 +301,6 @@ from_err!(log::SetLoggerError);
 from_err!(url::ParseError);
 
 pub type TResult<T> = Result<T, TError>;
-pub type TFutureResult<T> = Box<dyn (futures::Future<Output = TResult<T>>) + Send>;
 
 /// A helper to make reporting errors easier
 #[macro_export]
@@ -312,33 +311,6 @@ macro_rules! try_or {
             Err($sym) => {
                 $err;
             },
-        }
-    }
-}
-
-/// Like Ok, but for boxed futures (goes great with TFutureResult)
-#[macro_export]
-macro_rules! FOk {
-    ($ex:expr) => {
-        Box::new(futures::future::ok($ex))
-    }
-}
-
-/// Like Err, but for boxed futures (goes great with TFutureResult)
-#[macro_export]
-macro_rules! FErr {
-    ($ex:expr) => {
-        Box::new(futures::future::err(From::from($ex)))
-    }
-}
-
-/// A helper to make trying stuff in futures easier
-#[macro_export]
-macro_rules! ftry {
-    ($ex:expr) => {
-        match $ex {
-            Ok(x) => x,
-            Err(e) => return FErr!(e),
         }
     }
 }
