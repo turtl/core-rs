@@ -3,8 +3,12 @@ name = "clippo"
 version = "0.1.0"
 authors = ["Andrew Danger Lyon <orthecreedence@gmail.com>"]
 
+[features]
+wasm = []
+
 [dependencies]
 fern = "0.5.5"
+futures = { version = "0.3.4", features = ["thread-pool"] }
 jedi = { path = "../jedi" }
 lazy_static = "1.4.0"
 log = "0.4.1"

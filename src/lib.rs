@@ -30,6 +30,9 @@ use crate::error::TResult;
 #[cfg(not(feature = "wasm"))]
 use fs2::FileExt;
 
+#[cfg(feature = "wasm")]
+pub fn main() { }
+
 /// Init any state/logging/etc the app needs
 pub fn init(config_str: String) -> TResult<()> {
     log_panics::init();

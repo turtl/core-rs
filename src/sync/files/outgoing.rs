@@ -1,4 +1,5 @@
 use std::sync::{Arc, RwLock, Mutex};
+use std::io::Read;
 use log::{info, warn, error};
 use serde_json::json;
 use crate::sync::{SyncConfig, Syncer};
@@ -93,12 +94,14 @@ impl FileSyncOutgoing {
             info!("FileSyncOutgoing.upload_file() -- syncing file {:?}", file);
             // open our local file. we should test if it's readable/exists
             // before making API calls
-            let file = fs::File::open(&file)?;
+            let mut file = fs::File::open(&file)?;
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents)?;
             // start our API call to the note file attachment endpoint
             let url = format!("/notes/{}/attachment", note_id);
             self.api.put(&url[..])?
                 .header("Content-Type", "application/octet-stream")
-                .body(file)
+                .body(contents)
                 .call_opt(ApiReq::new().timeout(60))
                 .map_err(|x| From::from(x))
         };

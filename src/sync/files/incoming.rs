@@ -1,5 +1,4 @@
 use std::sync::{Arc, RwLock, Mutex};
-use std::io::{Read, Write};
 use log::{info};
 use serde_json::json;
 use crate::sync::{SyncConfig, Syncer};
@@ -92,19 +91,7 @@ impl FileSyncIncoming {
             let file_url: String = self.api.get(&url[..])?.call()?;
             info!("FileSyncIncoming.download_file() -- grabbing file at URL {}", file_url);
 
-            let mut res = self.api.download_file(&file_url)?;
-            // start streaming our API call into the file 4K at a time
-            let mut buf = [0; 4096];
-            loop {
-                let read = res.read(&mut buf[..])?;
-                // all done! (EOF)
-                if read <= 0 { break; }
-                let (read_bytes, _) = buf.split_at(read);
-                let written = file.write(read_bytes)?;
-                if read != written {
-                    return Err(TError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
-                }
-            }
+            self.api.download_file(&file_url, &mut file)?;
             Ok(())
         };
 

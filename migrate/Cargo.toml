@@ -10,6 +10,7 @@ doctest = false				# these annoy me
 
 [features]
 panic-on-error = []
+wasm = []
 
 [dependencies]
 aes_frast = "0.1.5"
@@ -18,6 +19,7 @@ base64 = "0.12.0"
 config = { path = "../config" }
 encoding_rs = "0.8.6"
 fern = "0.5.5"
+futures = { version = "0.3.4", features = ["thread-pool"] }
 hex = "0.4.2"
 hmac = "0.7.1"
 jedi = { path = "../jedi" }

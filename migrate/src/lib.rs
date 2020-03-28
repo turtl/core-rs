@@ -98,16 +98,7 @@ fn download_file(note_id: &String, api: &Api, tries: u8) -> MResult<Vec<u8>> {
         }
     };
     info!("migrate::download_file() -- grabbing file {}", url);
-    let res = api.download_file(&url)
-        .and_then(|mut res| {
-            let mut out = Vec::new();
-            res.read_to_end(&mut out)?;
-            if !res.status().is_success() {
-                let errmsg = String::from_utf8(out)?;
-                return Err(MError::Api(res.status(), errmsg));
-            }
-            Ok(out)
-        });
+    let res = api.download_file(&url);
     match res {
         Ok(x) => Ok(x),
         Err(e) => {

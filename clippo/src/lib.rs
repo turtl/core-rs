@@ -1,4 +1,5 @@
 extern crate fern;
+extern crate futures;
 extern crate jedi;
 #[macro_use]
 extern crate lazy_static;
@@ -20,13 +21,25 @@ pub mod error;
 use ::error::{CResult, CError};
 use ::std::env;
 use ::std::io::Read;
-use ::url::Url;
 use ::scraper::{Html, Selector};
 use ::regex::Regex;
 use ::std::path::PathBuf;
 use ::std::fs::File;
 use ::std::borrow::Cow;
 use ::jedi::Value;
+#[cfg(not(feature = "wasm"))]
+use ::reqwest::{
+    Method,
+    Url,
+    Proxy,
+    blocking::Client,
+};
+#[cfg(feature = "wasm")]
+use ::reqwest::{
+    Method,
+    Url,
+    Client,
+};
 
 lazy_static! {
     /// Load our built-in set of custom parsers
@@ -64,6 +77,18 @@ lazy_static! {
             }
         }
     };
+}
+
+#[cfg(not(feature = "wasm"))]
+fn blocker<T>(val: T) -> T {
+    val
+}
+
+#[cfg(feature = "wasm")]
+fn blocker<F, T>(val: F) -> T
+    where F: futures::Future<Output = T>
+{
+    futures::executor::block_on(val)
 }
 
 /// A struct used to tell the bookmarker how to find various pieces of info
@@ -116,26 +141,34 @@ impl ClipResult {
 
 /// Convert a URL to HTML
 fn grab_url(url: &String, proxy: Option<String>) -> CResult<String> {
-    let mut client_builder = reqwest::blocking::Client::builder();
-    if let Some(proxy_cfg) = proxy {
-        client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
-    }
+    #[cfg(not(feature = "wasm"))]
+    let client_builder = {
+        let mut builder = Client::builder();
+        if let Some(proxy_cfg) = proxy {
+            builder = builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+        }
+        builder
+    };
+    #[cfg(feature = "wasm")]
+    let client_builder = Client::builder();
     let client = client_builder.build()?;
-    let req = client.request(reqwest::Method::GET, reqwest::Url::parse(url.as_str())?)
+    let req = client.request(Method::GET, Url::parse(url.as_str())?)
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:54.0) Gecko/20100101 Firefox/54.0")
         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
         .header("Accept-Language", "en-US,en;q=0.5")
         //.header("Accept-Encoding", "")
-        .header("Cache-Control", "max-age=0")
-        .build()?;
-    let html = client.execute(req)
+        .header("Cache-Control", "max-age=0");
+    #[cfg(not(feature = "wasm"))]
+    let res = client.execute(req.build()?);
+    #[cfg(feature = "wasm")]
+    let res = blocker(req.send());
+    let html = res
         .map_err(|e| { From::from(e) })
-        .and_then(|mut res| {
-            let mut out = String::new();
-            let str_res = res.read_to_string(&mut out)
-                .map_err(|e| From::from(e))
-                .and_then(move |_| Ok(out));
-            if !res.status().is_success() {
+        .and_then(|res| {
+            let status = res.status();
+            let str_res = blocker(res.text())
+                .map_err(|e| From::from(e));
+            if !status.is_success() {
                 let errstr = match str_res {
                     Ok(x) => x,
                     Err(e) => {
@@ -143,7 +176,7 @@ fn grab_url(url: &String, proxy: Option<String>) -> CResult<String> {
                         String::from("<unknown>")
                     }
                 };
-                return Err(CError::Http(res.status(), errstr));
+                return Err(CError::Http(status, errstr));
             }
             str_res.map(move |x| x)
         })?;
@@ -352,7 +385,7 @@ mod tests {
     #[test]
     fn clips_stuff() {
         let res = clip(&String::from("https://www.amazon.com/Avoid-Huge-Ships-John-Trimmer/dp/0870334336/ref=pd_lpo_sbs_241_img_2?_encoding=UTF8&psc=1&refRID=SZKJN64CTAYQ44WPNN09"), &vec![], None).unwrap();
-        assert_eq!(res.title, Some(String::from("How to Avoid Huge Ships: John W. Trimmer: 9780870334337: Amazon.com: Books")));
+        assert_eq!(res.title, Some(String::from("How to Avoid Huge Ships: Trimmer, John W.: 9780870334337: Amazon.com: Books")));
         assert_eq!(res.description, Some(String::from("Book by Trimmer, John W.")));
         //assert_eq!(res.image_url, Some(String::from("https://images-na.ssl-images-amazon.com/images/I/714PH4X5FRL._SY344_BO1,204,203,200_.gif")));
 

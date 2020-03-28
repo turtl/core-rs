@@ -13,7 +13,8 @@
 //!
 //! Also note that a goal of this module is to only wrap *one* underlying crypto
 //! lib, but thanks to various issues with PBKDF2 (which MUST be supported for
-//! backwards compat), it currently uses rust-crypto.
+//! backwards compat), it currently uses an amalgamation of a bunch of different
+//! crates because I couldn't find just one that did Everything.
 
 use ::std::error::Error;
 
@@ -222,8 +223,7 @@ pub fn rand_float() -> CResult<f64> {
     Ok((rand_int()? as f64) / (::std::u64::MAX as f64))
 }
 
-/// Generate a key from a password/salt using PBKDF2/SHA256. This uses
-/// rust-crypto.
+/// Generate a key from a password/salt using PBKDF2/SHA256.
 pub fn pbkdf2(hasher: Hasher, pass: &[u8], salt: &[u8], iter: usize, keylen: usize) -> CResult<Vec<u8>> {
     let mut result: Vec<u8> = vec![0; keylen];
     match hasher {

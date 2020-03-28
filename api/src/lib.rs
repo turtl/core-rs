@@ -4,13 +4,448 @@
 #[macro_use]
 mod util;
 
+use std::sync::{RwLock, Mutex};
+use std::error::Error;
+use std::io::{Read, Write, Error as IoError};
+use std::time::Duration;
+use std::collections::HashMap;
+use std::fs::File;
+use log::{debug, error, info, trace, warn};
+use lazy_static::lazy_static;
+use quick_error::quick_error;
+use jedi::{Value, DeserializeOwned, Serialize};
+#[cfg(not(feature = "wasm"))]
+use reqwest::{
+    blocking::{
+        Body,
+        RequestBuilder,
+        Client,
+    },
+    Url,
+    Proxy
+};
 #[cfg(feature = "wasm")]
-mod api_wasm;
-#[cfg(feature = "wasm")]
-pub use api_wasm::*;
+use reqwest::{
+    Body,
+    RequestBuilder,
+    Client,
+    Url,
+};
+pub use reqwest::{self, Method, StatusCode};
+use serde_json::json;
+
+/// Pull out our crate version to send to the api
+const CORE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum APIError {
+        Boxed(err: Box<dyn Error + Send + Sync>) {
+            description(err.description())
+            display("json: error: {}", format!("{}", err))
+        }
+        Io(err: IoError) {
+            cause(err)
+            description("io error")
+            display("{}", format!("{}", err))
+        }
+        Api(status: StatusCode, msg: Value) {
+            description("API error")
+            display("{}", json!({"type": "api", "subtype": status.canonical_reason().unwrap_or("unknown"), "message": msg}))
+        }
+        Msg(msg: String) {
+            description(msg)
+            display("{}", msg)
+        }
+    }
+}
+
+pub type AResult<T> = Result<T, APIError>;
+
+impl From<IoError> for APIError {
+    fn from(err: IoError) -> APIError {
+        APIError::Io(err)
+    }
+}
+
+/// A macro to make it easy to create From impls for APIError
+macro_rules! from_err {
+    ($t:ty) => (
+        impl From<$t> for APIError {
+            fn from(err: $t) -> APIError {
+                APIError::Boxed(Box::new(err))
+            }
+        }
+    )
+}
+
+from_err!(reqwest::Error);
+from_err!(jedi::JSONError);
+from_err!(url::ParseError);
+
+macro_rules! toterr {
+    ($e:expr) => (
+        {
+            let err: APIError = From::from($e);
+            err
+        }
+    )
+}
+lazy_static! {
+    /// A hash table that holds HTTP clients. we used to just create/destroy
+    /// clients on each request, but that exhausts connections so it's better to
+    /// cache the clients and let them use their internal connection pool.
+    static ref CLIENTS: Mutex<HashMap<String, Client>> = Mutex::new(HashMap::new());
+}
 
 #[cfg(not(feature = "wasm"))]
-mod api_reqwest;
-#[cfg(not(feature = "wasm"))]
-pub use api_reqwest::*;
+fn blocker<T>(val: T) -> T {
+    val
+}
+
+#[cfg(feature = "wasm")]
+fn blocker<F, T>(val: F) -> T
+    where F: futures::Future<Output = T>
+{
+    futures::executor::block_on(val)
+}
+
+/// Holds our Api configuration. This consists of any mutable fields the Api
+/// needs to build URLs or make decisions.
+struct ApiConfig {
+    auth: Option<String>,
+}
+
+impl ApiConfig {
+    /// Create a new, blank config
+    fn new() -> ApiConfig {
+        ApiConfig {
+            auth: None,
+        }
+    }
+}
+
+/// A struct used for building API requests
+pub struct ApiReq {
+    timeout: Duration,
+}
+
+impl ApiReq {
+    /// Create a new builder
+    pub fn new() -> Self {
+        ApiReq {
+            timeout: Duration::new(10, 0),
+        }
+    }
+
+    /// Set (override) the timeout for this request
+    pub fn timeout<'a>(mut self, secs: u64) -> Self {
+        self.timeout = Duration::new(secs, 0);
+        self
+    }
+}
+
+/// Wraps calling the Turtl API in an object
+pub struct ApiCaller {
+    req: RequestBuilder,
+}
+
+impl ApiCaller {
+    fn from_req(req: RequestBuilder) -> ApiCaller {
+        ApiCaller { req: req }
+    }
+
+    pub fn header<T: Into<String>>(self, name: &str, val: T) -> Self {
+        ApiCaller::from_req(self.req.header(name, val.into()))
+    }
+
+    pub fn body<T: Into<Body>>(self, body: T) -> Self {
+        ApiCaller::from_req(self.req.body(body))
+    }
+
+    pub fn json<T: Serialize + ?Sized>(self, json: &T) -> Self {
+        ApiCaller::from_req(self.req.json(json))
+    }
+
+    pub fn call<T: DeserializeOwned>(self) -> AResult<T> {
+        self.call_opt_impl(None)
+    }
+
+    pub fn call_opt<T: DeserializeOwned>(self, apireq: ApiReq) -> AResult<T> {
+        self.call_opt_impl(Some(apireq))
+    }
+
+    pub fn call_opt_impl<T: DeserializeOwned>(self, builder_maybe: Option<ApiReq>) -> AResult<T> {
+        #[cfg(not(feature = "wasm"))]
+        let mut cachekey: Vec<String> = Vec::with_capacity(2);
+        #[cfg(not(feature = "wasm"))]
+        let mut client_builder = Client::builder();
+        #[cfg(not(feature = "wasm"))]
+        {
+            if let Some(builder) = builder_maybe {
+                let ApiReq { timeout } = builder;
+                client_builder = client_builder.timeout(timeout);
+                cachekey.push(format!("timeout-{}", timeout.as_secs()));
+            }
+            match config::get::<Option<String>>(&["api", "proxy"]) {
+                Ok(x) => {
+                    if let Some(proxy_cfg) = x {
+                        debug!("api::call() -- req: using proxy: {}", proxy_cfg);
+                        let proxystr = format!("{}", proxy_cfg);
+                        cachekey.push(format!("proxy-{}", proxystr));
+                        client_builder = client_builder.proxy(Proxy::all(proxystr.as_str())?);
+                    }
+                }
+                Err(_) => {}
+            }
+            match config::get::<Option<bool>>(&["api", "allow_invalid_ssl"]) {
+                Ok(x) => {
+                    if let Some(allow_invalid_ssl) = x {
+                        if allow_invalid_ssl {
+                            debug!("api::call() -- req: allow invalid ssl");
+                            cachekey.push(String::from("allow-invalid-ssl"));
+                            client_builder = client_builder.danger_accept_invalid_certs(true);
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        #[cfg(not(feature = "wasm"))]
+        let cachekey_string: String = cachekey.join("///");
+        let ApiCaller { req } = self;
+        #[cfg(not(feature = "wasm"))]
+        let (res, callinfo) = {
+            let client = {
+                let mut client_guard = lock!((*CLIENTS));
+                if !client_guard.contains_key(&cachekey_string) {
+                    let client = client_builder.build()?;
+                    debug!("api::call() -- creating new client with cachekey {}", cachekey_string);
+                    client_guard.insert(cachekey_string.clone(), client);
+                }
+                // notice we clone here...the client lets us clone without messing
+                // up the pooling. very nice!
+                client_guard.get(&cachekey_string).unwrap().clone()
+            };
+            let req_built = req.build()?;
+            let callinfo = CallInfo::new(req_built.method().clone(), String::from(req_built.url().as_str()));
+            let res = client.execute(req_built);
+            (res, callinfo)
+        };
+        #[cfg(feature = "wasm")]
+        let (res, callinfo) = {
+            let callinfo = CallInfo::new(Method::GET, String::from("<wasm-bogus>"));
+            let res = blocker(req.send());
+            (res, callinfo)
+        };
+        debug!("api::call() -- req: {} {}", callinfo.method, callinfo.resource);
+        res
+            .map_err(|e| { toterr!(e) })
+            .and_then(|res| {
+                let status = res.status();
+                let str_res = blocker(res.text())
+                    .map_err(|e| From::from(e));
+                if !status.is_success() {
+                    let errstr = match str_res {
+                        Ok(x) => x,
+                        Err(e) => {
+                            error!("api::call() -- problem grabbing error message: {}", e);
+                            String::from("<unknown>")
+                        }
+                    };
+                    let val = match jedi::parse(&errstr) {
+                        Ok(x) => x,
+                        Err(_) => Value::String(errstr),
+                    };
+                    return Err(APIError::Api(status, val));
+                }
+                str_res.map(move |x| (x, status))
+            })
+            .map(|(out, status)| {
+                info!("api::call() -- res({}): {:?} {} {}", out.len(), status.as_u16(), &callinfo.method, &callinfo.resource);
+                trace!("  api::call() -- body: {}", out);
+                out
+            })
+            .map_err(|err| {
+                debug!("api::call() -- call error: {}", err);
+                err
+            })
+            .and_then(|out| {
+                jedi::parse(&out).map_err(|e| {
+                    warn!("api::call() -- JSON parse error: {}", out);
+                    toterr!(e)
+                })
+            })
+    }
+}
+
+/// Used to store some info we want when we send a response to call_end()
+pub struct CallInfo {
+    method: Method,
+    resource: String,
+}
+
+impl CallInfo {
+    /// Create a new call info object
+    fn new(method: Method, resource: String) -> Self {
+        Self {
+            method: method,
+            resource: resource,
+        }
+    }
+}
+
+/// Our Api object. Responsible for making outbound calls to our Turtl server.
+pub struct Api {
+    config: RwLock<ApiConfig>,
+}
+
+impl Api {
+    /// Create an Api
+    pub fn new() -> Api {
+        Api {
+            config: RwLock::new(ApiConfig::new()),
+        }
+    }
+
+    /// Set the API's authentication
+    pub fn set_auth(&self, username: String, auth: String) -> AResult<()> {
+        let auth_str = format!("{}:{}", username, auth);
+        let base_auth = base64::encode(&Vec::from(auth_str.as_bytes()));
+        let ref mut config_guard = lockw!(self.config);
+        config_guard.auth = Some(String::from("Basic ") + &base_auth);
+        Ok(())
+    }
+
+    /// Clear out the API auth
+    pub fn clear_auth(&self) {
+        let ref mut config_guard = lockw!(self.config);
+        config_guard.auth = None;
+    }
+
+    /// Write our auth headers into a header collection
+    pub fn set_auth_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        let auth = {
+            let ref guard = lockr!(self.config);
+            guard.auth.clone()
+        };
+        match auth {
+            Some(x) => {
+                req.header("Authorization", x)
+            },
+            None => req
+        }
+    }
+
+    /// Set our standard auth header into a Headers set
+    fn set_standard_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        let req = self.set_auth_headers(req);
+        match config::get::<String>(&["api", "client_version_string"]) {
+            Ok(version) => {
+                let header_val = format!("{}/{}", version, CORE_VERSION);
+                req.header("X-Turtl-Client", header_val)
+            }
+            Err(_) => req,
+        }
+    }
+
+    /// Build a full URL given a resource
+    fn build_url(&self, resource: &str) -> AResult<String> {
+        let endpoint = config::get::<String>(&["api", "endpoint"])?;
+        let mut url = String::with_capacity(endpoint.len() + resource.len());
+        url.push_str(endpoint.trim_end_matches('/'));
+        url.push_str(resource);
+        Ok(url)
+    }
+
+    /// Given a method an url, return a Reqwest RequestBuilder
+    pub fn req(&self, method: Method, resource: &str) -> AResult<ApiCaller> {
+        debug!("api::req() -- begin: {} {}", method, resource);
+        let url = self.build_url(resource)?;
+        let req = Client::builder().build()?.request(method, Url::parse(url.as_str())?);
+        trace!("api::req() -- made client, got req: {:?}", req);
+        Ok(ApiCaller::from_req(self.set_standard_headers(req)))
+    }
+
+    /// Convenience function for api.call(GET)
+    pub fn get(&self, resource: &str) -> AResult<ApiCaller> {
+        self.req(Method::GET, resource)
+    }
+
+    /// Convenience function for api.call(POST)
+    pub fn post(&self, resource: &str) -> AResult<ApiCaller> {
+        self.req(Method::POST, resource)
+    }
+
+    /// Convenience function for api.call(PUT)
+    pub fn put(&self, resource: &str) -> AResult<ApiCaller> {
+        self.req(Method::PUT, resource)
+    }
+
+    /// Convenience function for api.call(DELETE)
+    pub fn delete(&self, resource: &str) -> AResult<ApiCaller> {
+        self.req(Method::DELETE, resource)
+    }
+
+    pub fn download_file(&self, file_url: &str, file: &mut File) -> AResult<()> {
+        let mut client_builder = Client::builder();
+        #[cfg(not(feature = "wasm"))]
+        {
+            client_builder = client_builder.timeout(Duration::new(30, 0));
+            match config::get::<Option<String>>(&["api", "proxy"]) {
+                Ok(Some(proxy_cfg)) => {
+                    client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                }
+                Ok(None) => {}
+                Err(_) => {}
+            }
+        }
+        let client = client_builder.build()?;
+        let req = client.request(Method::GET, reqwest::Url::parse(file_url)?);
+        // only add our auth junk if we're calling back to the turtl api!
+        let turtl_api_url: String = config::get(&["api", "endpoint"])?;
+        let req = if file_url.contains(&turtl_api_url) {
+            self.set_auth_headers(req)
+        } else {
+            req
+        };
+        #[cfg(not(feature = "wasm"))]
+        let mut res = client.execute(req.build()?)?;
+        #[cfg(feature = "wasm")]
+        let res = blocker(req.send())?;
+        let status = res.status().clone();
+        if status.as_u16() >= 400 {
+            let errstr = blocker(res.text())?;
+            let val = match jedi::parse(&errstr) {
+                Ok(x) => x,
+                Err(_) => Value::String(errstr),
+            };
+            return Err(APIError::Api(status, val));
+        }
+        #[cfg(not(feature = "wasm"))]
+        {
+            // start streaming our API call into the file 4K at a time
+            let mut buf = [0; 4096];
+            loop {
+                let read = res.read(&mut buf[..])?;
+                // all done! (EOF)
+                if read <= 0 { break; }
+                let (read_bytes, _) = buf.split_at(read);
+                let written = file.write(read_bytes)?;
+                if read != written {
+                    return Err(APIError::Msg(format!("problem downloading file: downloaded {} bytes, only saved {} wtf wtf lol", read, written)));
+                }
+            }
+        }
+        #[cfg(feature = "wasm")]
+        {
+            let out = Vec::from(blocker(res.bytes())?.as_ref());
+            match file.write(out.as_slice()) {
+                Ok(_) => {}
+                Err(e) => return Err(APIError::Msg(format!("problem downloading file: {}", e))),
+            }
+        }
+        Ok(())
+    }
+}
 

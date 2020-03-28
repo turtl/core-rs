@@ -1,20 +1,42 @@
 //! The Api system is responsible for talking to our Turtl server, and manages
 //! our user authentication.
 
-use ::std::io::Read;
 use ::std::time::Duration;
 use ::config;
+#[cfg(not(feature = "wasm"))]
 use ::reqwest::{
     Method,
-    blocking::{RequestBuilder, Client, Response},
+    blocking::{
+        RequestBuilder,
+        Client,
+    },
     Url,
     Proxy,
+};
+#[cfg(feature = "wasm")]
+use ::reqwest::{
+    Method,
+    RequestBuilder,
+    Client,
+    Url,
 };
 use ::reqwest::header::{HeaderMap, HeaderValue};
 pub use ::reqwest::StatusCode;
 use ::jedi::{self, Value, DeserializeOwned};
 use ::error::{MResult, MError};
 use ::crypto;
+
+#[cfg(not(feature = "wasm"))]
+fn blocker<T>(val: T) -> T {
+    val
+}
+
+#[cfg(feature = "wasm")]
+fn blocker<F, T>(val: F) -> T
+    where F: futures::Future<Output = T>
+{
+    futures::executor::block_on(val)
+}
 
 /// Holds our Api configuration. This consists of any mutable fields the Api
 /// needs to build URLs or make decisions.
@@ -139,32 +161,45 @@ impl Api {
         debug!("api::call() -- req: {} {}", method, resource);
         let ApiReq {headers, timeout, data} = builder;
         let url = self.build_url(resource)?;
-        let mut client_builder = Client::builder()
-            .timeout(timeout);
-        match config::get::<Option<String>>(&["api", "proxy"]) {
-            Ok(x) => {
-                if let Some(proxy_cfg) = x {
-                    client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+        let mut client_builder = Client::builder();
+        #[cfg(not(feature = "wasm"))]
+        {
+            client_builder = client_builder.timeout(timeout);
+            match config::get::<Option<String>>(&["api", "proxy"]) {
+                Ok(x) => {
+                    if let Some(proxy_cfg) = x {
+                        client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                    }
                 }
+                Err(_) => {}
             }
-            Err(_) => {}
         }
         let client = client_builder.build()?;
-        let req = client.request(method, Url::parse(url.as_str())?);
+        let req = client.request(method.clone(), Url::parse(url.as_str())?);
+        #[cfg(not(feature = "wasm"))]
         let req = self.set_standard_headers(req)
             .headers(headers)
-            .json(&data)
-            .build()?;
-        let callinfo = CallInfo::new(req.method().clone(), String::from(req.url().as_str()));
-        let res = client.execute(req);
+            .json(&data);
+        #[cfg(feature = "wasm")]
+        let req = {
+            let mut req = self.set_standard_headers(req);
+            for (k, v) in headers.iter() {
+                req = req.header(k, v);
+            }
+            req.json(&data)
+        };
+        let callinfo = CallInfo::new(method, String::from(url));
+        #[cfg(not(feature = "wasm"))]
+        let res = client.execute(req.build()?);
+        #[cfg(feature = "wasm")]
+        let res = blocker(req.send());
         res
             .map_err(|e| { tomerr!(e) })
-            .and_then(|mut res| {
-                let mut out = String::new();
-                let str_res = res.read_to_string(&mut out)
-                    .map_err(|e| tomerr!(e))
-                    .and_then(move |_| Ok(out));
-                if !res.status().is_success() {
+            .and_then(|res| {
+                let status = res.status();
+                let str_res = blocker(res.text())
+                    .map_err(|e| tomerr!(e));
+                if !status.is_success() {
                     let errstr = match str_res {
                         Ok(x) => x,
                         Err(e) => {
@@ -172,12 +207,12 @@ impl Api {
                             String::from("<unknown>")
                         }
                     };
-                    return Err(MError::Api(res.status(), errstr));
+                    return Err(MError::Api(status, errstr));
                 }
-                str_res.map(move |x| (x, res))
+                str_res.map(move |x| (x, status))
             })
-            .map(|(out, res)| {
-                info!("api::call() -- res({}): {:?} {} {}", out.len(), res.status().as_u16(), &callinfo.method, &callinfo.resource);
+            .map(|(out, status)| {
+                info!("api::call() -- res({}): {:?} {} {}", out.len(), status.as_u16(), &callinfo.method, &callinfo.resource);
                 trace!("  api::call() -- body: {}", out);
                 out
             })
@@ -206,27 +241,43 @@ impl Api {
         self.call(Method::DELETE, resource, builder)
     }
 
-    pub fn download_file(&self, file_url: &str) -> MResult<Response> {
-        let mut client_builder = reqwest::blocking::Client::builder()
-            .timeout(Duration::new(120, 0));
-        match config::get::<Option<String>>(&["api", "proxy"]) {
-            Ok(Some(proxy_cfg)) => {
-                client_builder = client_builder.proxy(reqwest::Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+    pub fn download_file(&self, file_url: &str) -> MResult<Vec<u8>> {
+        let mut client_builder = Client::builder();
+        #[cfg(not(feature = "wasm"))]
+        {
+            client_builder = client_builder.timeout(Duration::new(120, 0));
+            match config::get::<Option<String>>(&["api", "proxy"]) {
+                Ok(Some(proxy_cfg)) => {
+                    client_builder = client_builder.proxy(Proxy::http(format!("http://{}", proxy_cfg).as_str())?);
+                }
+                Ok(None) => {}
+                Err(_) => {}
             }
-            Ok(None) => {}
-            Err(_) => {}
         }
         let client = client_builder.build()?;
-        let mut req = client.request(reqwest::Method::GET, reqwest::Url::parse(file_url)?);
+        let mut req = client.request(Method::GET, Url::parse(file_url)?);
         let api_endpoint = config::get::<String>(&["api", "v6", "endpoint"])?;
         if file_url.contains(api_endpoint.as_str()) {
             let auth_header = self.get_auth().expect("migrate::download_file() -- failed to get auth header");
             req = req.header("Authorization", auth_header);
         }
-        client.execute(req.build()?)
+        #[cfg(not(feature = "wasm"))]
+        let res = client.execute(req.build()?);
+        #[cfg(feature = "wasm")]
+        let res = blocker(req.send());
+        res
             .map_err(|e| {
                 warn!("migrate::download_file() -- download error: {}", e);
                 tomerr!(e)
+            })
+            .and_then(|res| {
+                let status = res.status();
+                let out = Vec::from(blocker(res.bytes())?.as_ref());
+                if !status.is_success() {
+                    let errmsg = String::from_utf8(out)?;
+                    return Err(MError::Api(status, errmsg));
+                }
+                Ok(out)
             })
     }
 }

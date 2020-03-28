@@ -20,7 +20,7 @@ file-lock = ["fs2"]
 panic-on-error = ["migrate/panic-on-error"]
 public-api-tests = []
 sqlite-static = ["rusqlite/bundled"]
-wasm = ["api/wasm"]
+wasm = ["api/wasm", "migrate/wasm", "clippo/wasm"]
 
 [dependencies]
 api = { path = "api" }
