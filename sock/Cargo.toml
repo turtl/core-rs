@@ -8,9 +8,5 @@ cwrap = { path = "../cwrap" }
 fern = "0.5.5"
 log = "0.4.1"
 time = "0.1.35"
-
-[dependencies.websocket]
-version = "0.20.2"
-default-features = false
-features = ["sync"]
+tungstenite = "0.10.1"
 
