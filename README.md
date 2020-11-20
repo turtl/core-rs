@@ -65,7 +65,7 @@ NOTE 2: If your system has libsodium version different than 1.0.16 and your buil
 
 ```bash
 cargo build
-wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.16.tar.gz
+wget https://download.libsodium.org/libsodium/releases/old/libsodium-1.0.16.tar.gz
 tar xzf libsodium-1.0.16.tar.gz
 cd libsodium-1.0.16
 ./configure
