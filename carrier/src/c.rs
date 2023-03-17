@@ -99,7 +99,7 @@ pub extern fn carrier_recv_nb(channel_c: *const c_char, len_c: *mut usize) -> *c
 }
 
 #[no_mangle]
-pub extern fn carrier_free(msg: *const u8, len: usize) -> i32 {
+pub  unsafe extern fn carrier_free(msg: *const u8, len: usize) -> i32 {
     let vec = unsafe { Vec::from_raw_parts(msg as *mut u8, len, len) };
     drop(vec);
     0
