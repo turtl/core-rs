@@ -405,7 +405,7 @@ pub mod c_api {
 
     #[no_mangle]
     pub extern fn turtlc_free(msg: *const u8, len: usize) -> i32 {
-        carrier::c::carrier_free(msg, len)
+        unsafe { carrier::c::carrier_free(msg, len) }
     }
 
     #[no_mangle]
